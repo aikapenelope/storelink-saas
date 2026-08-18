@@ -1,5 +1,7 @@
 'use server';
 
+import { getPayload } from 'payload';
+import config from '@/payload.config';
 import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 
@@ -82,8 +84,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
 
     // 2. Dispatch Order to Merchant's Trello Board if configured
+    let trelloCardUrl: string | undefined = undefined;
     if (trelloConfig?.apiKey && trelloConfig?.token && trelloConfig?.listId) {
-      await createTrelloOrderCard({
+      const trelloRes = await createTrelloOrderCard({
         apiKey: trelloConfig.apiKey,
         token: trelloConfig.token,
         listId: trelloConfig.listId,
@@ -97,9 +100,58 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         currency,
         items,
       });
+      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
     }
 
-    // 3. Format WhatsApp Message
+    // 3. Save Order in Payload CMS Database
+    try {
+      const payload = await getPayload({ config });
+
+      let tenantId: any = undefined;
+      const tenantResult = await payload.find({
+        collection: 'tenants',
+        where: {
+          slug: {
+            equals: tenantSlug,
+          },
+        },
+        limit: 1,
+      });
+
+      if (tenantResult.docs.length > 0) {
+        tenantId = tenantResult.docs[0].id;
+      }
+
+      await payload.create({
+        collection: 'orders',
+        data: {
+          orderNumber,
+          status: 'pending',
+          tenant: tenantId,
+          customer: {
+            name: customer.name,
+            phone: customer.phone,
+            address: customer.address || '',
+            paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
+            notes: customer.notes || '',
+          },
+          items: items.map((item) => ({
+            sku: item.sku || 'N/A',
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            subtotal: item.price * item.quantity,
+          })),
+          totalAmount: total,
+          currency: currency || 'USD',
+          trelloCardUrl,
+        } as any,
+      });
+    } catch (dbErr) {
+      console.error('Error saving order record to Payload database:', dbErr);
+    }
+
+    // 4. Format WhatsApp Message
     const cleanPhone = whatsappPhone.replace(/\D/g, '');
     const itemsList = items
       .map(
