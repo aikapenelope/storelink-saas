@@ -1,15 +1,16 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { buildConfig, type Plugin } from 'payload';
 import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
 import { s3Storage } from '@payloadcms/storage-s3';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 
-import { Tenants } from './collections/Tenants';
 import { Users } from './collections/Users';
-import { Categories } from './collections/Categories';
+import { Tenants } from './collections/Tenants';
 import { Products } from './collections/Products';
+import { Categories } from './collections/Categories';
 import { Media } from './collections/Media';
 
 const filename = fileURLToPath(import.meta.url);
@@ -21,18 +22,17 @@ const plugins: Plugin[] = [
       products: {},
       categories: {},
     },
-    tenantField: {
-      access: {
-        read: () => true,
-        update: () => true,
-      },
-    },
     userHasAccessToAllTenants: (user) => (user as any)?.role === 'super-admin',
   }),
 ];
 
-// Configure Cloudflare R2 / S3 storage if environment variables are present
-if (process.env.R2_BUCKET && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) {
+// Optional: Cloudflare R2 / AWS S3 for storage
+if (
+  process.env.R2_ENDPOINT &&
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY &&
+  process.env.R2_BUCKET
+) {
   plugins.push(
     s3Storage({
       collections: {
@@ -44,8 +44,9 @@ if (process.env.R2_BUCKET && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECR
           accessKeyId: process.env.R2_ACCESS_KEY_ID,
           secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
         },
+        region: 'auto',
         endpoint: process.env.R2_ENDPOINT,
-        region: process.env.R2_REGION || 'auto',
+        forcePathStyle: true,
       },
     })
   );
@@ -58,6 +59,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
+  sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Media],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'SUPER_SECRET_PAYLOAD_KEY_123456789',
@@ -71,6 +73,7 @@ export default buildConfig({
         rejectUnauthorized: false,
       },
     },
+    push: true,
   }),
   plugins,
 });
