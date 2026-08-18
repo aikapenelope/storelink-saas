@@ -147,6 +147,55 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           trelloCardUrl,
         } as any,
       });
+
+      // 3.1 Upsert Customer into CRM collection
+      try {
+        const existingCustomer = await payload.find({
+          collection: 'customers',
+          where: {
+            and: [
+              { phone: { equals: customer.phone } },
+              { tenant: { equals: tenantId } },
+            ],
+          },
+          limit: 1,
+        });
+
+        if (existingCustomer.docs.length > 0) {
+          const cust = existingCustomer.docs[0] as any;
+          const newTotalOrders = (cust.totalOrders || 1) + 1;
+          const newTotalSpent = Number((Number(cust.totalSpent || 0) + total).toFixed(2));
+          const tag = newTotalOrders >= 5 ? 'vip' : newTotalOrders >= 2 ? 'frecuente' : 'nuevo';
+
+          await payload.update({
+            collection: 'customers',
+            id: cust.id,
+            data: {
+              name: customer.name,
+              totalOrders: newTotalOrders,
+              totalSpent: newTotalSpent,
+              lastOrderAt: now.toISOString(),
+              tag,
+            } as any,
+          });
+        } else {
+          await payload.create({
+            collection: 'customers',
+            data: {
+              name: customer.name,
+              phone: customer.phone,
+              tenant: tenantId,
+              totalOrders: 1,
+              totalSpent: Number(total.toFixed(2)),
+              lastOrderAt: now.toISOString(),
+              tag: 'nuevo',
+              savedAddresses: customer.address ? [{ address: customer.address }] : [],
+            } as any,
+          });
+        }
+      } catch (crmErr) {
+        console.error('Error updating customer CRM record:', crmErr);
+      }
     } catch (dbErr) {
       console.error('Error saving order record to Payload database:', dbErr);
     }

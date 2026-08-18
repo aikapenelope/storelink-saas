@@ -12,6 +12,7 @@ import { Tenants } from './collections/Tenants';
 import { Products } from './collections/Products';
 import { Categories } from './collections/Categories';
 import { Orders } from './collections/Orders';
+import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
 
 const filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ const plugins: Plugin[] = [
       products: {},
       categories: {},
       orders: {},
+      customers: {},
     },
     userHasAccessToAllTenants: (user) => (user as any)?.role === 'super-admin',
   }),
@@ -62,7 +64,7 @@ export default buildConfig({
     },
   },
   sharp: sharp as any,
-  collections: [Tenants, Users, Categories, Products, Orders, Media],
+  collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'SUPER_SECRET_PAYLOAD_KEY_123456789',
   typescript: {
