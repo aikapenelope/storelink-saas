@@ -79,7 +79,7 @@ export const Tenants: CollectionConfig = {
     {
       name: 'branding',
       type: 'group',
-      label: 'Personalización de Marca',
+      label: 'Personalización de Marca & Moneda',
       fields: [
         {
           name: 'logo',
@@ -97,6 +97,22 @@ export const Tenants: CollectionConfig = {
             { label: 'Peso Mexicano ($ MXN)', value: 'MXN' },
             { label: 'Peso Colombiano ($ COP)', value: 'COP' },
           ],
+        },
+        {
+          name: 'showVES',
+          type: 'checkbox',
+          defaultValue: true,
+          label: 'Habilitar cálculo multimoneda en Bolívares (Bs. VES)',
+        },
+        {
+          name: 'exchangeRateVES',
+          type: 'number',
+          defaultValue: 56.5,
+          label: 'Tasa de Cambio en Bolívares (VES por cada 1 USD)',
+          admin: {
+            condition: (data) => Boolean(data?.branding?.showVES),
+            description: 'Tasa oficial BCV o personalizada para convertir los precios automáticamente a Bolívares en catálogo y pedidos.',
+          },
         },
         {
           name: 'primaryColor',

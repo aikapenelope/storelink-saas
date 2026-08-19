@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Hammer, Shield, CheckCircle2, Plus, Minus, Tag, FileText, ChevronRight, Layers } from 'lucide-react';
+import { ShoppingBag, Search, Hammer, CheckCircle2, Plus, Minus, FileText, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -30,6 +30,9 @@ export function ThemeHardwareStore({
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const showVES = tenant.showVES ?? true;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -46,9 +49,16 @@ export function ThemeHardwareStore({
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-36 font-sans">
       {/* 1. Contractor & Wholesale Top Strip */}
-      <div className="bg-slate-950 text-slate-200 text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
-        <FileText className="w-3.5 h-3.5 text-amber-400" />
-        <span>VENTAS AL MAYOR Y DETAL • FACTURA FISCAL & COTIZACIONES INMEDIATAS</span>
+      <div className="bg-slate-950 text-slate-200 text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-3 border-b border-slate-800">
+        <div className="flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5 text-amber-400" />
+          <span>VENTAS AL MAYOR Y DETAL • HERRAMIENTAS Y EQUIPOS CON FACTURA FISCAL</span>
+        </div>
+        {showVES && (
+          <span className="bg-slate-800 text-amber-400 px-2 py-0.5 rounded font-mono text-[10px]">
+            TASA: {exchangeRate.toFixed(2)} Bs/$
+          </span>
+        )}
       </div>
 
       {/* 2. Ferretería Header */}
@@ -70,7 +80,7 @@ export function ThemeHardwareStore({
                   <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
                 </span>
                 <span>•</span>
-                <span>Materiales de Construcción & Herramientas</span>
+                <span>Herramientas Manuales, Eléctricas & Plomería</span>
               </p>
             </div>
           </div>
@@ -96,7 +106,7 @@ export function ThemeHardwareStore({
               Precios Especiales a Contratistas
             </span>
             <h2 className="text-xl sm:text-2xl font-black">Descuentos por Volumen a partir de 6 Unidades</h2>
-            <p className="text-xs text-blue-200">Agrega tus productos a la lista y envía la cotización al WhatsApp de ventas.</p>
+            <p className="text-xs text-blue-200">Agrega tus herramientas a la lista y envía la cotización al WhatsApp de ventas.</p>
           </div>
           <div className="flex gap-2">
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 text-center border border-white/15">
@@ -118,7 +128,7 @@ export function ThemeHardwareStore({
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar taladros, bombas, llaves, tuberías, SKU..."
+              placeholder="Buscar taladros, bombas, llaves, amoladoras, SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-2xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900 font-medium"
@@ -159,6 +169,8 @@ export function ThemeHardwareStore({
               const imageUrl =
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=600&q=80';
+
+              const priceInVES = product.price * exchangeRate;
 
               return (
                 <div
@@ -206,12 +218,17 @@ export function ThemeHardwareStore({
                   {/* Pricing & Add to Cart */}
                   <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] text-slate-400 uppercase font-bold block">
-                        Precio Detal / Mayor
-                      </span>
-                      <span className="text-xl font-black text-blue-950 font-mono">
-                        ${product.price.toFixed(2)}
-                      </span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-black text-blue-950 font-mono">
+                          ${product.price.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-bold">USD</span>
+                      </div>
+                      {showVES && (
+                        <span className="text-[11px] font-mono font-bold text-slate-500 block">
+                          Bs. {priceInVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </div>
 
                     <div>
@@ -274,9 +291,16 @@ export function ThemeHardwareStore({
               </span>
               <span className="text-sm">Solicitar Cotización por WhatsApp</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
-              <ChevronRight className="w-5 h-5 text-amber-400" />
+            <div className="text-right">
+              <div className="flex items-center gap-1.5 justify-end">
+                <span className="text-base font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-5 h-5 text-amber-400" />
+              </div>
+              {showVES && (
+                <span className="text-[10px] text-blue-200 block font-mono font-bold">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
           </button>
         </div>

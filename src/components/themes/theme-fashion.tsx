@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Sparkles, Heart, ChevronRight, Eye, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
+import { ShoppingBag, Search, ArrowUpRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -31,6 +31,9 @@ export function ThemeFashionBoutique({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeGender, setActiveGender] = useState<'ALL' | 'WOMEN' | 'MEN'>('ALL');
 
+  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const showVES = tenant.showVES ?? true;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -47,8 +50,9 @@ export function ThemeFashionBoutique({
   return (
     <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-36 font-sans">
       {/* 1. Haute Couture Top Banner */}
-      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.25em] py-2 px-4 text-center font-medium">
-        Colección Otoño-Invierno 2026 • Envíos Express por WhatsApp
+      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.25em] py-2 px-4 text-center font-medium flex items-center justify-center gap-2">
+        <span>Colección Textil & Moda 2026</span>
+        {showVES && <span className="text-[#a89d91]">| Tasa Ref: {exchangeRate.toFixed(2)} Bs/$</span>}
       </div>
 
       {/* 2. Editorial Header */}
@@ -109,19 +113,19 @@ export function ThemeFashionBoutique({
         <div className="relative rounded-3xl overflow-hidden bg-[#1e1b18] text-white aspect-[21/9] sm:aspect-[24/8] flex items-center shadow-lg">
           <img
             src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1600&q=80"
-            alt="Editorial Campaign"
+            alt="Editorial Fashion Campaign"
             className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-luminosity"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
           <div className="relative z-10 p-6 sm:p-12 max-w-xl space-y-3">
             <span className="text-[10px] uppercase tracking-[0.3em] text-[#dfd5cb] block">
-              Lookbook Exclusivo
+              Prendas & Confección 100% Original
             </span>
             <h2 className="font-serif text-2xl sm:text-4xl leading-tight font-normal">
-              Minimalismo, Texturas Orgánicas & Alta Confección.
+              Cortes Contemporáneos, Lino & Algodón Orgánico.
             </h2>
             <p className="text-xs text-[#d3c9bf] font-light max-w-sm hidden sm:block">
-              Prendas seleccionadas con materiales sostenibles pensadas para durar.
+              Vestidos, camisetas heavyweight, denim vintage y chaquetas con entrega directa.
             </p>
           </div>
         </div>
@@ -150,7 +154,7 @@ export function ThemeFashionBoutique({
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8c827a]" />
             <input
               type="text"
-              placeholder="Buscar vestidos, lino, abrigos..."
+              placeholder="Buscar vestidos, camisetas, denim, hoodies..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-2.5 bg-white border border-[#e5ded5] rounded-full text-xs placeholder:text-[#8c827a] text-[#1e1b18] focus:outline-none focus:border-[#1e1b18] shadow-xs"
@@ -174,6 +178,8 @@ export function ThemeFashionBoutique({
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80';
 
+              const priceInVES = product.price * exchangeRate;
+
               return (
                 <div
                   key={product.id}
@@ -192,7 +198,7 @@ export function ThemeFashionBoutique({
                     <div className="absolute top-3 left-3 flex flex-col gap-1.5">
                       {product.featured && (
                         <span className="bg-[#1e1b18]/90 backdrop-blur-md text-white text-[8px] uppercase tracking-[0.2em] px-3 py-1 rounded-full font-medium shadow-sm">
-                          New In
+                          Tendencia
                         </span>
                       )}
                       <span className="bg-white/90 backdrop-blur-md text-[#1e1b18] text-[8px] uppercase tracking-[0.15em] px-2.5 py-0.5 rounded-full font-bold shadow-xs">
@@ -231,14 +237,21 @@ export function ThemeFashionBoutique({
                     <h3 className="font-serif text-sm sm:text-base text-[#1c1815] group-hover:underline underline-offset-4 decoration-1 font-normal truncate">
                       {product.title}
                     </h3>
-                    <div className="flex items-center justify-between pt-0.5">
-                      <span className="text-xs font-black text-[#1e1b18]">
-                        {hasOptions && <span className="text-[10px] font-normal text-[#8c827a] mr-1">Desde</span>}
-                        ${product.price.toFixed(2)} {tenant.currency || 'USD'}
-                      </span>
-                      <span className="text-[10px] text-emerald-700 uppercase font-bold tracking-wider">
-                        En Stock
-                      </span>
+                    <div className="flex flex-col pt-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-[#1e1b18]">
+                          {hasOptions && <span className="text-[10px] font-normal text-[#8c827a] mr-1">Desde</span>}
+                          ${product.price.toFixed(2)} USD
+                        </span>
+                        <span className="text-[9px] text-emerald-700 uppercase font-bold tracking-wider">
+                          Disponible
+                        </span>
+                      </div>
+                      {showVES && (
+                        <span className="text-[11px] font-bold text-[#8c827a]">
+                          Bs. {priceInVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -261,7 +274,14 @@ export function ThemeFashionBoutique({
               </span>
               <span>Procesar Bolsa</span>
             </div>
-            <span className="font-bold text-sm tracking-normal">${cartAmount.toFixed(2)}</span>
+            <div className="text-right">
+              <span className="font-bold text-sm tracking-normal block">${cartAmount.toFixed(2)}</span>
+              {showVES && (
+                <span className="text-[9px] text-[#dfd5cb] tracking-normal font-sans font-medium">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
           </button>
         </div>
       )}

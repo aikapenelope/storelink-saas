@@ -25,6 +25,8 @@ export interface CheckoutRequest {
   storeName: string;
   whatsappPhone: string;
   currency: string;
+  exchangeRateVES?: number;
+  showVES?: boolean;
   trelloConfig?: {
     apiKey?: string;
     token?: string;
@@ -44,7 +46,7 @@ export interface CheckoutResponse {
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
-    const { tenantSlug, storeName, whatsappPhone, currency, trelloConfig, customer, items } = request;
+    const { tenantSlug, storeName, whatsappPhone, currency, exchangeRateVES, showVES, trelloConfig, customer, items } = request;
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };
@@ -66,6 +68,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+    const rate = exchangeRateVES || 56.5;
+    const totalVES = total * rate;
 
     // 1. Generate Delivery Note PDF (Uint8Array -> Base64)
     const pdfBytes = generateDeliveryNotePDF({
@@ -103,7 +107,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
     }
 
-    // 3. Save Order in Payload CMS Database
+    // 3. Save Order and Auto-Update Inventory in Payload CMS Database
     try {
       const payload = await getPayload({ config });
 
@@ -148,7 +152,42 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         } as any,
       });
 
-      // 3.1 Upsert Customer into CRM collection
+      // 3.1 Decrement Product Stock in Inventory
+      try {
+        for (const item of items) {
+          if (item.sku && item.sku !== 'N/A') {
+            const productMatch = await payload.find({
+              collection: 'products',
+              where: {
+                and: [
+                  { sku: { equals: item.sku } },
+                  { tenant: { equals: tenantId } },
+                ],
+              },
+              limit: 1,
+            });
+
+            if (productMatch.docs.length > 0) {
+              const prod = productMatch.docs[0] as any;
+              if (prod.trackStock && typeof prod.stockQuantity === 'number') {
+                const updatedStock = Math.max(0, prod.stockQuantity - item.quantity);
+                await payload.update({
+                  collection: 'products',
+                  id: prod.id,
+                  data: {
+                    stockQuantity: updatedStock,
+                    stockStatus: updatedStock === 0 ? 'out_of_stock' : 'in_stock',
+                  } as any,
+                });
+              }
+            }
+          }
+        }
+      } catch (invErr) {
+        console.error('Error updating product inventory:', invErr);
+      }
+
+      // 3.2 Upsert Customer into CRM collection
       try {
         const existingCustomer = await payload.find({
           collection: 'customers',
@@ -200,7 +239,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       console.error('Error saving order record to Payload database:', dbErr);
     }
 
-    // 4. Format WhatsApp Message
+    // 4. Format WhatsApp Message with Multi-Currency Breakdown
     const cleanPhone = whatsappPhone.replace(/\D/g, '');
     const itemsList = items
       .map(
@@ -208,6 +247,10 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           `• [${item.sku || 'N/A'}] ${item.quantity}x ${item.title} ($${item.price.toFixed(2)} c/u) = *$${(item.quantity * item.price).toFixed(2)}*`
       )
       .join('\n');
+
+    const vesLine = (showVES ?? true)
+      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${rate.toFixed(2)} Bs/$)`
+      : '';
 
     const message = `
 🛍️ *NUEVO PEDIDO #${orderNumber}*
@@ -222,7 +265,7 @@ ${customer.notes ? `• *Notas:* ${customer.notes}\n` : ''}
 📦 *PRODUCTOS:*
 ${itemsList}
 
-💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency}*
+💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency}*${vesLine}
 
 _Generado automáticamente desde la tienda PWA_
     `.trim();

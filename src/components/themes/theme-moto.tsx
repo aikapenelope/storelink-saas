@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, MessageCircle, Zap, CheckCircle2, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, Zap, CheckCircle2, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -31,6 +31,9 @@ export function ThemeMotoParts({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBikeBrand, setSelectedBikeBrand] = useState('TODAS');
 
+  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const showVES = tenant.showVES ?? true;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -47,9 +50,16 @@ export function ThemeMotoParts({
   return (
     <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-36 font-sans">
       {/* 1. Pro Automotive Status Bar */}
-      <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-2 tracking-wide shadow-md">
-        <Zap className="w-3.5 h-3.5 fill-black" />
-        <span>DESPACHO EXPRESS DE REPUESTOS Y ASESORÍA MECÁNICA DIRECTA POR WHATSAPP</span>
+      <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-3 tracking-wide shadow-md">
+        <div className="flex items-center gap-1.5">
+          <Zap className="w-3.5 h-3.5 fill-black" />
+          <span>REPUESTOS Y ACCESORIOS DE MOTO 100% ORIGINALES CON ENVÍO DIRECTO</span>
+        </div>
+        {showVES && (
+          <span className="bg-black text-amber-400 px-2 py-0.5 rounded font-mono text-[10px]">
+            TASA: {exchangeRate.toFixed(2)} Bs/$
+          </span>
+        )}
       </div>
 
       {/* 2. Moto Pro Header */}
@@ -68,10 +78,10 @@ export function ThemeMotoParts({
               </div>
               <p className="text-xs text-neutral-400 font-mono hidden sm:flex items-center gap-2 mt-0.5">
                 <span className="text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Stock Garantizado
+                  <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
                 </span>
                 <span>•</span>
-                <span>Envíos a Nivel Nacional</span>
+                <span>Cilindros, Frenos, Cadenas y Lubricantes</span>
               </p>
             </div>
           </div>
@@ -96,7 +106,7 @@ export function ThemeMotoParts({
             <Wrench className="w-5 h-5 text-amber-400" />
             <div>
               <span className="text-xs font-mono font-bold uppercase text-white block">Selector de Compatibilidad:</span>
-              <span className="text-[11px] text-neutral-400 font-mono">Filtra repuestos compatibles con tu motocicleta</span>
+              <span className="text-[11px] text-neutral-400 font-mono">Filtra repuestos para tu motocicleta</span>
             </div>
           </div>
 
@@ -168,6 +178,8 @@ export function ThemeMotoParts({
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80';
 
+              const priceInVES = product.price * exchangeRate;
+
               return (
                 <div
                   key={product.id}
@@ -221,12 +233,17 @@ export function ThemeMotoParts({
                   {/* Pricing & Add to Cart */}
                   <div className="mt-5 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] text-neutral-500 uppercase font-mono block">
-                        Precio Neto con IVA
-                      </span>
-                      <span className="text-xl font-black text-amber-400 font-mono">
-                        ${product.price.toFixed(2)}
-                      </span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-black text-amber-400 font-mono">
+                          ${product.price.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-mono">USD</span>
+                      </div>
+                      {showVES && (
+                        <span className="text-[11px] font-mono font-bold text-neutral-400 block">
+                          Bs. {priceInVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </div>
 
                     <div>
@@ -287,9 +304,16 @@ export function ThemeMotoParts({
               </span>
               <span className="text-xs uppercase tracking-wider">Enviar Orden al Mostrador</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-black">${cartAmount.toFixed(2)}</span>
-              <ChevronRight className="w-5 h-5 text-black" />
+            <div className="text-right">
+              <div className="flex items-center gap-1.5 justify-end">
+                <span className="text-lg font-black">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-5 h-5 text-black" />
+              </div>
+              {showVES && (
+                <span className="text-[10px] text-neutral-900 block font-black">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
           </button>
         </div>

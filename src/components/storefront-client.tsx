@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Check, Layers, Sparkles } from 'lucide-react';
+import { ShoppingBag, Check, Layers } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
 import { ThemeBasicBanner } from './themes/theme-basic';
 import { ThemeFoodDelivery } from './themes/theme-food';
@@ -53,6 +53,8 @@ export interface TenantConfig {
   theme?: 'basic-banner' | 'food-delivery' | 'fashion-boutique' | 'moto-parts' | 'hardware-store' | string;
   whatsappPhone: string;
   currency?: string;
+  showVES?: boolean;
+  exchangeRateVES?: number;
   primaryColor?: string;
   welcomeMessage?: string;
   trelloConfig?: {
@@ -68,7 +70,7 @@ interface StorefrontClientProps {
   categories: string[];
 }
 
-// Vertical Datasets for Live Theme Preview
+// Curated Pure Industry Datasets for Live Preview
 const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categories: string[]; items: ProductItem[] }> = {
   'basic-banner': {
     name: 'Comercial & Variedades Express',
@@ -155,7 +157,7 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
       {
         id: 'f2',
         sku: 'PIZ-001',
-        title: 'Pizza Margarita Artesanal',
+        title: 'Pizza Margarita Artesanal Napolitana',
         price: 12.5,
         description: 'Tomates San Marzano, mozzarella fresca di bufala, albahaca y aceite de oliva virgen extra.',
         category: { id: 'c2', name: 'Pizzas' },
@@ -170,9 +172,9 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
       {
         id: 'f3',
         sku: 'PAS-001',
-        title: 'Fettuccine Alfredo con Trufa',
+        title: 'Fettuccine Alfredo con Trufa Negra',
         price: 13.5,
-        description: 'Pasta fresca al huevo con crema de mantequilla trufada y queso parmesano.',
+        description: 'Pasta fresca al huevo con crema de mantequilla trufada y queso parmesano Reggiano.',
         category: { id: 'c3', name: 'Pastas' },
         stockStatus: 'in_stock',
         featured: false,
@@ -192,16 +194,16 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
     ],
   },
   'fashion-boutique': {
-    name: 'AURA Boutique & Studio',
-    welcome: 'Prendas exclusivas, cortes contemporáneos y tejidos sostenibles.',
-    categories: ['Todos', 'Camisetas', 'Vestidos', 'Chaquetas', 'Pantalones', 'Accesorios'],
+    name: 'AURA Studio & Apparel',
+    welcome: 'Prendas exclusivas, cortes contemporáneos y tejidos orgánicos sostenibles.',
+    categories: ['Todos', 'Camisetas', 'Vestidos', 'Chaquetas', 'Pantalones', 'Hoodies', 'Sneakers'],
     items: [
       {
         id: 'fa1',
         sku: 'AUR-TOP-01',
         title: 'Camiseta Heavyweight Minimalist 260GSM',
         price: 28.0,
-        description: 'Algodón orgánico peinado de alto gramaje con corte boxy fit.',
+        description: 'Algodón orgánico peinado de alto gramaje con corte boxy fit estructurado.',
         category: { id: 'c1', name: 'Camisetas' },
         stockStatus: 'in_stock',
         featured: true,
@@ -216,9 +218,9 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
       {
         id: 'fa2',
         sku: 'AUR-VES-02',
-        title: 'Vestido Midi de Lino Natural',
+        title: 'Vestido Midi de Lino Natural Estructurado',
         price: 65.0,
-        description: 'Lino 100% transpirable con escote cruzado y lazada en cintura.',
+        description: 'Lino 100% transpirable con escote cruzado y lazada ajustable en cintura.',
         category: { id: 'c2', name: 'Vestidos' },
         stockStatus: 'in_stock',
         featured: true,
@@ -232,9 +234,9 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
       {
         id: 'fa3',
         sku: 'AUR-JKT-03',
-        title: 'Chaqueta Denim Vintage Washed',
+        title: 'Chaqueta Denim Vintage Washed Oversized',
         price: 85.0,
-        description: 'Denim resistente con botones metálicos envejecidos y forro suave.',
+        description: 'Denim resistente con botones metálicos envejecidos y forro interior suave.',
         category: { id: 'c3', name: 'Chaquetas' },
         stockStatus: 'in_stock',
         featured: false,
@@ -246,21 +248,43 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
       },
       {
         id: 'fa4',
-        sku: 'AUR-ACC-04',
-        title: 'Bolso Tote en Cuero Sintético Premium',
-        price: 49.0,
-        description: 'Diseño estructurado con compartimiento interno para laptop.',
-        category: { id: 'c4', name: 'Accesorios' },
+        sku: 'AUR-PNT-04',
+        title: 'Pantalón Pleated Wide Leg en Gabardina',
+        price: 45.0,
+        description: 'Corte amplio con pinzas frontales y caída fluida contemporánea.',
+        category: { id: 'c4', name: 'Pantalones' },
         stockStatus: 'in_stock',
         featured: true,
-        images: [{ url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80' }],
+        images: [{ url: 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'fa5',
+        sku: 'AUR-HOD-05',
+        title: 'Hoodie Fleece Premium 450GSM',
+        price: 55.0,
+        description: 'Capucha doble forrada sin cordones, bolsillo canguro y felpa interior suave.',
+        category: { id: 'c5', name: 'Hoodies' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'fa6',
+        sku: 'AUR-SNK-06',
+        title: 'Sneakers Minimalist Cuero Blanco',
+        price: 75.0,
+        description: 'Piel vacuna seleccionada, suela cosida antideslizante y plantilla anatómica.',
+        category: { id: 'c6', name: 'Sneakers' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=600&q=80' }],
       },
     ],
   },
   'moto-parts': {
     name: 'MotoRepuestos El Piloto Pro',
-    welcome: 'Repuestos genuinos, cilindros, kits de tracción y lubricantes para motos.',
-    categories: ['Todos', 'Motor & Cilindros', 'Frenos & Discos', 'Transmisión', 'Lubricantes', 'Cascos & Seguridad'],
+    welcome: 'Repuestos genuinos, cilindros, kits de tracción, cascos y lubricantes para motos.',
+    categories: ['Todos', 'Motor & Cilindros', 'Frenos & Discos', 'Transmisión', 'Lubricantes', 'Cascos & Seguridad', 'Carburadores'],
     items: [
       {
         id: 'm1',
@@ -271,7 +295,7 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
         category: { id: 'c1', name: 'Motor & Cilindros' },
         stockStatus: 'in_stock',
         featured: true,
-        images: [{ url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80' }],
+        images: [{ url: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=600&q=80' }],
       },
       {
         id: 'm2',
@@ -293,12 +317,12 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
         category: { id: 'c3', name: 'Transmisión' },
         stockStatus: 'in_stock',
         featured: false,
-        images: [{ url: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80' }],
+        images: [{ url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80' }],
       },
       {
         id: 'm4',
         sku: 'MOT-LUB-10W40',
-        title: 'Aceite 4T 10W-40 Full Sintético 1L',
+        title: 'Aceite 4T 10W-40 Full Sintético 1 Litro',
         price: 12.0,
         description: 'Norma JASO MA2 / API SN para máxima protección de embrague y caja de cambios.',
         category: { id: 'c4', name: 'Lubricantes' },
@@ -306,12 +330,34 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
         featured: false,
         images: [{ url: 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=600&q=80' }],
       },
+      {
+        id: 'm5',
+        sku: 'MOT-CAS-DOT',
+        title: 'Casco Integral Certificado DOT con Visor Anti-Fog',
+        price: 75.0,
+        description: 'Carcasa de policarbonato reforzado, ventilación aerodinámica y cierre micrométrico.',
+        category: { id: 'c5', name: 'Cascos & Seguridad' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'm6',
+        sku: 'MOT-CRB-28MM',
+        title: 'Carburador Racing Mikuni Tipo Cortina Plana 28mm',
+        price: 38.0,
+        description: 'Mayor flujo de aire y respuesta instantánea al acelerador para motores 150cc a 200cc.',
+        category: { id: 'c6', name: 'Carburadores' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=600&q=80' }],
+      },
     ],
   },
   'hardware-store': {
     name: 'Ferretería & Suministros El Maestro',
     welcome: 'Herramientas eléctricas, manuales, plomería y construcción con cotización al WhatsApp.',
-    categories: ['Todos', 'Herramientas Eléctricas', 'Herramientas Manuales', 'Plomería & Bombas', 'Seguridad Industrial'],
+    categories: ['Todos', 'Herramientas Eléctricas', 'Herramientas Manuales', 'Plomería & Bombas', 'Maquinaria & Sierras', 'Cajas & Almacenaje'],
     items: [
       {
         id: 'h1',
@@ -356,6 +402,28 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
         stockStatus: 'in_stock',
         featured: false,
         images: [{ url: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'h5',
+        sku: 'FER-SIE-714',
+        title: 'Sierra Circular de Mano 7-1/4" 1500W con Disco',
+        price: 68.0,
+        description: 'Corte a 45° y 90°, base de aluminio graduada y guía láser de precisión.',
+        category: { id: 'c4', name: 'Maquinaria & Sierras' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'h6',
+        sku: 'FER-CAJ-MET',
+        title: 'Caja de Herramientas Metálica Cantilever 3 Niveles',
+        price: 32.0,
+        description: 'Estructura en chapa de acero galvanizado con 5 compartimientos desplegables.',
+        category: { id: 'c5', name: 'Cajas & Almacenaje' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=600&q=80' }],
       },
     ],
   },
@@ -457,6 +525,8 @@ export function StorefrontClient({
     ...tenant,
     name: tenant.name || currentVertical.name,
     welcomeMessage: tenant.welcomeMessage || currentVertical.welcome,
+    exchangeRateVES: tenant.exchangeRateVES || 56.5,
+    showVES: tenant.showVES ?? true,
   };
 
   const themeProps = {
