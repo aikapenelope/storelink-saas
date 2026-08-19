@@ -436,6 +436,7 @@ export function CartDrawer({
                         <option value="Municipio Chacao">Municipio Chacao</option>
                         <option value="Municipio Libertador">Municipio Libertador</option>
                         <option value="Municipio Sucre">Municipio Sucre</option>
+                        <option value="Otro Municipio / Fuera de Caracas">Otro Municipio / Fuera de Caracas</option>
                       </select>
                     </div>
                   </div>
