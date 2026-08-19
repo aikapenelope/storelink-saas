@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { getUserRole } from '@/lib/utils';
 
 export const Customers: CollectionConfig = {
   slug: 'customers',
@@ -10,7 +11,7 @@ export const Customers: CollectionConfig = {
     read: ({ req: { user } }) => Boolean(user),
     create: ({ req: { user } }) => Boolean(user), // Allows server actions to register or update customer records
     update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    delete: ({ req: { user } }) => getUserRole(user) === 'super-admin',
   },
   fields: [
     {

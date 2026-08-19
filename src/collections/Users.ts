@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { getUserRole } from '@/lib/utils';
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -9,9 +10,11 @@ export const Users: CollectionConfig = {
   },
   access: {
     read: ({ req: { user } }) => Boolean(user),
-    create: ({ req: { user } }) => (user as any)?.role === 'super-admin',
-    update: ({ req: { user }, id }) => (user as any)?.role === 'super-admin' || (user as any)?.id === id,
-    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    create: ({ req: { user } }) => getUserRole(user) === 'super-admin',
+    update: ({ req: { user }, id }) =>
+      getUserRole(user) === 'super-admin' ||
+      (typeof (user as { id?: number })?.id === 'number' && (user as { id?: number })?.id === id),
+    delete: ({ req: { user } }) => getUserRole(user) === 'super-admin',
   },
   fields: [
     {
@@ -20,7 +23,7 @@ export const Users: CollectionConfig = {
       required: true,
       defaultValue: 'tenant-admin',
       access: {
-        update: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+        update: ({ req: { user } }) => getUserRole(user) === 'super-admin',
       },
       options: [
         { label: 'Super Admin (Dueño de la Plataforma)', value: 'super-admin' },
