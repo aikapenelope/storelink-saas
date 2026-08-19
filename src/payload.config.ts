@@ -6,6 +6,7 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
 import { seoPlugin } from '@payloadcms/plugin-seo';
 import { s3Storage } from '@payloadcms/storage-s3';
+import { resendAdapter } from '@payloadcms/email-resend';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
 import sharp from 'sharp';
@@ -85,6 +86,11 @@ export default buildConfig({
     },
     fallbackLanguage: 'es',
   },
+  email: resendAdapter({
+    defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@storelink.app',
+    defaultFromName: process.env.RESEND_FROM_NAME || 'StoreLink Notificaciones',
+    apiKey: process.env.RESEND_API_KEY || 're_mock_key_for_build',
+  }),
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),

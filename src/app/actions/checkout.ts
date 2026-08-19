@@ -4,10 +4,12 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
+import { Resend } from 'resend';
 
 export interface CheckoutCustomerData {
   name: string;
   phone: string;
+  email?: string;
   address?: string;
   paymentMethod?: string;
   notes?: string;
@@ -41,6 +43,7 @@ export interface CheckoutResponse {
   orderNumber?: string;
   whatsappUrl?: string;
   pdfBase64?: string;
+  emailSent?: boolean;
   error?: string;
 }
 
@@ -68,7 +71,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
-    const rate = exchangeRateVES || 56.5;
+    const rate = exchangeRateVES || 910.0;
     const totalVES = total * rate;
 
     // 1. Generate Delivery Note PDF (Uint8Array -> Base64)
@@ -135,6 +138,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           customer: {
             name: customer.name,
             phone: customer.phone,
+            email: customer.email || '',
             address: customer.address || '',
             paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
             notes: customer.notes || '',
@@ -189,11 +193,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
       // 3.2 Upsert Customer into CRM collection
       try {
+        const cleanPhone = customer.phone.replace(/\D/g, '');
         const existingCustomer = await payload.find({
           collection: 'customers',
           where: {
             and: [
-              { phone: { equals: customer.phone } },
+              { phone: { equals: cleanPhone || customer.phone } },
               { tenant: { equals: tenantId } },
             ],
           },
@@ -211,6 +216,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             id: cust.id,
             data: {
               name: customer.name,
+              email: customer.email || cust.email,
               totalOrders: newTotalOrders,
               totalSpent: newTotalSpent,
               lastOrderAt: now.toISOString(),
@@ -222,7 +228,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             collection: 'customers',
             data: {
               name: customer.name,
-              phone: customer.phone,
+              phone: cleanPhone || customer.phone,
+              email: customer.email || '',
               tenant: tenantId,
               totalOrders: 1,
               totalSpent: Number(total.toFixed(2)),
@@ -239,7 +246,84 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       console.error('Error saving order record to Payload database:', dbErr);
     }
 
-    // 4. Format WhatsApp Message with Multi-Currency Breakdown
+    // 4. Send Order Confirmation Email with PDF Attachment via Resend
+    let emailSent = false;
+    if (customer.email && process.env.RESEND_API_KEY) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const fromEmail = process.env.RESEND_FROM_EMAIL || 'StoreLink <onboarding@resend.dev>';
+
+        const itemsHtml = items
+          .map(
+            (i) =>
+              `<tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>[${i.sku || 'N/A'}]</strong> ${i.title}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${i.quantity}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${(i.quantity * i.price).toFixed(2)}</td>
+              </tr>`
+          )
+          .join('');
+
+        await resend.emails.send({
+          from: fromEmail,
+          to: customer.email,
+          subject: `🛍️ Comprobante de Pedido #${orderNumber} - ${storeName}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a; padding: 20px;">
+              <div style="text-align: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px;">
+                <h1 style="color: #0f172a; margin: 0;">${storeName}</h1>
+                <p style="color: #64748b; font-size: 14px; margin-top: 5px;">¡Gracias por tu compra! Tu pedido ha sido registrado con éxito.</p>
+              </div>
+
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; margin: 20px 0;">
+                <p style="margin: 4px 0;"><strong>Número de Pedido:</strong> #${orderNumber}</p>
+                <p style="margin: 4px 0;"><strong>Cliente:</strong> ${customer.name}</p>
+                <p style="margin: 4px 0;"><strong>Teléfono:</strong> ${customer.phone}</p>
+                <p style="margin: 4px 0;"><strong>Método de Pago:</strong> ${customer.paymentMethod || 'Efectivo / Transferencia'}</p>
+                <p style="margin: 4px 0;"><strong>Dirección:</strong> ${customer.address || 'Retiro en tienda'}</p>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+                <thead>
+                  <tr style="background-color: #f1f5f9; text-align: left;">
+                    <th style="padding: 8px;">Producto</th>
+                    <th style="padding: 8px; text-align: center;">Cant.</th>
+                    <th style="padding: 8px; text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+
+              <div style="text-align: right; border-top: 2px solid #f0f0f0; padding-top: 15px;">
+                <h3 style="margin: 0; color: #0f172a;">Total a Pagar: $${total.toFixed(2)} USD</h3>
+                ${
+                  showVES
+                    ? `<p style="margin: 5px 0 0 0; color: #64748b; font-size: 13px;">Equivalente en Bolívares: <strong>Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> (Tasa Binance: ${rate.toFixed(2)} Bs/$)</p>`
+                    : ''
+                }
+              </div>
+
+              <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 30px;">
+                📎 Hemos adjuntado tu <strong>Nota de Entrega en formato PDF</strong> a este correo.
+              </p>
+            </div>
+          `,
+          attachments: [
+            {
+              filename: `Nota-Entrega-${orderNumber}.pdf`,
+              content: pdfBase64,
+            },
+          ],
+        });
+        emailSent = true;
+      } catch (emailErr) {
+        console.error('Error sending confirmation email via Resend:', emailErr);
+      }
+    }
+
+    // 5. Format WhatsApp Message with Multi-Currency Breakdown
     const cleanPhone = whatsappPhone.replace(/\D/g, '');
     const itemsList = items
       .map(
@@ -249,7 +333,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       .join('\n');
 
     const vesLine = (showVES ?? true)
-      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${rate.toFixed(2)} Bs/$)`
+      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa Binance: ${rate.toFixed(2)} Bs/$)`
       : '';
 
     const message = `
@@ -259,7 +343,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 👤 *DATOS DEL CLIENTE:*
 • *Nombre:* ${customer.name}
 • *Teléfono:* ${customer.phone}
-• *Dirección:* ${customer.address || 'Retiro en tienda'}
+${customer.email ? `• *Email:* ${customer.email}\n` : ''}• *Dirección:* ${customer.address || 'Retiro en tienda'}
 • *Método de Pago:* ${customer.paymentMethod || 'Efectivo / Transferencia'}
 ${customer.notes ? `• *Notas:* ${customer.notes}\n` : ''}
 📦 *PRODUCTOS:*
@@ -277,6 +361,7 @@ _Generado automáticamente desde la tienda PWA_
       orderNumber,
       whatsappUrl,
       pdfBase64,
+      emailSent,
     };
   } catch (err: any) {
     console.error('Error processing order:', err);

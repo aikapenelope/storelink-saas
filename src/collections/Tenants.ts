@@ -55,6 +55,27 @@ export const Tenants: CollectionConfig = {
       },
     },
     {
+      name: 'emailConfig',
+      type: 'group',
+      label: 'Notificaciones por Correo (Resend)',
+      fields: [
+        {
+          name: 'notificationEmail',
+          type: 'email',
+          label: 'Correo del Comercio para Recibir Nuevos Pedidos',
+          admin: {
+            description: 'Recibirá una copia de cada orden generada con el PDF de nota de entrega adjunto.',
+          },
+        },
+        {
+          name: 'emailSubject',
+          type: 'text',
+          label: 'Asunto Personalizado del Correo',
+          defaultValue: '🛍️ Confirmación y Comprobante de tu Pedido',
+        },
+      ],
+    },
+    {
       name: 'trelloConfig',
       type: 'group',
       label: 'Integración con Trello',
@@ -107,11 +128,10 @@ export const Tenants: CollectionConfig = {
         {
           name: 'exchangeRateVES',
           type: 'number',
-          defaultValue: 56.5,
-          label: 'Tasa de Cambio en Bolívares (VES por cada 1 USD)',
+          label: 'Tasa de Cambio Manual en Bolívares (VES por cada 1 USD)',
           admin: {
             condition: (data) => Boolean(data?.branding?.showVES),
-            description: 'Tasa oficial BCV o personalizada para convertir los precios automáticamente a Bolívares en catálogo y pedidos.',
+            description: 'Si se deja vacío o en 0, el sistema toma automáticamente la tasa en tiempo real de Binance P2P.',
           },
         },
         {

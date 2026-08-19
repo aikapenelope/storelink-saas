@@ -46,6 +46,7 @@ export function CartDrawer({
   const [customer, setCustomer] = useState({
     name: '',
     phone: '',
+    email: '',
     address: '',
     paymentMethod: 'Transferencia / Pago Móvil / Efectivo',
     notes: '',
@@ -244,6 +245,16 @@ export function CartDrawer({
                     placeholder="Ej. 0412 123 4567 o +58 412..."
                     value={customer.phone}
                     onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (para recibir comprobante y PDF)</label>
+                  <input
+                    type="email"
+                    placeholder="tucorreo@ejemplo.com (opcional)"
+                    value={customer.email}
+                    onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                 </div>
