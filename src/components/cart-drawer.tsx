@@ -1,7 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShoppingBag, Trash2, Plus, Minus, Send, FileDown, CheckCircle2, X } from 'lucide-react';
+import {
+  ShoppingBag,
+  Trash2,
+  Plus,
+  Minus,
+  Send,
+  FileDown,
+  CheckCircle2,
+  X,
+  Truck,
+  Store,
+  MapPin,
+  Clock,
+  Info,
+} from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { ProductItem } from '@/components/product-card';
 import { processOrder } from '@/app/actions/checkout';
@@ -29,7 +43,7 @@ export function CartDrawer({
   onClose,
   items,
   currency = 'USD',
-  exchangeRateVES = 56.5,
+  exchangeRateVES = 910.0,
   showVES = true,
   storeName,
   whatsappPhone,
@@ -37,11 +51,16 @@ export function CartDrawer({
   onUpdateQuantity,
   onClearCart,
 }: CartDrawerProps) {
+  const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
+
   const [customer, setCustomer] = useState({
     name: '',
     phone: '',
     email: '',
     address: '',
+    residenceZone: '',
+    buildingHouse: '',
+    municipality: 'Chacao',
     paymentMethod: 'Transferencia / Pago Móvil / Efectivo',
     notes: '',
   });
@@ -63,7 +82,24 @@ export function CartDrawer({
       return;
     }
 
+    if (deliveryType === 'delivery') {
+      if (
+        !customer.address.trim() ||
+        !customer.residenceZone.trim() ||
+        !customer.buildingHouse.trim() ||
+        !customer.municipality.trim()
+      ) {
+        alert('Por favor completa todos los campos obligatorios de la dirección de delivery.');
+        return;
+      }
+    }
+
     setIsLoading(true);
+
+    const formattedAddress =
+      deliveryType === 'delivery'
+        ? `[DELIVERY] ${customer.address}, Edif/Casa: ${customer.buildingHouse}, Zona/Sector: ${customer.residenceZone}, Mun: ${customer.municipality}`
+        : `[RETIRO EN TIENDA / PICKUP] Sede Don Luigi - Las Mercedes, Caracas (Horario: 11:30 AM - 10:00 PM)`;
 
     try {
       const response = await processOrder({
@@ -73,7 +109,14 @@ export function CartDrawer({
         currency,
         exchangeRateVES,
         showVES,
-        customer,
+        customer: {
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          address: formattedAddress,
+          paymentMethod: customer.paymentMethod,
+          notes: customer.notes,
+        },
         items: items.map((i) => ({
           sku: i.sku,
           title: i.title,
@@ -190,8 +233,8 @@ export function CartDrawer({
                         <span className="text-xs font-mono text-slate-400">SKU: {item.sku}</span>
                         <span className="text-xs font-bold text-emerald-700">{formatPrice(item.price, currency)}</span>
                         {showVES && (
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            (Bs. {(item.price * exchangeRateVES).toLocaleString('es-VE', { minimumFractionDigits: 2 })})
+                          <span className="text-[10px] text-slate-500 font-mono font-bold">
+                            (Bs. {(item.price * exchangeRateVES).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                           </span>
                         )}
                       </div>
@@ -217,72 +260,197 @@ export function CartDrawer({
               </div>
 
               {/* Customer Checkout Form */}
-              <form id="checkout-form" onSubmit={handleCheckout} className="space-y-3 pt-4 border-t border-slate-100">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Datos para el Pedido</h4>
+              <form id="checkout-form" onSubmit={handleCheckout} className="space-y-4 pt-4 border-t border-slate-100">
+                {/* 1. Modalidad de Entrega (Delivery vs Pickup) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Nombre Completo *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. Juan Pérez"
-                    value={customer.name}
-                    onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-2">
+                    Tipo de Entrega:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('delivery')}
+                      className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                        deliveryType === 'delivery'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Truck className="w-4 h-4" />
+                      <span>🚚 Delivery</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('pickup')}
+                      className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                        deliveryType === 'pickup'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Store className="w-4 h-4" />
+                      <span>🏪 Retiro (Pickup)</span>
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Teléfono WhatsApp *</label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="Ej. 0412 123 4567 o +58 412..."
-                    value={customer.phone}
-                    onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (para recibir comprobante y PDF)</label>
-                  <input
-                    type="email"
-                    placeholder="tucorreo@ejemplo.com (opcional)"
-                    value={customer.email}
-                    onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Dirección de Entrega / Municipio</label>
-                  <input
-                    type="text"
-                    placeholder="Calle, Edificio, Apto o Punto de Referencia"
-                    value={customer.address}
-                    onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Método de Pago Preferido</label>
-                  <select
-                    value={customer.paymentMethod}
-                    onChange={(e) => setCustomer({ ...customer, paymentMethod: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium"
-                  >
-                    <option value="Pago Móvil / Transferencia en Bolívares (VES)">Pago Móvil / Transferencia en Bolívares (VES)</option>
-                    <option value="Dólares en Efectivo al Recibir (USD)">Dólares en Efectivo al Recibir (USD)</option>
-                    <option value="Zelle / Binance USDT">Zelle / Binance USDT</option>
-                    <option value="Punto de Venta / Tarjeta en Local">Punto de Venta / Tarjeta en Local</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Notas Adicionales</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Instrucciones especiales para la entrega o preparación..."
-                    value={customer.notes}
-                    onChange={(e) => setCustomer({ ...customer, notes: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
+
+                {/* 2. Pickup Venezuelan Store Address & Schedule Card */}
+                {deliveryType === 'pickup' ? (
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-slate-800 space-y-2.5 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2.5">
+                      <MapPin className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h5 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                          Dirección de Retiro en Tienda:
+                        </h5>
+                        <p className="text-xs text-slate-700 font-medium leading-relaxed mt-0.5">
+                          Av. Principal de Las Mercedes con Calle París, Edificio Don Luigi, Planta Baja (frente a la Plaza Alfredo Sadel), Caracas, Venezuela.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-amber-200/60 text-xs text-slate-600 font-semibold">
+                      <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Horario de Retiro: Lunes a Domingo de 11:30 AM a 10:00 PM</span>
+                    </div>
+
+                    <p className="text-[11px] text-amber-800 font-medium bg-amber-100/60 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                      Tu pedido estará listo para retirar en 20-30 min tras confirmación por WhatsApp.
+                    </p>
+                  </div>
+                ) : (
+                  /* 3. Delivery Required Fields */
+                  <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 animate-in fade-in duration-200">
+                    <h5 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      Datos de Dirección para el Delivery
+                    </h5>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Dirección exacta / Calle o Avenida *
+                      </label>
+                      <input
+                        type="text"
+                        required={deliveryType === 'delivery'}
+                        placeholder="Ej. Av. Francisco de Miranda, Calle El Recreo"
+                        value={customer.address}
+                        onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Zona de Residencia / Sector *
+                        </label>
+                        <input
+                          type="text"
+                          required={deliveryType === 'delivery'}
+                          placeholder="Ej. Los Palos Grandes, Altamira, Las Mercedes"
+                          value={customer.residenceZone}
+                          onChange={(e) => setCustomer({ ...customer, residenceZone: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Edificio / Casa / Apto / Piso *
+                        </label>
+                        <input
+                          type="text"
+                          required={deliveryType === 'delivery'}
+                          placeholder="Ej. Edif. Ávila, Piso 4, Apto 4-B"
+                          value={customer.buildingHouse}
+                          onChange={(e) => setCustomer({ ...customer, buildingHouse: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Municipio *
+                      </label>
+                      <select
+                        value={customer.municipality}
+                        onChange={(e) => setCustomer({ ...customer, municipality: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium"
+                      >
+                        <option value="Chacao">Municipio Chacao</option>
+                        <option value="Baruta">Municipio Baruta</option>
+                        <option value="Sucre">Municipio Sucre (Petare / Los Dos Caminos)</option>
+                        <option value="El Hatillo">Municipio El Hatillo</option>
+                        <option value="Libertador">Municipio Libertador (Caracas Centro / Oeste)</option>
+                        <option value="Otro Municipio">Otro Municipio / Fuera de Caracas</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Datos del Cliente */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                    Datos del Comprador
+                  </h4>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nombre Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. Juan Pérez"
+                      value={customer.name}
+                      onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Teléfono WhatsApp *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="Ej. 0412 123 4567 o +58 412..."
+                      value={customer.phone}
+                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (para recibir comprobante y PDF)</label>
+                    <input
+                      type="email"
+                      placeholder="tucorreo@ejemplo.com (opcional)"
+                      value={customer.email}
+                      onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Método de Pago Preferido</label>
+                    <select
+                      value={customer.paymentMethod}
+                      onChange={(e) => setCustomer({ ...customer, paymentMethod: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium"
+                    >
+                      <option value="Pago Móvil / Transferencia en Bolívares (VES)">Pago Móvil / Transferencia en Bolívares (VES)</option>
+                      <option value="Dólares en Efectivo al Recibir (USD)">Dólares en Efectivo al Recibir (USD)</option>
+                      <option value="Zelle / Binance USDT">Zelle / Binance USDT</option>
+                      <option value="Punto de Venta / Tarjeta en Local">Punto de Venta / Tarjeta en Local</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Notas Adicionales</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Instrucciones especiales para la entrega o preparación..."
+                      value={customer.notes}
+                      onChange={(e) => setCustomer({ ...customer, notes: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
               </form>
             </>
@@ -296,7 +464,7 @@ export function CartDrawer({
               <div>
                 <span className="text-xs font-bold text-slate-500 block">Total a Pagar:</span>
                 {showVES && (
-                  <span className="text-xs text-slate-400 font-mono font-bold">
+                  <span className="text-xs text-slate-600 font-mono font-bold">
                     Bs. {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 )}

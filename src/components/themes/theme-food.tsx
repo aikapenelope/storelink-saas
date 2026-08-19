@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight } from 'lucide-react';
+import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -11,6 +12,8 @@ interface ThemeProps {
   cartCount: number;
   cartAmount: number;
   cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
   onAddToCart: (product: ProductItem, quantity: number) => void;
@@ -23,6 +26,8 @@ export function ThemeFoodDelivery({
   cartCount,
   cartAmount,
   cart,
+  activeTheme = 'food-delivery',
+  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -68,28 +73,36 @@ export function ThemeFoodDelivery({
 
       {/* 2. Glassmorphic App Bar */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-orange-100 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-orange-500/30 transform hover:rotate-3 transition">
-              🍔
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black tracking-tight text-slate-900">
-                  {tenant.name}
-                </h1>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> ABIERTO
-                </span>
+        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap sm:flex-nowrap">
+            {/* DEMOS MARTES Switcher (First element in Header) */}
+            <DemosMartesSwitcher
+              activeTheme={activeTheme}
+              onSelectTheme={onSelectTheme}
+            />
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-orange-500/30 transform hover:rotate-3 transition flex-shrink-0">
+                🍔
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 font-semibold mt-0.5">
-                <span className="flex items-center gap-1 text-amber-600">
-                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9 (140+ reseñas)
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-1 text-slate-600">
-                  <Clock className="w-3.5 h-3.5 text-orange-500" /> 20-30 min
-                </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-900">
+                    {tenant.name}
+                  </h1>
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> ABIERTO
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 font-semibold mt-0.5">
+                  <span className="flex items-center gap-1 text-amber-600 text-[11px] sm:text-xs">
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9 (140+ reseñas)
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-slate-600 text-[11px] sm:text-xs">
+                    <Clock className="w-3.5 h-3.5 text-orange-500" /> 20-30 min
+                  </span>
+                </div>
               </div>
             </div>
           </div>

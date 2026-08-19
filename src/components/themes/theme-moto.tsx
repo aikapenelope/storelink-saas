@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, Zap, CheckCircle2, ChevronRight } from 'lucide-react';
+import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -11,6 +12,8 @@ interface ThemeProps {
   cartCount: number;
   cartAmount: number;
   cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
   onAddToCart: (product: ProductItem, quantity: number) => void;
@@ -23,6 +26,8 @@ export function ThemeMotoParts({
   cartCount,
   cartAmount,
   cart,
+  activeTheme = 'moto-parts',
+  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -65,25 +70,33 @@ export function ThemeMotoParts({
 
       {/* 2. Moto Pro Header */}
       <header className="sticky top-0 z-40 bg-[#0e1217]/90 backdrop-blur-xl border-b border-neutral-800 shadow-2xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition">
-              <Gauge className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
-                  ORIGINAL OEM
-                </span>
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap sm:flex-nowrap">
+            {/* DEMOS MARTES Switcher (First element in Header) */}
+            <DemosMartesSwitcher
+              activeTheme={activeTheme}
+              onSelectTheme={onSelectTheme}
+            />
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-lg sm:text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition flex-shrink-0">
+                <Gauge className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <p className="text-xs text-neutral-400 font-mono hidden sm:flex items-center gap-2 mt-0.5">
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
-                </span>
-                <span>•</span>
-                <span>Cilindros, Frenos, Cadenas y Lubricantes</span>
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-black text-base sm:text-xl tracking-tight text-white">{tenant.name}</h1>
+                  <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
+                    OEM
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 font-mono hidden md:flex items-center gap-2 mt-0.5">
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
+                  </span>
+                  <span>•</span>
+                  <span>Cilindros, Frenos, Cadenas y Lubricantes</span>
+                </p>
+              </div>
             </div>
           </div>
 

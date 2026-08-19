@@ -535,6 +535,8 @@ export function StorefrontClient({
     cartCount: totalCartCount,
     cartAmount: totalCartAmount,
     cart,
+    activeTheme,
+    onSelectTheme: (themeId: string) => setActiveTheme(themeId),
     onOpenCart: () => setIsCartOpen(true),
     onOpenProductModal: handleOpenProductModal,
     onAddToCart: handleAddToCart,
@@ -542,53 +544,6 @@ export function StorefrontClient({
 
   return (
     <div className="relative min-h-screen">
-      {/* Live Interactive Vertical Catalog Switcher Bar */}
-      <div className="fixed top-3 right-3 z-50 flex items-center gap-1 bg-slate-950/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full shadow-2xl text-[11px] text-white">
-        <span className="px-2 font-bold flex items-center gap-1 text-slate-300">
-          <Layers className="w-3.5 h-3.5 text-amber-400" /> Plan / Tema:
-        </span>
-        <button
-          onClick={() => setActiveTheme('basic-banner')}
-          className={`px-3 py-1 rounded-full font-bold transition ${
-            activeTheme === 'basic-banner' ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
-          }`}
-        >
-          🏷️ Básico (Banner)
-        </button>
-        <button
-          onClick={() => setActiveTheme('food-delivery')}
-          className={`px-3 py-1 rounded-full font-bold transition ${
-            activeTheme === 'food-delivery' ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
-          }`}
-        >
-          🍔 Comida
-        </button>
-        <button
-          onClick={() => setActiveTheme('fashion-boutique')}
-          className={`px-3 py-1 rounded-full font-bold transition ${
-            activeTheme === 'fashion-boutique' ? 'bg-[#ebdcd0] text-[#2d2825] shadow-sm' : 'hover:bg-white/10 text-slate-300'
-          }`}
-        >
-          👗 Ropa
-        </button>
-        <button
-          onClick={() => setActiveTheme('moto-parts')}
-          className={`px-3 py-1 rounded-full font-bold transition ${
-            activeTheme === 'moto-parts' ? 'bg-amber-400 text-black shadow-sm' : 'hover:bg-white/10 text-slate-300'
-          }`}
-        >
-          🏍️ Motos
-        </button>
-        <button
-          onClick={() => setActiveTheme('hardware-store')}
-          className={`px-3 py-1 rounded-full font-bold transition ${
-            activeTheme === 'hardware-store' ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
-          }`}
-        >
-          🔧 Ferretería
-        </button>
-      </div>
-
       {/* Render Active Theme View */}
       {activeTheme === 'basic-banner' && <ThemeBasicBanner {...themeProps} />}
       {activeTheme === 'fashion-boutique' && <ThemeFashionBoutique {...themeProps} />}
@@ -749,8 +704,11 @@ export function StorefrontClient({
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={cart}
+        currency={activeTenantConfig.currency || 'USD'}
+        exchangeRateVES={activeTenantConfig.exchangeRateVES}
+        showVES={activeTenantConfig.showVES}
         tenantSlug={tenant.slug}
-        storeName={tenant.name}
+        storeName={activeTenantConfig.name}
         whatsappPhone={tenant.whatsappPhone}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={() => setCart([])}

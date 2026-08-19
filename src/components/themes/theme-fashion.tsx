@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Search, ArrowUpRight } from 'lucide-react';
+import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -11,6 +12,8 @@ interface ThemeProps {
   cartCount: number;
   cartAmount: number;
   cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
   onAddToCart: (product: ProductItem, quantity: number) => void;
@@ -23,6 +26,8 @@ export function ThemeFashionBoutique({
   cartCount,
   cartAmount,
   cart,
+  activeTheme = 'fashion-boutique',
+  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -62,13 +67,19 @@ export function ThemeFashionBoutique({
 
       {/* 2. Editorial Header */}
       <header className="sticky top-0 z-40 bg-[#fbf9f6]/95 backdrop-blur-md border-b border-[#ece5dd]">
-        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-6 flex-wrap sm:flex-nowrap">
+            {/* DEMOS MARTES Switcher (First element in Header) */}
+            <DemosMartesSwitcher
+              activeTheme={activeTheme}
+              onSelectTheme={onSelectTheme}
+            />
+
             <div>
               <span className="text-[9px] tracking-[0.3em] text-[#8c827a] uppercase block">
                 Atelier & Studio
               </span>
-              <h1 className="font-serif text-2xl tracking-tight text-[#1c1815] font-normal">
+              <h1 className="font-serif text-xl sm:text-2xl tracking-tight text-[#1c1815] font-normal">
                 {tenant.name}
               </h1>
             </div>

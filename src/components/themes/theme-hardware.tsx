@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Search, Hammer, CheckCircle2, Plus, Minus, FileText, ChevronRight } from 'lucide-react';
+import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -11,6 +12,8 @@ interface ThemeProps {
   cartCount: number;
   cartAmount: number;
   cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
   onAddToCart: (product: ProductItem, quantity: number) => void;
@@ -23,6 +26,8 @@ export function ThemeHardwareStore({
   cartCount,
   cartAmount,
   cart,
+  activeTheme = 'hardware-store',
+  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -64,25 +69,33 @@ export function ThemeHardwareStore({
 
       {/* 2. Ferretería Header */}
       <header className="sticky top-0 z-40 bg-blue-950 text-white shadow-xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition">
-              <Hammer className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600">
-                  SUMINISTROS PRO
-                </span>
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap sm:flex-nowrap">
+            {/* DEMOS MARTES Switcher (First element in Header) */}
+            <DemosMartesSwitcher
+              activeTheme={activeTheme}
+              onSelectTheme={onSelectTheme}
+            />
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg sm:text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition flex-shrink-0">
+                <Hammer className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <p className="text-xs text-blue-200 hidden sm:flex items-center gap-2 mt-0.5">
-                <span className="flex items-center gap-1 text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
-                </span>
-                <span>•</span>
-                <span>Herramientas Manuales, Eléctricas & Plomería</span>
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-black text-base sm:text-xl tracking-tight text-white">{tenant.name}</h1>
+                  <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600">
+                    PRO
+                  </span>
+                </div>
+                <p className="text-xs text-blue-200 hidden md:flex items-center gap-2 mt-0.5">
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
+                  </span>
+                  <span>•</span>
+                  <span>Herramientas & Plomería</span>
+                </p>
+              </div>
             </div>
           </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Search, Plus, Minus, CheckCircle2 } from 'lucide-react';
+import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -11,6 +12,8 @@ interface ThemeProps {
   cartCount: number;
   cartAmount: number;
   cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
   onAddToCart: (product: ProductItem, quantity: number) => void;
@@ -23,6 +26,8 @@ export function ThemeBasicBanner({
   cartCount,
   cartAmount,
   cart,
+  activeTheme = 'basic-banner',
+  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -69,9 +74,12 @@ export function ThemeBasicBanner({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        {/* Plan Badge */}
-        <div className="absolute top-3 left-4 bg-white/90 backdrop-blur-md text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
-          Plan Básico
+        {/* DEMOS MARTES Switcher on Banner Top-Left */}
+        <div className="absolute top-3 left-4 z-20">
+          <DemosMartesSwitcher
+            activeTheme={activeTheme}
+            onSelectTheme={onSelectTheme}
+          />
         </div>
       </div>
 
