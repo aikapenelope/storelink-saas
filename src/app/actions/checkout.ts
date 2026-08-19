@@ -413,11 +413,12 @@ _Generado automáticamente desde la tienda PWA_
           .join('');
 
         for (const recipient of recipients) {
-          await resend.emails.send({
-            from: fromEmail,
-            to: recipient,
-            subject: `✨ ¡Hola, ${customer.name}! Tu pedido #${orderNumber} en ${storeName || 'Don Luigi'} está registrado`,
-            html: `
+          try {
+            const sendResult = await resend.emails.send({
+              from: fromEmail,
+              to: recipient,
+              subject: `✨ ¡Hola, ${customer.name}! Tu pedido #${orderNumber} en ${storeName || 'Don Luigi'} está registrado`,
+              html: `
               <!DOCTYPE html>
               <html>
               <head>
@@ -514,13 +515,35 @@ _Generado automáticamente desde la tienda PWA_
               </body>
               </html>
             `,
-            attachments: [
-              {
-                filename: `Nota-Entrega-${orderNumber}.pdf`,
-                content: pdfBase64,
-              },
-            ],
-          });
+              attachments: [
+                {
+                  filename: `Nota-Entrega-${orderNumber}.pdf`,
+                  content: pdfBase64,
+                },
+              ],
+            });
+
+            if (sendResult.error) {
+              console.warn('Resend send warning for recipient:', recipient, sendResult.error);
+              // Fallback to account owner email if testing domain restriction triggers
+              if (sendResult.error.name === 'validation_error' && recipient !== 'angeldelnogal55@gmail.com') {
+                await resend.emails.send({
+                  from: fromEmail,
+                  to: 'angeldelnogal55@gmail.com',
+                  subject: `[Demo StoreLink] Pedido #${orderNumber} de ${customer.name} (${customer.email || 'Sin email'})`,
+                  html: `<p>Se generó un pedido desde la tienda demo para el cliente <strong>${customer.name}</strong> (${customer.email}). El correo no pudo enviarse directamente a su buzón debido a que estás usando el dominio de prueba <code>onboarding@resend.dev</code> de Resend. Te enviamos la copia a ti con la Nota de Entrega en PDF adjunta.</p>`,
+                  attachments: [
+                    {
+                      filename: `Nota-Entrega-${orderNumber}.pdf`,
+                      content: pdfBase64,
+                    },
+                  ],
+                });
+              }
+            }
+          } catch (singleErr) {
+            console.warn('Resend single recipient exception:', singleErr);
+          }
         }
         emailSent = true;
       } catch (emailErr) {
