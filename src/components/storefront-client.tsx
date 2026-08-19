@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Check, Layers, Sparkles } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
+import { ThemeBasicBanner } from './themes/theme-basic';
 import { ThemeFoodDelivery } from './themes/theme-food';
 import { ThemeFashionBoutique } from './themes/theme-fashion';
 import { ThemeMotoParts } from './themes/theme-moto';
@@ -49,7 +50,7 @@ export interface TenantConfig {
   id: string;
   name: string;
   slug: string;
-  theme?: 'food-delivery' | 'fashion-boutique' | 'moto-parts' | 'hardware-store' | string;
+  theme?: 'basic-banner' | 'food-delivery' | 'fashion-boutique' | 'moto-parts' | 'hardware-store' | string;
   whatsappPhone: string;
   currency?: string;
   primaryColor?: string;
@@ -69,6 +70,57 @@ interface StorefrontClientProps {
 
 // Vertical Datasets for Live Theme Preview
 const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categories: string[]; items: ProductItem[] }> = {
+  'basic-banner': {
+    name: 'Comercial & Variedades Express',
+    welcome: 'Catálogo de productos destacados con atención y pedidos directos por WhatsApp.',
+    categories: ['Todos', 'Ofertas', 'Hogar', 'Tecnología', 'Cuidado Personal'],
+    items: [
+      {
+        id: 'b1',
+        sku: 'BAS-HOG-01',
+        title: 'Lámpara LED de Escritorio Recargable Touch',
+        price: 15.0,
+        description: '3 niveles de intensidad de luz blanca/cálida, cuello flexible y batería USB.',
+        category: { id: 'c1', name: 'Hogar' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'b2',
+        sku: 'BAS-TEC-02',
+        title: 'Auriculares Inalámbricos Bluetooth 5.3 con Estuche',
+        price: 22.0,
+        description: 'Cancelación pasiva de ruido, micrófono HD y hasta 24h de reproducción.',
+        category: { id: 'c2', name: 'Tecnología' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'b3',
+        sku: 'BAS-PER-03',
+        title: 'Termo de Acero Inoxidable Doble Pared 750ml',
+        price: 12.5,
+        description: 'Mantiene bebidas frías por 24h y calientes por 12h. Tapa antiderrame.',
+        category: { id: 'c3', name: 'Cuidado Personal' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'b4',
+        sku: 'BAS-OFR-04',
+        title: 'Organizador Multiusos de Acrílico Transparente',
+        price: 9.0,
+        description: 'Ideal para cosméticos, escritorio o accesorios. 4 compartimientos.',
+        category: { id: 'c4', name: 'Ofertas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80' }],
+      },
+    ],
+  },
   'food-delivery': {
     name: 'Don Luigi & Burgers',
     welcome: 'Comida artesanal preparada al momento. Pide y recibe por WhatsApp.',
@@ -319,7 +371,7 @@ export function StorefrontClient({
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
 
   // Active theme (defaults to tenant.theme, allows live preview toggle)
-  const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'food-delivery');
+  const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'basic-banner');
 
   // Modal variant & modifier selection state
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -398,7 +450,7 @@ export function StorefrontClient({
   const totalCartAmount = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
   // Active theme dataset (switches products if previewing demo verticals)
-  const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['food-delivery'];
+  const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['basic-banner'];
   const activeProducts = products.length > 0 ? products : currentVertical.items;
   const activeCategories = categories.length > 1 ? categories : currentVertical.categories;
   const activeTenantConfig: TenantConfig = {
@@ -424,8 +476,16 @@ export function StorefrontClient({
       {/* Live Interactive Vertical Catalog Switcher Bar */}
       <div className="fixed top-3 right-3 z-50 flex items-center gap-1 bg-slate-950/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full shadow-2xl text-[11px] text-white">
         <span className="px-2 font-bold flex items-center gap-1 text-slate-300">
-          <Layers className="w-3.5 h-3.5 text-amber-400" /> Catálogo:
+          <Layers className="w-3.5 h-3.5 text-amber-400" /> Plan / Tema:
         </span>
+        <button
+          onClick={() => setActiveTheme('basic-banner')}
+          className={`px-3 py-1 rounded-full font-bold transition ${
+            activeTheme === 'basic-banner' ? 'bg-slate-700 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
+          }`}
+        >
+          🏷️ Básico (Banner)
+        </button>
         <button
           onClick={() => setActiveTheme('food-delivery')}
           className={`px-3 py-1 rounded-full font-bold transition ${
@@ -461,10 +521,11 @@ export function StorefrontClient({
       </div>
 
       {/* Render Active Theme View */}
+      {activeTheme === 'basic-banner' && <ThemeBasicBanner {...themeProps} />}
       {activeTheme === 'fashion-boutique' && <ThemeFashionBoutique {...themeProps} />}
       {activeTheme === 'moto-parts' && <ThemeMotoParts {...themeProps} />}
       {activeTheme === 'hardware-store' && <ThemeHardwareStore {...themeProps} />}
-      {(activeTheme === 'food-delivery' || !activeTheme) && <ThemeFoodDelivery {...themeProps} />}
+      {activeTheme === 'food-delivery' && <ThemeFoodDelivery {...themeProps} />}
 
       {/* Shared Interactive Product Customizer Modal */}
       {selectedProduct && (

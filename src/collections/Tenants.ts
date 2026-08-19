@@ -32,16 +32,17 @@ export const Tenants: CollectionConfig = {
     {
       name: 'theme',
       type: 'select',
-      label: 'Diseño del Catálogo (Theme UI)',
-      defaultValue: 'food-delivery',
+      label: 'Plan y Diseño del Catálogo (Theme UI)',
+      defaultValue: 'basic-banner',
       options: [
-        { label: '🍔 Comida & Restaurantes (Delivery & Menú)', value: 'food-delivery' },
-        { label: '👗 Tienda de Ropa & Moda (Boutique Lookbook)', value: 'fashion-boutique' },
-        { label: '🏍️ Repuestos de Moto & Accesorios (Moto Pro)', value: 'moto-parts' },
-        { label: '🔧 Ferretería & Herramientas (Ferretería Industrial)', value: 'hardware-store' },
+        { label: '🏷️ Plan Básico (Banner Header & Catálogo Rápido)', value: 'basic-banner' },
+        { label: '🍔 Comida & Restaurantes (Delivery & Menú - Premium)', value: 'food-delivery' },
+        { label: '👗 Tienda de Ropa & Moda (Boutique Lookbook - Premium)', value: 'fashion-boutique' },
+        { label: '🏍️ Repuestos de Moto & Accesorios (Moto Pro - Premium)', value: 'moto-parts' },
+        { label: '🔧 Ferretería & Herramientas (Ferretería Industrial - Premium)', value: 'hardware-store' },
       ],
       admin: {
-        description: 'Elige el modelo visual especializado para tu tipo de comercio.',
+        description: 'Elige si la tienda usa la plantilla del Plan Básico o una de las plantillas Premium especializadas.',
       },
     },
     {
@@ -100,7 +101,7 @@ export const Tenants: CollectionConfig = {
         {
           name: 'primaryColor',
           type: 'text',
-          defaultValue: '#f97316',
+          defaultValue: '#1e293b',
           label: 'Color Primario (Hexadecimal)',
         },
         {
