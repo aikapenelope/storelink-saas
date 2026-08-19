@@ -158,25 +158,24 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       .join('\n');
 
     const vesLine = (showVES ?? true)
-      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${rate.toFixed(2)} Bs/$)`
+      ? ` (equiv. Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
       : '';
 
     const message = `
-🛍️ *NUEVO PEDIDO #${orderNumber}*
-🏪 *Tienda:* ${storeName || 'StoreLink Shop'}
+👋 ¡Hola, *${storeName || 'Don Luigi'}*!
 
-👤 *DATOS DEL CLIENTE:*
-• *Nombre:* ${customer.name}
-• *Teléfono:* ${customer.phone}
-${customer.email ? `• *Email:* ${customer.email}\n` : ''}• *Modalidad:* ${customer.address || 'Retiro en tienda (Pickup)'}
-• *Método de Pago:* ${customer.paymentMethod || 'Efectivo / Transferencia'}
-${customer.notes ? `• *Notas:* ${customer.notes}\n` : ''}
-📦 *PRODUCTOS:*
-${itemsList}
+Acabo de registrar mi pedido *#${orderNumber}* desde su tienda online.
 
-💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency || 'USD'}*${vesLine}
+👤 *Cliente:* ${customer.name}
+📱 *Teléfono:* ${customer.phone}
+🛍️ *Modalidad:* ${customer.address || 'Retiro en tienda (Pickup)'}
+💳 *Método de Pago:* ${customer.paymentMethod || 'Pago Móvil / Zelle / Efectivo'}
+💰 *Total:* $${total.toFixed(2)} ${currency || 'USD'}${vesLine}
+${customer.notes ? `📝 *Nota:* ${customer.notes}\n` : ''}
+📸 *Adjunto a continuación la foto / captura del comprobante de pago* (o foto de los billetes).
+📍 *Comparto mi ubicación en tiempo real* para coordinar la entrega.
 
-_Generado automáticamente desde la tienda PWA_
+¡Muchas gracias! Quedo a la espera de su confirmación. 🙏
     `.trim();
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
