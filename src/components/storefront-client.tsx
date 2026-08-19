@@ -555,11 +555,11 @@ export function StorefrontClient({
       {/* Shared Interactive Product Customizer Modal */}
       {selectedProduct && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 pb-16 sm:p-4 sm:pb-4"
           onClick={() => setSelectedProduct(null)}
         >
           <div
-            className="bg-white text-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-6 duration-200 flex flex-col"
+            className="bg-white text-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[80vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-6 duration-200 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Image Banner */}
@@ -686,7 +686,7 @@ export function StorefrontClient({
               )}
 
               {/* Add to Cart CTA */}
-              <div className="pt-3 sticky bottom-0 bg-white">
+              <div className="pt-3 pb-3 sticky bottom-0 bg-white border-t border-slate-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
                 <button
                   onClick={handleAddCustomizedToCart}
                   className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2"

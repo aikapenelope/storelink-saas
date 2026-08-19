@@ -166,7 +166,7 @@ export function CartDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex justify-end">
+    <div className="fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-sm flex justify-end">
       <div className="bg-white w-full max-w-md h-full flex flex-col justify-between shadow-2xl animate-in slide-in-from-right duration-200 font-sans">
         {/* Header */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -496,7 +496,7 @@ export function CartDrawer({
 
         {/* Footer Checkout Bar */}
         {!completedOrder && items.length > 0 && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50">
+          <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] sm:pb-4 border-t border-slate-100 bg-slate-50 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <span className="text-xs font-bold text-slate-500 block">Total a Pagar:</span>
@@ -513,7 +513,7 @@ export function CartDrawer({
               type="submit"
               form="checkout-form"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 active:scale-95"
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 active:scale-95 text-sm"
             >
               <Send className="w-4 h-4" />
               {isLoading ? 'Procesando Pedido...' : 'Confirmar y Enviar a WhatsApp'}
