@@ -517,15 +517,19 @@ export function StorefrontClient({
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const totalCartAmount = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
-  // Active theme dataset (switches products if previewing demo verticals)
+  // Active theme dataset (switches products when clicking demo verticals)
   const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['basic-banner'];
-  const activeProducts = products.length > 0 ? products : currentVertical.items;
-  const activeCategories = categories.length > 1 ? categories : currentVertical.categories;
+  
+  // If products are the initial demo food set OR user switches vertical in preview:
+  const isCustomDbProducts = products.length > 0 && !products.some((p) => p.sku === 'PIZ-001');
+  const activeProducts = (isCustomDbProducts && activeTheme === tenant.theme) ? products : currentVertical.items;
+  const activeCategories = (isCustomDbProducts && activeTheme === tenant.theme) ? categories : currentVertical.categories;
+
   const activeTenantConfig: TenantConfig = {
     ...tenant,
-    name: tenant.name || currentVertical.name,
-    welcomeMessage: tenant.welcomeMessage || currentVertical.welcome,
-    exchangeRateVES: tenant.exchangeRateVES || 56.5,
+    name: (isCustomDbProducts && activeTheme === tenant.theme) ? tenant.name : currentVertical.name,
+    welcomeMessage: (isCustomDbProducts && activeTheme === tenant.theme) ? tenant.welcomeMessage : currentVertical.welcome,
+    exchangeRateVES: tenant.exchangeRateVES || 910.0,
     showVES: tenant.showVES ?? true,
   };
 
