@@ -9,6 +9,8 @@ export interface TrelloOrderPayload {
   paymentMethod?: string;
   notes?: string;
   total: number;
+  totalVES?: number;
+  exchangeRateVES?: number;
   currency: string;
   items: Array<{
     sku: string;
@@ -21,10 +23,28 @@ export interface TrelloOrderPayload {
 
 export async function createTrelloOrderCard(payload: TrelloOrderPayload): Promise<{ success: boolean; cardId?: string; error?: string }> {
   try {
-    const { apiKey, token, listId, orderNumber, customerName, customerPhone, customerAddress, paymentMethod, notes, total, currency, items, pdfUrl } = payload;
+    const {
+      apiKey,
+      token,
+      listId,
+      orderNumber,
+      customerName,
+      customerPhone,
+      customerAddress,
+      paymentMethod,
+      notes,
+      total,
+      totalVES,
+      exchangeRateVES,
+      currency,
+      items,
+      pdfUrl,
+    } = payload;
 
-    if (!apiKey || !token || !listId) {
-      console.warn('Trello configuration missing for tenant');
+    const targetListId = listId || '6a77eee513389b2d14a8b8da';
+
+    if (!apiKey || !token) {
+      console.warn('Trello API Key or Token missing');
       return { success: false, error: 'Credenciales de Trello no configuradas' };
     }
 
@@ -32,13 +52,17 @@ export async function createTrelloOrderCard(payload: TrelloOrderPayload): Promis
       .map((item) => `- **[${item.sku || 'N/A'}]** ${item.quantity}x ${item.title} ($${item.price.toFixed(2)} c/u) = **$${(item.quantity * item.price).toFixed(2)}**`)
       .join('\n');
 
+    const vesText = totalVES
+      ? `\n* **Equivalente VES:** Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })} (Tasa: ${exchangeRateVES?.toFixed(2) || 'N/A'} Bs/$)`
+      : '';
+
     const cardDescription = `
 ### 👤 DATOS DEL CLIENTE
-* **Nombre:** ${customerName}
-* **Teléfono:** [${customerPhone}](https://wa.me/${customerPhone.replace(/\D/g, '')})
-* **Dirección de Entrega:** ${customerAddress || 'Retiro en local / No especificada'}
+* **Cliente:** ${customerName}
+* **WhatsApp:** [${customerPhone}](https://wa.me/${customerPhone.replace(/\D/g, '')})
+* **Modalidad / Dirección:** ${customerAddress || 'Retiro en tienda (Pickup)'}
 * **Método de Pago:** ${paymentMethod || 'No especificado'}
-${notes ? `* **Notas:** ${notes}` : ''}
+${notes ? `* **Observación / Nota:** ${notes}` : ''}
 
 ---
 
@@ -47,20 +71,21 @@ ${itemsSummary}
 
 ---
 
-### 💰 TOTAL: **${total.toFixed(2)} ${currency}**
+### 💰 TOTAL A PAGAR: **$${total.toFixed(2)} ${currency}**${vesText}
 ${pdfUrl ? `\n📄 **[Descargar Nota de Entrega en PDF](${pdfUrl})**` : ''}
 
-_Creado automáticamente desde StoreLink PWA_
+_Generado automáticamente desde StoreLink PWA_
     `.trim();
 
-    const cardTitle = `🛍️ Pedido #${orderNumber} - ${customerName} (${total.toFixed(2)} ${currency})`;
+    const cardTitle = `🛍️ Pedido #${orderNumber} — ${customerName} ($${total.toFixed(2)} ${currency})`;
 
     const params = new URLSearchParams({
       key: apiKey,
       token: token,
-      idList: listId,
+      idList: targetListId,
       name: cardTitle,
       desc: cardDescription,
+      idLabels: '6a77f035716c662b2dcd1c1d,6a77eed8b83fbca7a633fdd4', // Pendiente (red) + PWA (blue)
       pos: 'top',
     });
 

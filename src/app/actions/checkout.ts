@@ -138,8 +138,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         customerPhone: customer.phone,
         customerAddress: customer.address,
         paymentMethod: customer.paymentMethod,
+        notes: customer.notes,
         currency: currency || 'USD',
         total,
+        totalVES,
+        exchangeRateVES: rate,
+        showVES: showVES ?? true,
         items: verifiedItems,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');
