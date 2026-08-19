@@ -59,6 +59,59 @@ export interface TenantConfig {
   exchangeRateVES?: number;
   primaryColor?: string;
   welcomeMessage?: string;
+  pickupConfig?: {
+    enabled?: boolean | null;
+    locationAddress?: string | null;
+    schedule?: string | null;
+    estimatedTime?: string | null;
+    instructions?: string | null;
+  };
+  paymentMethodsConfig?: {
+    pagoMovil?: {
+      enabled?: boolean | null;
+      bank?: string | null;
+      phone?: string | null;
+      idDoc?: string | null;
+      accountHolder?: string | null;
+    };
+    zelle?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    binance?: {
+      enabled?: boolean | null;
+      payId?: string | null;
+      nickname?: string | null;
+    };
+    zinli?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    banescoPanama?: {
+      enabled?: boolean | null;
+      accountNumber?: string | null;
+      accountHolder?: string | null;
+      accountType?: string | null;
+    };
+    cash?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+    pos?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+  };
+  deliveryConfig?: {
+    zones?: Array<{
+      id?: string | null;
+      name: string;
+      priceDelivery?: number | null;
+      estimatedTime?: string | null;
+    }> | null;
+  };
 }
 
 interface StorefrontClientProps {
@@ -714,6 +767,9 @@ export function StorefrontClient({
         tenantSlug={tenant.slug}
         storeName={activeTenantConfig.name}
         whatsappPhone={tenant.whatsappPhone}
+        pickupConfig={tenant.pickupConfig}
+        paymentMethodsConfig={tenant.paymentMethodsConfig}
+        deliveryConfig={tenant.deliveryConfig}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={() => setCart([])}
       />

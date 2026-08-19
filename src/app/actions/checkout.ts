@@ -391,8 +391,8 @@ _Generado automáticamente desde la tienda PWA_
     // 4. Send Order Confirmation Email with PDF Attachment via Resend (Multi-Tenant BYOK + Platform Fallback)
     let emailSent = false;
     const isEmailEnabled = tenantDoc?.emailConfig?.enabled ?? true;
-    const effectiveResendKey = tenantDoc?.emailConfig?.resendApiKey || process.env.RESEND_API_KEY;
-    const fromEmail = tenantDoc?.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || 'StoreLink <onboarding@resend.dev>';
+    const effectiveResendKey = tenantDoc?.emailConfig?.resendApiKey || process.env.RESEND_API_KEY || 're_2BtYzBRz_GtERUkjdX1B8NM6uzgM9tsrA';
+    const fromEmail = tenantDoc?.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || 'Don Luigi <onboarding@resend.dev>';
     const emailSubject = tenantDoc?.emailConfig?.emailSubject || `🛍️ Comprobante de Pedido #${orderNumber} - ${storeName}`;
     const merchantNotificationEmail = tenantDoc?.emailConfig?.notificationEmail;
 

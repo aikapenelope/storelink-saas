@@ -41,6 +41,59 @@ interface CartDrawerProps {
   storeName: string;
   whatsappPhone: string;
   tenantSlug: string;
+  pickupConfig?: {
+    enabled?: boolean | null;
+    locationAddress?: string | null;
+    schedule?: string | null;
+    estimatedTime?: string | null;
+    instructions?: string | null;
+  };
+  paymentMethodsConfig?: {
+    pagoMovil?: {
+      enabled?: boolean | null;
+      bank?: string | null;
+      phone?: string | null;
+      idDoc?: string | null;
+      accountHolder?: string | null;
+    };
+    zelle?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    binance?: {
+      enabled?: boolean | null;
+      payId?: string | null;
+      nickname?: string | null;
+    };
+    zinli?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    banescoPanama?: {
+      enabled?: boolean | null;
+      accountNumber?: string | null;
+      accountHolder?: string | null;
+      accountType?: string | null;
+    };
+    cash?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+    pos?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+  };
+  deliveryConfig?: {
+    zones?: Array<{
+      id?: string | null;
+      name: string;
+      priceDelivery?: number | null;
+      estimatedTime?: string | null;
+    }> | null;
+  };
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onClearCart: () => void;
 }
@@ -55,12 +108,37 @@ export function CartDrawer({
   storeName,
   whatsappPhone,
   tenantSlug,
+  pickupConfig,
+  paymentMethodsConfig,
+  deliveryConfig,
   onUpdateQuantity,
   onClearCart,
 }: CartDrawerProps) {
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
   const [phoneOperator, setPhoneOperator] = useState('414');
   const [phoneNumber, setPhoneNumber] = useState('');
+
+  // Dynamic merchant account values from Payload DB
+  const pmBank = paymentMethodsConfig?.pagoMovil?.bank || 'Banesco (0134)';
+  const pmPhone = paymentMethodsConfig?.pagoMovil?.phone || whatsappPhone || '04141234567';
+  const pmIdDoc = paymentMethodsConfig?.pagoMovil?.idDoc || 'J-12345678-0';
+  const pmHolder = paymentMethodsConfig?.pagoMovil?.accountHolder || storeName;
+
+  const zelleEmail = paymentMethodsConfig?.zelle?.email || 'pagos@storelink.app';
+  const zelleHolder = paymentMethodsConfig?.zelle?.accountHolder || storeName;
+
+  const binancePayId = paymentMethodsConfig?.binance?.payId || '284910381';
+  const binanceNick = paymentMethodsConfig?.binance?.nickname || storeName.replace(/\s+/g, '');
+
+  const zinliEmail = paymentMethodsConfig?.zinli?.email || 'pagos@storelink.app';
+  const zinliHolder = paymentMethodsConfig?.zinli?.accountHolder || storeName;
+
+  const banescoAcc = paymentMethodsConfig?.banescoPanama?.accountNumber || '01-2345-6789';
+  const banescoHolder = paymentMethodsConfig?.banescoPanama?.accountHolder || storeName;
+
+  const pickupLoc = pickupConfig?.locationAddress || `${storeName} - Sede Principal`;
+  const pickupSched = pickupConfig?.schedule || 'Lun-Dom 11:30 AM - 10:00 PM';
+  const pickupTime = pickupConfig?.estimatedTime || '20-30 min';
 
   // Payment Method Selection
   const [paymentMethodKey, setPaymentMethodKey] = useState<

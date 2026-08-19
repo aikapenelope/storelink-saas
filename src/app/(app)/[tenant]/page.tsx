@@ -133,6 +133,9 @@ export default async function TenantStorefrontPage({
         primaryColor: branding?.primaryColor || undefined,
         exchangeRateVES: Number(branding?.exchangeRateVES) > 0 ? Number(branding?.exchangeRateVES) : liveRate,
         showVES: branding?.showVES ?? true,
+        pickupConfig: doc.pickupConfig || undefined,
+        paymentMethodsConfig: doc.paymentMethodsConfig || undefined,
+        deliveryConfig: doc.deliveryConfig || undefined,
       };
 
       // Fetch products for this tenant
