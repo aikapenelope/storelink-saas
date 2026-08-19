@@ -83,9 +83,8 @@ export function CartDrawer({
     name: '',
     email: '',
     address: '',
-    residenceZone: '',
     buildingHouse: '',
-    municipality: 'Chacao',
+    municipality: 'Municipio Chacao',
     notes: '',
   });
 
@@ -123,11 +122,10 @@ export function CartDrawer({
     if (deliveryType === 'delivery') {
       if (
         !customer.address.trim() ||
-        !customer.residenceZone.trim() ||
         !customer.buildingHouse.trim() ||
         !customer.municipality.trim()
       ) {
-        alert('Por favor completa todos los campos obligatorios de la dirección de delivery.');
+        alert('Por favor completa los tres campos obligatorios de la dirección de delivery.');
         return;
       }
     }
@@ -154,7 +152,7 @@ export function CartDrawer({
 
     const formattedAddress =
       deliveryType === 'delivery'
-        ? `[DELIVERY] ${customer.address}, Edif/Casa: ${customer.buildingHouse}, Zona/Sector: ${customer.residenceZone}, Mun: ${customer.municipality}`
+        ? `[DELIVERY] Dirección/Zona: ${customer.address}, Edif/Casa: ${customer.buildingHouse}, ${customer.municipality}`
         : `[RETIRO EN TIENDA / PICKUP] Sede Don Luigi - Las Mercedes, Caracas (Horario: 11:30 AM - 10:00 PM)`;
 
     try {
@@ -386,57 +384,44 @@ export function CartDrawer({
                     </p>
                   </div>
                 ) : (
-                  /* 3. Delivery Required Fields */
+                  /* 3. Delivery Required Fields (3 Fields: Dirección o zona, Edificio o casa, Municipios) */
                   <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 animate-in fade-in duration-200">
                     <h5 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                       Datos de Dirección para el Delivery
                     </h5>
 
+                    {/* Campo 1: Dirección o zona */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Dirección exacta / Calle o Avenida *
+                        Dirección o zona *
                       </label>
                       <input
                         type="text"
                         required={deliveryType === 'delivery'}
-                        placeholder="Ej. Av. Francisco de Miranda, Calle El Recreo"
+                        placeholder="Ej. Los Palos Grandes, Av. Francisco de Miranda"
                         value={customer.address}
                         onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Zona de Residencia / Sector *
-                        </label>
-                        <input
-                          type="text"
-                          required={deliveryType === 'delivery'}
-                          placeholder="Ej. Los Palos Grandes, Altamira, Las Mercedes"
-                          value={customer.residenceZone}
-                          onChange={(e) => setCustomer({ ...customer, residenceZone: e.target.value })}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Edificio / Casa / Apto / Piso *
-                        </label>
-                        <input
-                          type="text"
-                          required={deliveryType === 'delivery'}
-                          placeholder="Ej. Edif. Ávila, Piso 4, Apto 4-B"
-                          value={customer.buildingHouse}
-                          onChange={(e) => setCustomer({ ...customer, buildingHouse: e.target.value })}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
-                        />
-                      </div>
+                    {/* Campo 2: Edificio o casa */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Edificio o casa *
+                      </label>
+                      <input
+                        type="text"
+                        required={deliveryType === 'delivery'}
+                        placeholder="Ej. Edif. Ávila, Piso 4, Apto 4-B o Casa N° 12"
+                        value={customer.buildingHouse}
+                        onChange={(e) => setCustomer({ ...customer, buildingHouse: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                      />
                     </div>
 
+                    {/* Campo 3: Municipio */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Municipio *
@@ -444,14 +429,13 @@ export function CartDrawer({
                       <select
                         value={customer.municipality}
                         onChange={(e) => setCustomer({ ...customer, municipality: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium text-slate-800"
                       >
-                        <option value="Chacao">Municipio Chacao</option>
-                        <option value="Baruta">Municipio Baruta</option>
-                        <option value="Sucre">Municipio Sucre (Petare / Los Dos Caminos)</option>
-                        <option value="El Hatillo">Municipio El Hatillo</option>
-                        <option value="Libertador">Municipio Libertador (Caracas Centro / Oeste)</option>
-                        <option value="Otro Municipio">Otro Municipio / Fuera de Caracas</option>
+                        <option value="Municipio Hatillo">Municipio Hatillo</option>
+                        <option value="Municipio Baruta">Municipio Baruta</option>
+                        <option value="Municipio Chacao">Municipio Chacao</option>
+                        <option value="Municipio Libertador">Municipio Libertador</option>
+                        <option value="Municipio Sucre">Municipio Sucre</option>
                       </select>
                     </div>
                   </div>
