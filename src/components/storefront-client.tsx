@@ -57,11 +57,6 @@ export interface TenantConfig {
   exchangeRateVES?: number;
   primaryColor?: string;
   welcomeMessage?: string;
-  trelloConfig?: {
-    apiKey?: string;
-    token?: string;
-    listId?: string;
-  };
 }
 
 interface StorefrontClientProps {
@@ -757,7 +752,6 @@ export function StorefrontClient({
         tenantSlug={tenant.slug}
         storeName={tenant.name}
         whatsappPhone={tenant.whatsappPhone}
-        trelloConfig={tenant.trelloConfig}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={() => setCart([])}
       />

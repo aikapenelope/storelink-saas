@@ -291,7 +291,7 @@ export default async function TenantStorefrontPage({
         primaryColor: doc.branding?.primaryColor || undefined,
         exchangeRateVES: Number(doc.branding?.exchangeRateVES) > 0 ? Number(doc.branding.exchangeRateVES) : liveRate,
         showVES: doc.branding?.showVES ?? true,
-        trelloConfig: doc.trelloConfig || undefined,
+        // trelloConfig intentionally NOT passed to client — read server-side in checkout action
       };
 
       // Fetch products for this tenant

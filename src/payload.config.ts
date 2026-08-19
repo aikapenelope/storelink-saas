@@ -32,7 +32,7 @@ const plugins: Plugin[] = [
       media: {},
     },
     userHasAccessToAllTenants: (user) =>
-      Boolean(user?.role === 'super-admin' || user?.email === 'aq2133845@gmail.com'),
+      Boolean(user?.role === 'super-admin'),
   }),
   seoPlugin({
     collections: ['products', 'tenants'],
@@ -43,7 +43,7 @@ const plugins: Plugin[] = [
       doc?.branding?.welcomeMessage ||
       'Catálogo interactivo con pedidos y facturas por WhatsApp.',
     generateURL: ({ doc }: any) =>
-      `https://storelink-saas.vercel.app/${doc?.slug || ''}`,
+      `${process.env.NEXT_PUBLIC_SITE_URL || 'https://storelink-saas.vercel.app'}/${doc?.slug || ''}`,
   }),
 ];
 
@@ -90,12 +90,12 @@ export default buildConfig({
   email: resendAdapter({
     defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@storelink.app',
     defaultFromName: process.env.RESEND_FROM_NAME || 'StoreLink Notificaciones',
-    apiKey: process.env.RESEND_API_KEY || 're_mock_key_for_build',
+    apiKey: process.env.RESEND_API_KEY || '', // Empty string: Payload skips email if no key is set
   }),
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),
-  secret: process.env.PAYLOAD_SECRET || 'SUPER_SECRET_PAYLOAD_KEY_123456789',
+  secret: process.env.PAYLOAD_SECRET || (() => { throw new Error('PAYLOAD_SECRET env var is required'); })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
@@ -107,7 +107,7 @@ export default buildConfig({
         rejectUnauthorized: false,
       },
     },
-    push: true,
+    push: false, // Production: use explicit migrations instead of auto-push
   }),
   plugins,
 });

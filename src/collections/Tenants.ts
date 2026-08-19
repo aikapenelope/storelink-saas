@@ -58,6 +58,10 @@ export const Tenants: CollectionConfig = {
       name: 'emailConfig',
       type: 'group',
       label: 'Notificaciones por Correo (Multi-Tenant Resend)',
+      access: {
+        read: ({ req: { user } }) => Boolean(user),
+        update: ({ req: { user } }) => Boolean(user),
+      },
       fields: [
         {
           name: 'enabled',
@@ -101,6 +105,10 @@ export const Tenants: CollectionConfig = {
       name: 'trelloConfig',
       type: 'group',
       label: 'Integración con Trello',
+      access: {
+        read: ({ req: { user } }) => Boolean(user),
+        update: ({ req: { user } }) => Boolean(user),
+      },
       fields: [
         {
           name: 'apiKey',

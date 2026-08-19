@@ -20,11 +20,6 @@ interface CartDrawerProps {
   storeName: string;
   whatsappPhone: string;
   tenantSlug: string;
-  trelloConfig?: {
-    apiKey?: string;
-    token?: string;
-    listId?: string;
-  };
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onClearCart: () => void;
 }
@@ -39,7 +34,6 @@ export function CartDrawer({
   storeName,
   whatsappPhone,
   tenantSlug,
-  trelloConfig,
   onUpdateQuantity,
   onClearCart,
 }: CartDrawerProps) {
@@ -79,7 +73,6 @@ export function CartDrawer({
         currency,
         exchangeRateVES,
         showVES,
-        trelloConfig,
         customer,
         items: items.map((i) => ({
           sku: i.sku,

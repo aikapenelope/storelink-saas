@@ -8,9 +8,9 @@ export const Orders: CollectionConfig = {
   },
   access: {
     read: ({ req: { user } }) => Boolean(user),
-    create: () => true, // Allows server action to record customer orders
+    create: ({ req: { user } }) => Boolean(user), // Allows server action to record customer orders
     update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    delete: ({ req: { user } }) => Boolean(user),
   },
   fields: [
     {

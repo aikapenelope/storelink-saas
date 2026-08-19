@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
+import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,12 +32,30 @@ export async function POST(
   const { tenant: tenantSlug } = await params;
 
   try {
+    const payload = await getPayload({ config });
+    const headersList = await headers();
+    const authResult = await payload.auth({ headers: headersList });
+    if (!authResult.user) {
+      return NextResponse.json(
+        { error: 'No autorizado. Debes iniciar sesión como administrador para sincronizar productos.' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     let sheetUrl = body.url || body.sheetsUrl;
 
     if (!sheetUrl) {
       return NextResponse.json(
         { error: 'Debes proporcionar la URL de Google Sheets en el cuerpo JSON: { "url": "https://..." }' },
+        { status: 400 }
+      );
+    }
+
+    // SSRF Protection: Only allow Google Sheets URLs
+    if (!sheetUrl.includes('docs.google.com/spreadsheets') && !sheetUrl.includes('googleapis.com')) {
+      return NextResponse.json(
+        { error: 'Solo se aceptan URLs de Google Sheets por seguridad.' },
         { status: 400 }
       );
     }
@@ -68,8 +87,6 @@ export async function POST(
       );
     }
 
-    const payload = await getPayload({ config });
-
     // 2. Find tenant
     const tenantResult = await payload.find({
       collection: 'tenants',
@@ -95,19 +112,19 @@ export async function POST(
       );
     }
 
-    const headers = parseCSVLine(rawLines[0]).map((h) => h.toLowerCase().trim());
-    const skuIdx = headers.findIndex((h) => h === 'sku' || h === 'codigo');
-    const titleIdx = headers.findIndex((h) => h === 'title' || h === 'nombre' || h === 'producto');
-    const priceIdx = headers.findIndex((h) => h === 'price' || h === 'precio');
-    const descIdx = headers.findIndex((h) => h === 'description' || h === 'descripcion');
-    const stockIdx = headers.findIndex((h) => h === 'stock' || h === 'cantidad' || h === 'stock_quantity');
+    const csvHeaders = parseCSVLine(rawLines[0]).map((h) => h.toLowerCase().trim());
+    const skuIdx = csvHeaders.findIndex((h) => h === 'sku' || h === 'codigo');
+    const titleIdx = csvHeaders.findIndex((h) => h === 'title' || h === 'nombre' || h === 'producto');
+    const priceIdx = csvHeaders.findIndex((h) => h === 'price' || h === 'precio');
+    const descIdx = csvHeaders.findIndex((h) => h === 'description' || h === 'descripcion');
+    const stockIdx = csvHeaders.findIndex((h) => h === 'stock' || h === 'cantidad' || h === 'stock_quantity');
 
     if (titleIdx === -1 || priceIdx === -1) {
       return NextResponse.json(
         {
           error:
             'La hoja de Google Sheets debe contener al menos las columnas "title" (o nombre) y "price" (o precio).',
-          headersFound: headers,
+          headersFound: csvHeaders,
         },
         { status: 400 }
       );

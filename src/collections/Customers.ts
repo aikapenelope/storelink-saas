@@ -8,7 +8,7 @@ export const Customers: CollectionConfig = {
   },
   access: {
     read: ({ req: { user } }) => Boolean(user),
-    create: () => true, // Allows server actions to register or update customer records
+    create: ({ req: { user } }) => Boolean(user), // Allows server actions to register or update customer records
     update: ({ req: { user } }) => Boolean(user),
     delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
   },

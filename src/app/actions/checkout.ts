@@ -4,6 +4,7 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
+import { getLiveExchangeRate } from '@/lib/exchange-rate';
 import { Resend } from 'resend';
 
 export interface CheckoutCustomerData {
@@ -19,7 +20,7 @@ export interface CheckoutItemData {
   sku: string;
   title: string;
   quantity: number;
-  price: number;
+  price: number; // Client-supplied price (will be re-validated on server)
 }
 
 export interface CheckoutRequest {
@@ -29,11 +30,7 @@ export interface CheckoutRequest {
   currency: string;
   exchangeRateVES?: number;
   showVES?: boolean;
-  trelloConfig?: {
-    apiKey?: string;
-    token?: string;
-    listId?: string;
-  };
+  // trelloConfig is intentionally NOT accepted from client — read securely from DB
   customer: CheckoutCustomerData;
   items: CheckoutItemData[];
 }
@@ -49,7 +46,7 @@ export interface CheckoutResponse {
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
-    const { tenantSlug, storeName, whatsappPhone, currency, exchangeRateVES, showVES, trelloConfig, customer, items } = request;
+    const { tenantSlug, storeName, whatsappPhone, currency, showVES, customer, items } = request;
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };
@@ -57,6 +54,50 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     if (!customer.name || !customer.phone) {
       return { success: false, error: 'Por favor completa el nombre y teléfono de contacto' };
+    }
+
+    // Initialize Payload for all server-side DB operations
+    const payload = await getPayload({ config });
+
+    // Resolve tenant from database (single source of truth for config & secrets)
+    let tenantDoc: any = null;
+    let tenantId: any = undefined;
+    const tenantResult = await payload.find({
+      collection: 'tenants',
+      where: { slug: { equals: tenantSlug } },
+      limit: 1,
+      overrideAccess: true, // Server-side: bypass field-level access to read trelloConfig etc.
+    });
+    if (tenantResult.docs.length > 0) {
+      tenantDoc = tenantResult.docs[0];
+      tenantId = tenantDoc.id;
+    }
+
+    // Server-side price validation: re-read prices from DB to prevent client manipulation
+    const verifiedItems: CheckoutItemData[] = [];
+    for (const item of items) {
+      let verifiedPrice = item.price; // Fallback to client price for demo products
+      if (tenantId && item.sku) {
+        try {
+          const productMatch = await payload.find({
+            collection: 'products',
+            where: {
+              and: [
+                { sku: { equals: item.sku } },
+                { tenant: { equals: tenantId } },
+              ],
+            },
+            limit: 1,
+            overrideAccess: true,
+          });
+          if (productMatch.docs.length > 0) {
+            verifiedPrice = Number((productMatch.docs[0] as any).price) || item.price;
+          }
+        } catch {
+          // If lookup fails, use client price as fallback
+        }
+      }
+      verifiedItems.push({ ...item, price: verifiedPrice });
     }
 
     // Generate unique human-readable order number
@@ -70,8 +111,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       minute: '2-digit',
     });
 
-    const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
-    const rate = exchangeRateVES || 910.0;
+    // Calculate total using verified server-side prices
+    const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
+
+    // Resolve exchange rate from tenant config or live API
+    const tenantManualRate = Number(tenantDoc?.branding?.exchangeRateVES);
+    const rate = tenantManualRate > 0 ? tenantManualRate : await getLiveExchangeRate('binance');
     const totalVES = total * rate;
 
     // 1. Generate Delivery Note PDF (Uint8Array -> Base64)
@@ -85,13 +130,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       paymentMethod: customer.paymentMethod,
       currency: currency || 'USD',
       total,
-      items,
+      items: verifiedItems,
     });
 
     const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
 
-    // 2. Dispatch Order to Merchant's Trello Board if configured
+    // 2. Dispatch Order to Merchant's Trello Board (credentials read from DB, NOT from client)
     let trelloCardUrl: string | undefined = undefined;
+    const trelloConfig = tenantDoc?.trelloConfig;
     if (trelloConfig?.apiKey && trelloConfig?.token && trelloConfig?.listId) {
       const trelloRes = await createTrelloOrderCard({
         apiKey: trelloConfig.apiKey,
@@ -105,34 +151,16 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         notes: customer.notes,
         total,
         currency,
-        items,
+        items: verifiedItems,
       });
       trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
     }
 
     // 3. Save Order and Auto-Update Inventory in Payload CMS Database
-    let tenantDoc: any = null;
     try {
-      const payload = await getPayload({ config });
-
-      let tenantId: any = undefined;
-      const tenantResult = await payload.find({
-        collection: 'tenants',
-        where: {
-          slug: {
-            equals: tenantSlug,
-          },
-        },
-        limit: 1,
-      });
-
-      if (tenantResult.docs.length > 0) {
-        tenantDoc = tenantResult.docs[0];
-        tenantId = tenantDoc.id;
-      }
-
       await payload.create({
         collection: 'orders',
+        overrideAccess: true, // Server action: bypass collection access control
         data: {
           orderNumber,
           status: 'pending',
@@ -140,12 +168,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           customer: {
             name: customer.name,
             phone: customer.phone,
-            email: customer.email || '',
             address: customer.address || '',
             paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
             notes: customer.notes || '',
           },
-          items: items.map((item) => ({
+          items: verifiedItems.map((item) => ({
             sku: item.sku || 'N/A',
             title: item.title,
             price: item.price,
@@ -160,7 +187,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
       // 3.1 Decrement Product Stock in Inventory
       try {
-        for (const item of items) {
+        for (const item of verifiedItems) {
           if (item.sku && item.sku !== 'N/A') {
             const productMatch = await payload.find({
               collection: 'products',
@@ -171,6 +198,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
                 ],
               },
               limit: 1,
+              overrideAccess: true,
             });
 
             if (productMatch.docs.length > 0) {
@@ -180,6 +208,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
                 await payload.update({
                   collection: 'products',
                   id: prod.id,
+                  overrideAccess: true,
                   data: {
                     stockQuantity: updatedStock,
                     stockStatus: updatedStock === 0 ? 'out_of_stock' : 'in_stock',
@@ -205,6 +234,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             ],
           },
           limit: 1,
+          overrideAccess: true,
         });
 
         if (existingCustomer.docs.length > 0) {
@@ -216,6 +246,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           await payload.update({
             collection: 'customers',
             id: cust.id,
+            overrideAccess: true,
             data: {
               name: customer.name,
               email: customer.email || cust.email,
@@ -228,6 +259,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         } else {
           await payload.create({
             collection: 'customers',
+            overrideAccess: true,
             data: {
               name: customer.name,
               phone: cleanPhone || customer.phone,

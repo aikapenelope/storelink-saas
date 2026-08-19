@@ -10,7 +10,7 @@ export const Users: CollectionConfig = {
   access: {
     read: ({ req: { user } }) => Boolean(user),
     create: ({ req: { user } }) => (user as any)?.role === 'super-admin',
-    update: ({ req: { user } }) => Boolean(user),
+    update: ({ req: { user }, id }) => (user as any)?.role === 'super-admin' || (user as any)?.id === id,
     delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
   },
   fields: [
@@ -19,6 +19,9 @@ export const Users: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'tenant-admin',
+      access: {
+        update: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+      },
       options: [
         { label: 'Super Admin (Dueño de la Plataforma)', value: 'super-admin' },
         { label: 'Comerciante (Admin de Tienda)', value: 'tenant-admin' },
