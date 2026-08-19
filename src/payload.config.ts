@@ -6,6 +6,8 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
 import { seoPlugin } from '@payloadcms/plugin-seo';
 import { s3Storage } from '@payloadcms/storage-s3';
+import { es } from '@payloadcms/translations/languages/es';
+import { en } from '@payloadcms/translations/languages/en';
 import sharp from 'sharp';
 
 import { Users } from './collections/Users';
@@ -75,6 +77,13 @@ export default buildConfig({
     importMap: {
       baseDir: path.resolve(dirname),
     },
+  },
+  i18n: {
+    supportedLanguages: {
+      es,
+      en,
+    },
+    fallbackLanguage: 'es',
   },
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],

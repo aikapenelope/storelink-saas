@@ -29,6 +29,9 @@ importers:
       '@payloadcms/storage-s3':
         specifier: ^3.88.0
         version: 3.88.0(@types/react@19.2.18)(monaco-editor@0.56.0)(next@15.5.23(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4))(payload@3.88.0(graphql@17.0.2)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      '@payloadcms/translations':
+        specifier: ^3.88.0
+        version: 3.88.0
       autoprefixer:
         specifier: ^10.5.4
         version: 10.5.4(postcss@8.5.26)

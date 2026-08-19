@@ -7,6 +7,12 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
     defaultColumns: ['email', 'role', 'tenant'],
   },
+  access: {
+    read: ({ req: { user } }) => Boolean(user),
+    create: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    update: ({ req: { user } }) => Boolean(user),
+    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+  },
   fields: [
     {
       name: 'role',
@@ -24,7 +30,7 @@ export const Users: CollectionConfig = {
       relationTo: 'tenants',
       admin: {
         condition: (data) => data?.role === 'tenant-admin',
-        description: 'Tienda asignada a este usuario.',
+        description: 'Tienda asignada a este comerciante.',
       },
     },
   ],

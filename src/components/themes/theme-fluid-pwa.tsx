@@ -44,73 +44,85 @@ export function ThemeFluidPWA({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-28">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200 shadow-sm">
-        <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              {tenant.name}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              {tenant.welcomeMessage || 'Catálogo interactivo con pedidos por WhatsApp'}
-            </p>
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32">
+      {/* Header Responsive */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-lg shadow-sm">
+              {tenant.name.charAt(0)}
+            </div>
+            <div>
+              <h1 className="text-lg md:text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                {tenant.name}
+              </h1>
+              <p className="text-xs text-slate-500 font-medium hidden sm:block">
+                {tenant.welcomeMessage || 'Catálogo interactivo con pedidos por WhatsApp'}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={onOpenCart}
-            className="relative p-2.5 bg-emerald-50 text-emerald-700 rounded-full hover:bg-emerald-100 transition-colors"
-            aria-label="Ver carrito"
-          >
-            <ShoppingBag className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shadow-md animate-bounce">
-                {cartCount}
-              </span>
-            )}
-          </button>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenCart}
+              className="relative px-4 py-2 bg-emerald-50 text-emerald-800 rounded-full hover:bg-emerald-100 transition-colors flex items-center gap-2 font-bold text-xs shadow-xs"
+              aria-label="Ver carrito"
+            >
+              <ShoppingBag className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Mi Pedido</span>
+              {cartCount > 0 && (
+                <span className="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full shadow-sm">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar productos o código SKU..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm"
-          />
+      {/* Main Container Responsive (Max width 6xl) */}
+      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
+        {/* Search & Category Filter Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar productos o código SKU..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-xs"
+            />
+          </div>
+
+          {/* Category Pills Bar */}
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shadow-xs ${
+                  selectedCategory === cat
+                    ? 'bg-slate-900 text-white shadow-slate-900/10'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Category Pills Bar */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar -mx-4 px-4">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-sm ${
-                selectedCategory === cat
-                  ? 'bg-slate-900 text-white shadow-slate-900/10'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Product Grid */}
-        <div className="space-y-3">
-          {filteredProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
-              <p className="text-slate-400 text-sm">No se encontraron productos disponibles.</p>
-            </div>
-          ) : (
-            filteredProducts.map((product) => {
+        {/* Product Grid Responsive (1 col on mobile, 2 on tablet, 3 on desktop) */}
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+            <p className="text-slate-400 text-sm">No se encontraron productos en esta categoría.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredProducts.map((product) => {
               const inCart = cart.find((item) => item.id === product.id);
               const qty = inCart ? inCart.quantity : 0;
               const isOutOfStock = product.stockStatus === 'out_of_stock';
@@ -124,12 +136,12 @@ export function ThemeFluidPWA({
               return (
                 <div
                   key={product.id}
-                  className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm flex gap-3.5 items-center transition hover:shadow-md"
+                  className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex gap-4 items-center transition hover:shadow-md hover:border-slate-300"
                 >
                   {/* Product Image */}
                   <div
                     onClick={() => onOpenProductModal(product)}
-                    className="relative w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
+                    className="relative w-28 h-28 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
                   >
                     <img
                       src={imageUrl}
@@ -155,14 +167,14 @@ export function ThemeFluidPWA({
                     </div>
                     <h2
                       onClick={() => onOpenProductModal(product)}
-                      className="font-bold text-slate-800 text-sm leading-tight truncate cursor-pointer hover:text-emerald-600 transition"
+                      className="font-bold text-slate-800 text-sm leading-tight truncate cursor-pointer hover:text-emerald-600 transition mt-0.5"
                     >
                       {product.title}
                     </h2>
-                    <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                    <p className="text-xs text-slate-500 line-clamp-2 mt-1">
                       {product.description}
                     </p>
-                    <div className="mt-2 flex items-center justify-between">
+                    <div className="mt-3 flex items-center justify-between">
                       <span className="text-emerald-700 font-extrabold text-base">
                         {hasOptions && <span className="text-xs font-normal text-slate-500 mr-1">Desde</span>}
                         ${product.price.toFixed(2)}
@@ -176,15 +188,15 @@ export function ThemeFluidPWA({
                       ) : hasOptions ? (
                         <button
                           onClick={() => onOpenProductModal(product)}
-                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition"
+                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs active:scale-95 transition"
                         >
                           Opciones
                         </button>
                       ) : qty > 0 ? (
-                        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-1.5 py-1">
+                        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
                           <button
                             onClick={() => onAddToCart(product, qty - 1)}
-                            className="w-6 h-6 flex items-center justify-center text-emerald-800 hover:bg-emerald-200/60 rounded"
+                            className="w-5 h-5 flex items-center justify-center text-emerald-800 hover:bg-emerald-200/60 rounded"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
@@ -193,7 +205,7 @@ export function ThemeFluidPWA({
                           </span>
                           <button
                             onClick={() => onAddToCart(product, qty + 1)}
-                            className="w-6 h-6 flex items-center justify-center text-emerald-800 hover:bg-emerald-200/60 rounded"
+                            className="w-5 h-5 flex items-center justify-center text-emerald-800 hover:bg-emerald-200/60 rounded"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -201,7 +213,7 @@ export function ThemeFluidPWA({
                       ) : (
                         <button
                           onClick={() => onAddToCart(product, 1)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm active:scale-95 transition"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-xs active:scale-95 transition"
                         >
                           Añadir
                         </button>
@@ -210,23 +222,23 @@ export function ThemeFluidPWA({
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </main>
 
       {/* Fixed Floating Bottom Cart Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-4 left-0 right-0 z-40 max-w-md mx-auto px-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
           <button
             onClick={onOpenCart}
-            className="w-full bg-slate-900 text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-between border border-slate-800 hover:bg-slate-800 active:scale-[0.99] transition"
+            className="w-full bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-slate-800 hover:bg-slate-800 active:scale-[0.99] transition"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-emerald-500 text-slate-950 text-xs font-black px-2.5 py-1 rounded-full">
+              <span className="bg-emerald-500 text-slate-950 text-xs font-black px-3 py-1 rounded-full">
                 {cartCount} {cartCount === 1 ? 'ítem' : 'ítems'}
               </span>
-              <span className="font-semibold text-sm">Ver Pedido</span>
+              <span className="font-semibold text-sm">Ver Pedido Completo</span>
             </div>
             <span className="text-base font-black text-emerald-400">
               ${cartAmount.toFixed(2)}
