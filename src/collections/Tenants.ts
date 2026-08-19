@@ -57,12 +57,34 @@ export const Tenants: CollectionConfig = {
     {
       name: 'emailConfig',
       type: 'group',
-      label: 'Notificaciones por Correo (Resend)',
+      label: 'Notificaciones por Correo (Multi-Tenant Resend)',
       fields: [
+        {
+          name: 'enabled',
+          type: 'checkbox',
+          defaultValue: true,
+          label: 'Activar envío de comprobantes y PDF por correo al cliente',
+        },
+        {
+          name: 'resendApiKey',
+          type: 'text',
+          label: 'API Key de Resend Propia del Comercio (Opcional - BYOK)',
+          admin: {
+            description: 'Si el comercio coloca su propia clave de Resend, usará su cuenta y su cuota individual. Si se deja vacío, usa la clave global del sistema.',
+          },
+        },
+        {
+          name: 'fromEmail',
+          type: 'text',
+          label: 'Correo Remitente Personalizado (ej: pedidos@mitienda.com)',
+          admin: {
+            description: 'Debe estar verificado en la cuenta de Resend utilizada.',
+          },
+        },
         {
           name: 'notificationEmail',
           type: 'email',
-          label: 'Correo del Comercio para Recibir Nuevos Pedidos',
+          label: 'Correo del Comercio para Recibir Alerta de Nuevos Pedidos',
           admin: {
             description: 'Recibirá una copia de cada orden generada con el PDF de nota de entrega adjunto.',
           },

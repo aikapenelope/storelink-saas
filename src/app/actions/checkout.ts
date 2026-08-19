@@ -111,6 +111,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // 3. Save Order and Auto-Update Inventory in Payload CMS Database
+    let tenantDoc: any = null;
     try {
       const payload = await getPayload({ config });
 
@@ -126,7 +127,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       });
 
       if (tenantResult.docs.length > 0) {
-        tenantId = tenantResult.docs[0].id;
+        tenantDoc = tenantResult.docs[0];
+        tenantId = tenantDoc.id;
       }
 
       await payload.create({
@@ -246,12 +248,18 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       console.error('Error saving order record to Payload database:', dbErr);
     }
 
-    // 4. Send Order Confirmation Email with PDF Attachment via Resend
+    // 4. Send Order Confirmation Email with PDF Attachment via Resend (Multi-Tenant BYOK + Platform Fallback)
     let emailSent = false;
-    if (customer.email && process.env.RESEND_API_KEY) {
+    const isEmailEnabled = tenantDoc?.emailConfig?.enabled ?? true;
+    const effectiveResendKey = tenantDoc?.emailConfig?.resendApiKey || process.env.RESEND_API_KEY;
+    const fromEmail = tenantDoc?.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || 'StoreLink <onboarding@resend.dev>';
+    const emailSubject = tenantDoc?.emailConfig?.emailSubject || `🛍️ Comprobante de Pedido #${orderNumber} - ${storeName}`;
+    const merchantNotificationEmail = tenantDoc?.emailConfig?.notificationEmail;
+
+    if (isEmailEnabled && effectiveResendKey && (customer.email || merchantNotificationEmail)) {
       try {
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const fromEmail = process.env.RESEND_FROM_EMAIL || 'StoreLink <onboarding@resend.dev>';
+        const resend = new Resend(effectiveResendKey);
+        const recipients = [customer.email, merchantNotificationEmail].filter(Boolean) as string[];
 
         const itemsHtml = items
           .map(
@@ -264,59 +272,62 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           )
           .join('');
 
-        await resend.emails.send({
-          from: fromEmail,
-          to: customer.email,
-          subject: `🛍️ Comprobante de Pedido #${orderNumber} - ${storeName}`,
-          html: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a; padding: 20px;">
-              <div style="text-align: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px;">
-                <h1 style="color: #0f172a; margin: 0;">${storeName}</h1>
-                <p style="color: #64748b; font-size: 14px; margin-top: 5px;">¡Gracias por tu compra! Tu pedido ha sido registrado con éxito.</p>
+        for (const recipient of recipients) {
+          await resend.emails.send({
+            from: fromEmail,
+            to: recipient,
+            subject: emailSubject,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a; padding: 20px;">
+                <div style="text-align: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px;">
+                  <h1 style="color: #0f172a; margin: 0;">${storeName}</h1>
+                  <p style="color: #64748b; font-size: 14px; margin-top: 5px;">¡Gracias por tu compra! Tu pedido ha sido registrado con éxito.</p>
+                </div>
+
+                <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; margin: 20px 0;">
+                  <p style="margin: 4px 0;"><strong>Número de Pedido:</strong> #${orderNumber}</p>
+                  <p style="margin: 4px 0;"><strong>Cliente:</strong> ${customer.name}</p>
+                  <p style="margin: 4px 0;"><strong>Teléfono:</strong> ${customer.phone}</p>
+                  ${customer.email ? `<p style="margin: 4px 0;"><strong>Email:</strong> ${customer.email}</p>` : ''}
+                  <p style="margin: 4px 0;"><strong>Método de Pago:</strong> ${customer.paymentMethod || 'Efectivo / Transferencia'}</p>
+                  <p style="margin: 4px 0;"><strong>Dirección:</strong> ${customer.address || 'Retiro en tienda'}</p>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+                  <thead>
+                    <tr style="background-color: #f1f5f9; text-align: left;">
+                      <th style="padding: 8px;">Producto</th>
+                      <th style="padding: 8px; text-align: center;">Cant.</th>
+                      <th style="padding: 8px; text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${itemsHtml}
+                  </tbody>
+                </table>
+
+                <div style="text-align: right; border-top: 2px solid #f0f0f0; padding-top: 15px;">
+                  <h3 style="margin: 0; color: #0f172a;">Total a Pagar: $${total.toFixed(2)} USD</h3>
+                  ${
+                    showVES
+                      ? `<p style="margin: 5px 0 0 0; color: #64748b; font-size: 13px;">Equivalente en Bolívares: <strong>Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> (Tasa Binance: ${rate.toFixed(2)} Bs/$)</p>`
+                      : ''
+                  }
+                </div>
+
+                <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 30px;">
+                  📎 Hemos adjuntado tu <strong>Nota de Entrega en formato PDF</strong> a este correo.
+                </p>
               </div>
-
-              <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; margin: 20px 0;">
-                <p style="margin: 4px 0;"><strong>Número de Pedido:</strong> #${orderNumber}</p>
-                <p style="margin: 4px 0;"><strong>Cliente:</strong> ${customer.name}</p>
-                <p style="margin: 4px 0;"><strong>Teléfono:</strong> ${customer.phone}</p>
-                <p style="margin: 4px 0;"><strong>Método de Pago:</strong> ${customer.paymentMethod || 'Efectivo / Transferencia'}</p>
-                <p style="margin: 4px 0;"><strong>Dirección:</strong> ${customer.address || 'Retiro en tienda'}</p>
-              </div>
-
-              <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
-                <thead>
-                  <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="padding: 8px;">Producto</th>
-                    <th style="padding: 8px; text-align: center;">Cant.</th>
-                    <th style="padding: 8px; text-align: right;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${itemsHtml}
-                </tbody>
-              </table>
-
-              <div style="text-align: right; border-top: 2px solid #f0f0f0; padding-top: 15px;">
-                <h3 style="margin: 0; color: #0f172a;">Total a Pagar: $${total.toFixed(2)} USD</h3>
-                ${
-                  showVES
-                    ? `<p style="margin: 5px 0 0 0; color: #64748b; font-size: 13px;">Equivalente en Bolívares: <strong>Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> (Tasa Binance: ${rate.toFixed(2)} Bs/$)</p>`
-                    : ''
-                }
-              </div>
-
-              <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 30px;">
-                📎 Hemos adjuntado tu <strong>Nota de Entrega en formato PDF</strong> a este correo.
-              </p>
-            </div>
-          `,
-          attachments: [
-            {
-              filename: `Nota-Entrega-${orderNumber}.pdf`,
-              content: pdfBase64,
-            },
-          ],
-        });
+            `,
+            attachments: [
+              {
+                filename: `Nota-Entrega-${orderNumber}.pdf`,
+                content: pdfBase64,
+              },
+            ],
+          });
+        }
         emailSent = true;
       } catch (emailErr) {
         console.error('Error sending confirmation email via Resend:', emailErr);
