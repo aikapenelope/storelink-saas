@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Sparkles, Heart } from 'lucide-react';
+import { ShoppingBag, Search, Sparkles, Heart, ChevronRight, Eye, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -29,6 +29,7 @@ export function ThemeFashionBoutique({
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeGender, setActiveGender] = useState<'ALL' | 'WOMEN' | 'MEN'>('ALL');
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -44,47 +45,100 @@ export function ThemeFashionBoutique({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#faf8f5] text-[#2d2825] selection:bg-[#ebdcd0] pb-32">
-      {/* Editorial Luxury Header */}
-      <header className="sticky top-0 z-40 bg-[#faf8f5]/90 backdrop-blur-md border-b border-[#ece5dd]">
+    <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-36 font-sans">
+      {/* 1. Haute Couture Top Banner */}
+      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.25em] py-2 px-4 text-center font-medium">
+        Colección Otoño-Invierno 2026 • Envíos Express por WhatsApp
+      </div>
+
+      {/* 2. Editorial Header */}
+      <header className="sticky top-0 z-40 bg-[#fbf9f6]/95 backdrop-blur-md border-b border-[#ece5dd]">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] tracking-[0.25em] text-[#8c827a] uppercase block">
-              Colección & Tendencias
-            </span>
-            <h1 className="font-serif text-2xl tracking-tight text-[#1c1815] font-normal">
-              {tenant.name}
-            </h1>
+          <div className="flex items-center gap-6">
+            <div>
+              <span className="text-[9px] tracking-[0.3em] text-[#8c827a] uppercase block">
+                Atelier & Studio
+              </span>
+              <h1 className="font-serif text-2xl tracking-tight text-[#1c1815] font-normal">
+                {tenant.name}
+              </h1>
+            </div>
+
+            {/* Sub Nav Links */}
+            <nav className="hidden md:flex items-center gap-6 text-xs uppercase tracking-[0.15em] text-[#5c544d]">
+              <button
+                onClick={() => setActiveGender('ALL')}
+                className={`transition ${activeGender === 'ALL' ? 'text-black font-bold underline underline-offset-8' : 'hover:text-black'}`}
+              >
+                Todo
+              </button>
+              <button
+                onClick={() => setActiveGender('WOMEN')}
+                className={`transition ${activeGender === 'WOMEN' ? 'text-black font-bold underline underline-offset-8' : 'hover:text-black'}`}
+              >
+                Mujer
+              </button>
+              <button
+                onClick={() => setActiveGender('MEN')}
+                className={`transition ${activeGender === 'MEN' ? 'text-black font-bold underline underline-offset-8' : 'hover:text-black'}`}
+              >
+                Hombre
+              </button>
+            </nav>
           </div>
 
-          <button
-            onClick={onOpenCart}
-            className="relative px-5 py-2.5 rounded-full border border-[#2d2825] text-xs uppercase tracking-widest font-medium hover:bg-[#2d2825] hover:text-white transition-all flex items-center gap-2"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Bolsa</span>
-            {cartCount > 0 && (
-              <span className="bg-[#2d2825] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-                {cartCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onOpenCart}
+              className="relative px-6 py-2.5 rounded-full bg-[#1e1b18] text-white text-[11px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-all flex items-center gap-2.5 shadow-md active:scale-95"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Bolsa ({cartCount})</span>
+              {cartCount > 0 && (
+                <span className="bg-[#e8ded5] text-[#1e1b18] text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                  ${cartAmount.toFixed(2)}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-6 pt-6 space-y-6">
-        {/* Search & Category Filter */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#ece5dd] pb-6">
+      {/* 3. Luxury Editorial Hero Banner */}
+      <section className="max-w-6xl mx-auto px-6 pt-6">
+        <div className="relative rounded-3xl overflow-hidden bg-[#1e1b18] text-white aspect-[21/9] sm:aspect-[24/8] flex items-center shadow-lg">
+          <img
+            src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1600&q=80"
+            alt="Editorial Campaign"
+            className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-luminosity"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+          <div className="relative z-10 p-6 sm:p-12 max-w-xl space-y-3">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-[#dfd5cb] block">
+              Lookbook Exclusivo
+            </span>
+            <h2 className="font-serif text-2xl sm:text-4xl leading-tight font-normal">
+              Minimalismo, Texturas Orgánicas & Alta Confección.
+            </h2>
+            <p className="text-xs text-[#d3c9bf] font-light max-w-sm hidden sm:block">
+              Prendas seleccionadas con materiales sostenibles pensadas para durar.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Filter Bar */}
+      <main className="max-w-6xl mx-auto px-6 pt-8 space-y-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#ece5dd] pb-5">
           <div className="flex gap-4 overflow-x-auto no-scrollbar w-full sm:w-auto">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`text-xs uppercase tracking-[0.15em] pb-1 border-b-2 transition-all whitespace-nowrap ${
+                className={`text-xs uppercase tracking-[0.18em] pb-1 border-b-2 transition-all whitespace-nowrap ${
                   selectedCategory === cat
-                    ? 'border-[#2d2825] text-[#2d2825] font-bold'
-                    : 'border-transparent text-[#8c827a] hover:text-[#2d2825]'
+                    ? 'border-[#1e1b18] text-[#1e1b18] font-black'
+                    : 'border-transparent text-[#8c827a] hover:text-[#1e1b18]'
                 }`}
               >
                 {cat}
@@ -92,22 +146,22 @@ export function ThemeFashionBoutique({
             ))}
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8c827a]" />
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8c827a]" />
             <input
               type="text"
-              placeholder="Buscar vestidos, camisetas, tallas..."
+              placeholder="Buscar vestidos, lino, abrigos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white/70 border border-[#e5ded5] rounded-full text-xs placeholder:text-[#8c827a] text-[#2d2825] focus:outline-none focus:border-[#2d2825]"
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-[#e5ded5] rounded-full text-xs placeholder:text-[#8c827a] text-[#1e1b18] focus:outline-none focus:border-[#1e1b18] shadow-xs"
             />
           </div>
         </div>
 
-        {/* 4:5 Vertical Cards Responsive Grid */}
+        {/* 5. Portrait 3:4 & 4:5 Responsive Grid */}
         {filteredProducts.length === 0 ? (
           <div className="py-24 text-center text-[#8c827a] font-serif italic text-sm">
-            No se encontraron prendas disponibles en esta sección.
+            No se encontraron prendas en esta sección.
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -126,37 +180,66 @@ export function ThemeFashionBoutique({
                   onClick={() => onOpenProductModal(product)}
                   className="group cursor-pointer flex flex-col justify-between"
                 >
-                  <div className="relative aspect-[3/4] sm:aspect-[4/5] bg-[#ece5dd] rounded-2xl overflow-hidden shadow-xs">
+                  {/* Portrait Image Card */}
+                  <div className="relative aspect-[3/4] bg-[#ece5dd] rounded-3xl overflow-hidden shadow-xs group-hover:shadow-xl transition-all duration-500">
                     <img
                       src={imageUrl}
                       alt={product.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     />
-                    {product.featured && (
-                      <span className="absolute top-3 left-3 bg-[#2d2825]/90 backdrop-blur-md text-white text-[9px] uppercase tracking-widest px-2.5 py-1 rounded-full">
-                        Exclusivo
+
+                    {/* Aesthetic Badges */}
+                    <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                      {product.featured && (
+                        <span className="bg-[#1e1b18]/90 backdrop-blur-md text-white text-[8px] uppercase tracking-[0.2em] px-3 py-1 rounded-full font-medium shadow-sm">
+                          New In
+                        </span>
+                      )}
+                      <span className="bg-white/90 backdrop-blur-md text-[#1e1b18] text-[8px] uppercase tracking-[0.15em] px-2.5 py-0.5 rounded-full font-bold shadow-xs">
+                        {product.sku}
                       </span>
-                    )}
+                    </div>
+
+                    {/* Color Swatch Dots Overlay */}
+                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full">
+                      <span className="w-2.5 h-2.5 rounded-full bg-black border border-white"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#d4c3b3] border border-white"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-white border border-slate-300"></span>
+                    </div>
+
+                    {/* Quick View Button */}
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <div className="w-8 h-8 rounded-full bg-[#1e1b18] text-white flex items-center justify-center shadow-lg">
+                        <ArrowUpRight className="w-4 h-4" />
+                      </div>
+                    </div>
+
                     {isOutOfStock && (
-                      <div className="absolute inset-0 bg-[#2d2825]/40 backdrop-blur-[2px] flex items-center justify-center">
-                        <span className="text-xs uppercase tracking-widest bg-white text-[#2d2825] px-3.5 py-1.5 rounded-full font-bold shadow-md">
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                        <span className="text-[10px] uppercase tracking-[0.2em] bg-white text-[#1e1b18] px-4 py-2 rounded-full font-black shadow-md">
                           Agotado
                         </span>
                       </div>
                     )}
                   </div>
 
-                  <div className="pt-3 text-center sm:text-left">
-                    <span className="text-[10px] uppercase tracking-widest text-[#8c827a] block">
-                      {product.sku}
+                  {/* Information Details */}
+                  <div className="pt-3.5 space-y-1">
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#8c827a] block">
+                      {product.category?.name || 'Prenda Exclusiva'}
                     </span>
-                    <h3 className="font-serif text-sm sm:text-base text-[#1c1815] group-hover:underline underline-offset-4 decoration-1 mt-0.5 truncate">
+                    <h3 className="font-serif text-sm sm:text-base text-[#1c1815] group-hover:underline underline-offset-4 decoration-1 font-normal truncate">
                       {product.title}
                     </h3>
-                    <p className="text-xs font-bold text-[#5c544d] mt-1">
-                      {hasOptions && <span className="text-[10px] font-normal text-[#8c827a] mr-1">Desde</span>}
-                      ${product.price.toFixed(2)} {tenant.currency || 'USD'}
-                    </p>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-xs font-black text-[#1e1b18]">
+                        {hasOptions && <span className="text-[10px] font-normal text-[#8c827a] mr-1">Desde</span>}
+                        ${product.price.toFixed(2)} {tenant.currency || 'USD'}
+                      </span>
+                      <span className="text-[10px] text-emerald-700 uppercase font-bold tracking-wider">
+                        En Stock
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -165,18 +248,18 @@ export function ThemeFashionBoutique({
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar */}
+      {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
         <div className="fixed bottom-6 left-0 right-0 z-40 max-w-md mx-auto px-6 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-[#2d2825] text-white p-4 rounded-full shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition uppercase tracking-widest text-xs font-medium"
+            className="w-full bg-[#1e1b18] text-white p-4 rounded-full shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition uppercase tracking-[0.2em] text-xs font-medium border border-[#3e3833]"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-white text-[#2d2825] text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="bg-[#e8ded5] text-[#1e1b18] text-[10px] font-black px-2.5 py-0.5 rounded-full">
                 {cartCount}
               </span>
-              <span>Completar Pedido</span>
+              <span>Procesar Bolsa</span>
             </div>
             <span className="font-bold text-sm tracking-normal">${cartAmount.toFixed(2)}</span>
           </button>

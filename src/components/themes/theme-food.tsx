@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, Info, Sparkles, Flame, Clock } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight, Check, Tag } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -44,40 +44,49 @@ export function ThemeFoodDelivery({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-slate-900 pb-32">
-      {/* Header with Warm Food Theme */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-orange-100 shadow-xs">
+    <div className="min-h-screen bg-[#fcfbfa] text-slate-900 pb-36 font-sans">
+      {/* 1. Dynamic Top Banner */}
+      <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 shadow-inner">
+        <Sparkles className="w-3.5 h-3.5 animate-spin" />
+        <span>🔥 ¡Pide hoy por WhatsApp y recibe envío prioritario en tu zona!</span>
+      </div>
+
+      {/* 2. Glassmorphic App Bar */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-orange-100 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-sm">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-orange-500/30 transform hover:rotate-3 transition">
               🍔
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg md:text-xl font-black tracking-tight text-slate-900">
+                <h1 className="text-xl font-black tracking-tight text-slate-900">
                   {tenant.name}
                 </h1>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Abierto
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> ABIERTO
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium hidden sm:flex items-center gap-2 mt-0.5">
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-orange-500" /> 25-35 min</span>
+              <div className="flex items-center gap-3 text-xs text-slate-500 font-semibold mt-0.5">
+                <span className="flex items-center gap-1 text-amber-600">
+                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9 (140+ reseñas)
+                </span>
                 <span>•</span>
-                <span>{tenant.welcomeMessage || 'Pedidos directos a tu WhatsApp con entrega rápida'}</span>
-              </p>
+                <span className="flex items-center gap-1 text-slate-600">
+                  <Clock className="w-3.5 h-3.5 text-orange-500" /> 20-30 min
+                </span>
+              </div>
             </div>
           </div>
 
           <button
             onClick={onOpenCart}
-            className="relative px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-all flex items-center gap-2 font-bold text-xs shadow-md shadow-orange-500/20 active:scale-95"
-            aria-label="Ver carrito"
+            className="relative px-5 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl transition-all flex items-center gap-2.5 font-black text-xs shadow-lg shadow-orange-500/25 active:scale-95"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span className="hidden sm:inline">Mi Pedido</span>
+            <span className="hidden sm:inline uppercase tracking-wider">Ver Bandeja</span>
             {cartCount > 0 && (
-              <span className="bg-white text-orange-600 text-xs px-2 py-0.5 rounded-full font-black">
+              <span className="bg-white text-orange-600 text-xs px-2 py-0.5 rounded-full font-black shadow-xs">
                 {cartCount}
               </span>
             )}
@@ -85,31 +94,56 @@ export function ThemeFoodDelivery({
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* 3. Hero Promo Spotlight Card */}
+      <section className="max-w-6xl mx-auto px-4 pt-6">
+        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 text-white p-6 sm:p-8 shadow-xl border border-orange-900/30 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-2 text-center md:text-left z-10">
+            <span className="bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full inline-block">
+              Especial de la Casa
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
+              Combos Smash Burger & Pizzas Napolitanas
+            </h2>
+            <p className="text-slate-300 text-xs sm:text-sm max-w-lg">
+              Ingredientes 100% artesanales, carnes maduradas y pan brioche horneado a diario.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 z-10">
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 text-center">
+              <span className="block text-2xl font-black text-amber-400">100%</span>
+              <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider">Artesanal</span>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 text-center">
+              <span className="block text-2xl font-black text-emerald-400">0$</span>
+              <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider">Costo Envío</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Search & Filter Bar */}
       <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        {/* Search & Category Filter Bar */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-500" />
             <input
               type="text"
-              placeholder="Buscar hamburguesas, pizzas, bebidas..."
+              placeholder="Buscar platillos, ingredientes, bebidas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-xs"
+              className="w-full pl-11 pr-4 py-3 bg-white border border-orange-100 rounded-2xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-xs"
             />
           </div>
 
-          {/* Category Pills Bar */}
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-xs ${
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black whitespace-nowrap transition-all shadow-xs ${
                   selectedCategory === cat
-                    ? 'bg-orange-500 text-white shadow-orange-500/20'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-orange-50/50'
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25 scale-105'
+                    : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-orange-50/50'
                 }`}
               >
                 {cat}
@@ -118,13 +152,13 @@ export function ThemeFoodDelivery({
           </div>
         </div>
 
-        {/* Product Grid */}
+        {/* 5. Food Grid */}
         {filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-            <p className="text-slate-400 text-sm">No encontramos platillos en esta categoría.</p>
+          <div className="bg-white rounded-3xl p-16 text-center border border-dashed border-orange-200">
+            <p className="text-slate-400 text-sm font-semibold">No encontramos platillos disponibles en esta categoría.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredProducts.map((product) => {
               const inCart = cart.find((item) => item.id === product.id);
               const qty = inCart ? inCart.quantity : 0;
@@ -139,68 +173,101 @@ export function ThemeFoodDelivery({
               return (
                 <div
                   key={product.id}
-                  className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex gap-4 items-center transition hover:shadow-md hover:border-orange-200"
+                  className="bg-white rounded-3xl p-4 border border-orange-100 shadow-sm hover:shadow-xl hover:border-orange-300 transition-all duration-300 flex flex-col justify-between group"
                 >
-                  <div
-                    onClick={() => onOpenProductModal(product)}
-                    className="relative w-28 h-28 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
-                  >
-                    <img
-                      src={imageUrl}
-                      alt={product.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                    {product.featured && (
-                      <div className="absolute top-1.5 left-1.5 bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-                        <Flame className="w-2.5 h-2.5 fill-white" /> Popular
+                  <div>
+                    {/* Image Box */}
+                    <div
+                      onClick={() => onOpenProductModal(product)}
+                      className="relative h-48 w-full rounded-2xl overflow-hidden bg-slate-100 cursor-pointer"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={product.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition" />
+                      
+                      {/* Top Badges */}
+                      <div className="absolute top-3 left-3 flex gap-1.5">
+                        {product.featured && (
+                          <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Flame className="w-3 h-3 fill-white" /> POPULAR
+                          </span>
+                        )}
+                        <span className="bg-black/60 backdrop-blur-md text-white text-[10px] font-mono font-bold px-2.5 py-1 rounded-full">
+                          {product.sku}
+                        </span>
                       </div>
-                    )}
+
+                      {isOutOfStock && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
+                          <span className="bg-rose-600 text-white text-xs font-black uppercase px-4 py-1.5 rounded-full shadow-lg">
+                            Agotado
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Content Details */}
+                    <div className="pt-4 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">
+                          {product.category?.name || 'Menú Principal'}
+                        </span>
+                        <div className="flex items-center gap-1 text-amber-500 text-xs font-black">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> 4.9
+                        </div>
+                      </div>
+
+                      <h3
+                        onClick={() => onOpenProductModal(product)}
+                        className="font-black text-slate-900 text-base leading-tight group-hover:text-orange-600 transition cursor-pointer line-clamp-1"
+                      >
+                        {product.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                        {product.description || 'Elaborado con ingredientes frescos de primera calidad.'}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      {product.sku}
-                    </span>
-                    <h2
-                      onClick={() => onOpenProductModal(product)}
-                      className="font-bold text-slate-900 text-sm leading-tight truncate cursor-pointer hover:text-orange-600 transition mt-0.5"
-                    >
-                      {product.title}
-                    </h2>
-                    <p className="text-xs text-slate-500 line-clamp-2 mt-1">
-                      {product.description}
-                    </p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-orange-600 font-black text-base">
-                        {hasOptions && <span className="text-xs font-normal text-slate-500 mr-1">Desde</span>}
+                  {/* Pricing & Add to Cart */}
+                  <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                        {hasOptions ? 'Desde' : 'Precio'}
+                      </span>
+                      <span className="text-xl font-black text-slate-950">
                         ${product.price.toFixed(2)}
                       </span>
+                    </div>
 
+                    <div>
                       {isOutOfStock ? (
-                        <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 px-2 py-1 rounded-md">
-                          Agotado
-                        </span>
+                        <span className="text-xs text-slate-400 font-bold">No disponible</span>
                       ) : hasOptions ? (
                         <button
                           onClick={() => onOpenProductModal(product)}
-                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs active:scale-95 transition"
+                          className="bg-slate-950 hover:bg-orange-600 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1"
                         >
-                          Personalizar
+                          <span>Personalizar</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       ) : qty > 0 ? (
-                        <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                        <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-2.5 py-1.5 shadow-inner">
                           <button
                             onClick={() => onAddToCart(product, qty - 1)}
-                            className="w-5 h-5 flex items-center justify-center text-orange-800 hover:bg-orange-200/60 rounded"
+                            className="w-6 h-6 flex items-center justify-center text-orange-900 hover:bg-orange-200/60 rounded-lg transition"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="text-xs font-black text-orange-950 w-4 text-center">
+                          <span className="text-xs font-black text-orange-950 w-5 text-center">
                             {qty}
                           </span>
                           <button
                             onClick={() => onAddToCart(product, qty + 1)}
-                            className="w-5 h-5 flex items-center justify-center text-orange-800 hover:bg-orange-200/60 rounded"
+                            className="w-6 h-6 flex items-center justify-center text-orange-900 hover:bg-orange-200/60 rounded-lg transition"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -208,9 +275,9 @@ export function ThemeFoodDelivery({
                       ) : (
                         <button
                           onClick={() => onAddToCart(product, 1)}
-                          className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-xs active:scale-95 transition"
+                          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md shadow-orange-500/20 active:scale-95 transition flex items-center gap-1.5"
                         >
-                          Añadir
+                          <Plus className="w-3.5 h-3.5" /> Añadir
                         </button>
                       )}
                     </div>
@@ -222,22 +289,26 @@ export function ThemeFoodDelivery({
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar */}
+      {/* 6. Premium Floating WhatsApp Checkout Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-slate-950 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-slate-800 hover:bg-slate-900 active:scale-[0.99] transition"
+            className="w-full bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-orange-500/30 hover:shadow-orange-500/20 active:scale-[0.99] transition group"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-orange-500 text-white text-xs font-black px-3 py-1 rounded-full">
+              <span className="bg-orange-500 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-sm">
                 {cartCount} {cartCount === 1 ? 'platillo' : 'platillos'}
               </span>
-              <span className="font-bold text-sm">Completar Pedido por WhatsApp</span>
+              <div className="text-left">
+                <span className="font-black text-sm block">Completar Pedido</span>
+                <span className="text-[10px] text-orange-300">Directo al WhatsApp del restaurante</span>
+              </div>
             </div>
-            <span className="text-base font-black text-orange-400">
-              ${cartAmount.toFixed(2)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black text-amber-400">${cartAmount.toFixed(2)}</span>
+              <ChevronRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition" />
+            </div>
           </button>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, MessageCircle } from 'lucide-react';
+import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, MessageCircle, Zap, CheckCircle2, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -29,6 +29,7 @@ export function ThemeMotoParts({
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBikeBrand, setSelectedBikeBrand] = useState('TODAS');
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -44,64 +45,103 @@ export function ThemeMotoParts({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 selection:bg-amber-400 selection:text-black pb-32">
-      {/* Moto Pro Header */}
-      <header className="sticky top-0 z-40 bg-neutral-900/90 backdrop-blur-md border-b border-neutral-800">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-black text-lg shadow-md shadow-amber-400/10">
-              <Gauge className="w-6 h-6" />
+    <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-36 font-sans">
+      {/* 1. Pro Automotive Status Bar */}
+      <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-2 tracking-wide shadow-md">
+        <Zap className="w-3.5 h-3.5 fill-black" />
+        <span>DESPACHO EXPRESS DE REPUESTOS Y ASESORÍA MECÁNICA DIRECTA POR WHATSAPP</span>
+      </div>
+
+      {/* 2. Moto Pro Header */}
+      <header className="sticky top-0 z-40 bg-[#0e1217]/90 backdrop-blur-xl border-b border-neutral-800 shadow-2xl">
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition">
+              <Gauge className="w-7 h-7" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-extrabold text-base tracking-tight text-white">{tenant.name}</h1>
+                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
                 <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
-                  REPUESTOS 100% ORIGINALES
+                  ORIGINAL OEM
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400 font-mono hidden sm:block">
-                {tenant.welcomeMessage || 'Catálogo de repuestos, lubricantes y accesorios para motos.'}
+              <p className="text-xs text-neutral-400 font-mono hidden sm:flex items-center gap-2 mt-0.5">
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Stock Garantizado
+                </span>
+                <span>•</span>
+                <span>Envíos a Nivel Nacional</span>
               </p>
             </div>
           </div>
 
           <button
             onClick={onOpenCart}
-            className="h-10 px-4 bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-amber-400/20 active:scale-95"
+            className="h-12 px-5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-black font-black text-xs rounded-2xl transition flex items-center gap-2.5 shadow-xl shadow-amber-400/20 active:scale-95 uppercase tracking-wider"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Pedido ({cartCount})</span>
-            <span className="bg-black text-amber-400 text-[11px] font-mono px-2 py-0.5 rounded font-black">
+            <span>Mi Pedido ({cartCount})</span>
+            <span className="bg-black text-amber-400 text-xs font-mono px-2 py-0.5 rounded-lg font-black">
               ${cartAmount.toFixed(2)}
             </span>
           </button>
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* 3. Interactive Bike Brand Selector Strip */}
+      <section className="max-w-6xl mx-auto px-4 pt-6">
+        <div className="bg-[#141922] border border-neutral-800 rounded-3xl p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-neutral-300">
+            <Wrench className="w-5 h-5 text-amber-400" />
+            <div>
+              <span className="text-xs font-mono font-bold uppercase text-white block">Selector de Compatibilidad:</span>
+              <span className="text-[11px] text-neutral-400 font-mono">Filtra repuestos compatibles con tu motocicleta</span>
+            </div>
+          </div>
+
+          {/* Bike Brands */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
+            {['TODAS', 'BERA', 'EMPIRE', 'YAMAHA', 'HONDA', 'SUZUKI'].map((brand) => (
+              <button
+                key={brand}
+                onClick={() => setSelectedBikeBrand(brand)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-black uppercase transition whitespace-nowrap ${
+                  selectedBikeBrand === brand
+                    ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
+                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                {brand}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Search & Category Filter */}
       <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        {/* Search & Compatibility Bar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-neutral-900 p-4 rounded-2xl border border-neutral-800">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
             <input
               type="text"
-              placeholder="Buscar por código de pieza, modelo (ej: DT, SBR, Keeway)..."
+              placeholder="Buscar por código de pieza, modelo (ej: CG150, DT, SBR, Keeway)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl text-xs placeholder:text-neutral-500 text-white focus:outline-none focus:border-amber-400 font-mono"
+              className="w-full pl-11 pr-4 py-3 bg-[#141922] border border-neutral-800 rounded-2xl text-xs sm:text-sm placeholder:text-neutral-500 text-white focus:outline-none focus:border-amber-400 font-mono shadow-inner"
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-mono uppercase tracking-wider font-bold transition whitespace-nowrap ${
+                className={`px-4 py-2.5 rounded-2xl text-xs font-mono uppercase tracking-wider font-bold transition whitespace-nowrap ${
                   selectedCategory === cat
-                    ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
-                    : 'bg-neutral-950 text-neutral-400 border border-neutral-800 hover:border-neutral-700'
+                    ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
+                    : 'bg-[#141922] text-neutral-400 border border-neutral-800 hover:border-neutral-700'
                 }`}
               >
                 {cat}
@@ -110,10 +150,10 @@ export function ThemeMotoParts({
           </div>
         </div>
 
-        {/* Technical Moto Parts Grid */}
+        {/* 5. Industrial Moto Parts Grid */}
         {filteredProducts.length === 0 ? (
-          <div className="py-20 text-center border border-neutral-800 rounded-2xl bg-neutral-900">
-            <p className="text-neutral-500 text-sm font-mono">No se encontraron repuestos con este criterio.</p>
+          <div className="py-24 text-center border border-neutral-800 rounded-3xl bg-[#141922]">
+            <p className="text-neutral-500 text-sm font-mono">No se encontraron repuestos con este criterio de búsqueda.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -131,82 +171,88 @@ export function ThemeMotoParts({
               return (
                 <div
                   key={product.id}
-                  className="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-2xl p-4 flex flex-col justify-between transition hover:shadow-xl group"
+                  className="bg-[#12161f] border border-neutral-800 hover:border-amber-400/60 rounded-3xl p-4 flex flex-col justify-between transition-all duration-300 hover:shadow-2xl hover:shadow-amber-400/5 group"
                 >
                   <div>
-                    {/* Image & SKU Tag */}
+                    {/* Image & Badges */}
                     <div
                       onClick={() => onOpenProductModal(product)}
-                      className="relative aspect-video w-full rounded-xl overflow-hidden bg-neutral-950 cursor-pointer"
+                      className="relative aspect-video w-full rounded-2xl overflow-hidden bg-neutral-950 cursor-pointer"
                     >
                       <img
                         src={imageUrl}
                         alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
-                      <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded text-[10px] font-mono font-bold text-amber-400 border border-neutral-800">
-                        {product.sku}
+                      <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-mono font-black text-amber-400 border border-neutral-800 shadow-md">
+                        OEM: {product.sku}
                       </div>
+                      
                       {isOutOfStock ? (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                          <span className="text-rose-400 font-mono text-xs font-bold uppercase tracking-wider bg-rose-950/80 px-3 py-1 rounded border border-rose-800">
-                            Agotado
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                          <span className="text-rose-400 font-mono text-xs font-black uppercase px-4 py-1.5 rounded-lg border border-rose-800 bg-rose-950/90 shadow-lg">
+                            Sin Stock
                           </span>
                         </div>
                       ) : (
-                        <div className="absolute bottom-2 right-2 bg-emerald-950/80 text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-800 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" /> Garantizado
+                        <div className="absolute bottom-3 right-3 bg-emerald-950/90 text-emerald-400 text-[10px] font-mono font-black px-2.5 py-1 rounded-lg border border-emerald-700/60 flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5" /> 100% Genuino
                         </div>
                       )}
                     </div>
 
-                    {/* Title & Description */}
-                    <div className="pt-3">
+                    {/* Information */}
+                    <div className="pt-4 space-y-1.5">
+                      <span className="text-[10px] uppercase font-mono text-amber-400 tracking-wider block font-bold">
+                        {product.category?.name || 'Repuesto Automotriz'}
+                      </span>
                       <h3
                         onClick={() => onOpenProductModal(product)}
-                        className="font-bold text-sm text-white group-hover:text-amber-400 transition cursor-pointer line-clamp-2"
+                        className="font-black text-base text-white group-hover:text-amber-400 transition cursor-pointer line-clamp-1"
                       >
                         {product.title}
                       </h3>
-                      <p className="text-xs text-neutral-400 line-clamp-2 mt-1 font-mono">
-                        {product.description || 'Repuesto genuino de alta durabilidad.'}
+                      <p className="text-xs text-neutral-400 line-clamp-2 font-mono leading-relaxed">
+                        {product.description || 'Repuesto de alto rendimiento probado en banco.'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Pricing & Add Actions */}
-                  <div className="mt-4 pt-3 border-t border-neutral-800 flex items-center justify-between">
+                  {/* Pricing & Add to Cart */}
+                  <div className="mt-5 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-neutral-500 uppercase font-mono block">Precio Neto</span>
-                      <span className="text-lg font-black text-amber-400 font-mono">
+                      <span className="text-[9px] text-neutral-500 uppercase font-mono block">
+                        Precio Neto con IVA
+                      </span>
+                      <span className="text-xl font-black text-amber-400 font-mono">
                         ${product.price.toFixed(2)}
                       </span>
                     </div>
 
                     <div>
                       {isOutOfStock ? (
-                        <span className="text-xs text-neutral-500 font-mono">Sin stock</span>
+                        <span className="text-xs text-neutral-500 font-mono">Agotado</span>
                       ) : hasOptions ? (
                         <button
                           onClick={() => onOpenProductModal(product)}
-                          className="bg-neutral-800 hover:bg-neutral-700 text-white font-mono text-xs font-bold px-3.5 py-2 rounded-xl transition"
+                          className="bg-neutral-800 hover:bg-neutral-700 text-white font-mono text-xs font-bold px-4 py-2.5 rounded-xl transition"
                         >
                           Variantes
                         </button>
                       ) : qty > 0 ? (
-                        <div className="flex items-center gap-2 bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1">
+                        <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 rounded-xl px-2.5 py-1.5 shadow-inner">
                           <button
                             onClick={() => onAddToCart(product, qty - 1)}
-                            className="w-5 h-5 flex items-center justify-center text-neutral-300 hover:text-white"
+                            className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-white"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="text-xs font-mono font-black text-amber-400 w-4 text-center">
+                          <span className="text-xs font-mono font-black text-amber-400 w-5 text-center">
                             {qty}
                           </span>
                           <button
                             onClick={() => onAddToCart(product, qty + 1)}
-                            className="w-5 h-5 flex items-center justify-center text-neutral-300 hover:text-white"
+                            className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-white"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -214,7 +260,7 @@ export function ThemeMotoParts({
                       ) : (
                         <button
                           onClick={() => onAddToCart(product, 1)}
-                          className="bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs px-4 py-2 rounded-xl transition shadow-md shadow-amber-400/10 font-mono"
+                          className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-black font-black text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-amber-400/10 font-mono active:scale-95"
                         >
                           + Agregar
                         </button>
@@ -228,20 +274,23 @@ export function ThemeMotoParts({
         )}
       </main>
 
-      {/* Floating Checkout Footer Bar */}
+      {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
         <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-amber-400 text-black p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:bg-amber-300 active:scale-[0.99] transition font-mono font-bold"
+            className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 text-black p-4 rounded-3xl shadow-2xl flex items-center justify-between hover:shadow-amber-400/20 active:scale-[0.99] transition font-mono font-black"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-black text-amber-400 text-xs px-2.5 py-1 rounded-full">
+              <span className="bg-black text-amber-400 text-xs px-3 py-1 rounded-full font-black">
                 {cartCount} piezas
               </span>
-              <span className="text-xs uppercase tracking-wider">Enviar Orden al Taller</span>
+              <span className="text-xs uppercase tracking-wider">Enviar Orden al Mostrador</span>
             </div>
-            <span className="text-base font-black">${cartAmount.toFixed(2)}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black">${cartAmount.toFixed(2)}</span>
+              <ChevronRight className="w-5 h-5 text-black" />
+            </div>
           </button>
         </div>
       )}
