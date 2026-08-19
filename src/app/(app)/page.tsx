@@ -11,7 +11,7 @@ export default function HomePage() {
             <ShoppingBag className="w-5 h-5 text-slate-950" />
           </div>
           <span className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
-            StoreLink<span className="text-green-400">.saas</span>
+            Flow<span className="text-green-400">.martes.app</span>
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -43,7 +43,7 @@ export default function HomePage() {
           </span>
         </h1>
         <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mb-10 leading-relaxed">
-          Cada comerciante tiene su propio panel de control, subida de fotos sin límites, sincronización con el catálogo de Meta y pedidos organizados en Trello en tiempo real.
+          Cada comerciante tiene su propio panel de control, subida de fotos sin límites, gestión de inventario y pedidos organizados en Trello en tiempo real.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">

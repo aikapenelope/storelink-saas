@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'StoreLink SaaS - Catálogos PWA para WhatsApp',
-  description: 'Plataforma multi-tenant de catálogos y e-commerce conectados con WhatsApp, Meta Catalog y Trello.',
+  title: 'Flow | Catálogos PWA e E-Commerce para WhatsApp',
+  description: 'Plataforma multi-tenant de catálogos y e-commerce conectados directamente con WhatsApp y Trello.',
   manifest: '/manifest.json',
 };
 
