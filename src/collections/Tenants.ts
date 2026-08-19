@@ -7,10 +7,10 @@ export const Tenants: CollectionConfig = {
     defaultColumns: ['name', 'slug', 'theme', 'whatsappPhone', 'createdAt'],
   },
   access: {
-    read: () => true, // Public read so storefronts can read store info
-    create: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    read: () => true,
+    create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    delete: ({ req: { user } }) => Boolean(user),
   },
   fields: [
     {
