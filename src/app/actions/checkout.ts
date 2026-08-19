@@ -157,25 +157,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       )
       .join('\n');
 
-    const vesLine = (showVES ?? true)
-      ? ` (equiv. Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
-      : '';
-
     const message = `
-👋 ¡Hola, *${storeName || 'Don Luigi'}*!
+👋 ¡Hola, *${storeName || 'Don Luigi'}*! Gracias por procesar mi pedido *#${orderNumber}*.
 
-Acabo de registrar mi pedido *#${orderNumber}* desde su tienda online.
+📸 Adjunto la foto / captura del comprobante de pago (o foto de los billetes).
+📍 Les comparto mi ubicación en tiempo real para coordinar la entrega.
 
-👤 *Cliente:* ${customer.name}
-📱 *Teléfono:* ${customer.phone}
-🛍️ *Modalidad:* ${customer.address || 'Retiro en tienda (Pickup)'}
-💳 *Método de Pago:* ${customer.paymentMethod || 'Pago Móvil / Zelle / Efectivo'}
-💰 *Total:* $${total.toFixed(2)} ${currency || 'USD'}${vesLine}
-${customer.notes ? `📝 *Nota:* ${customer.notes}\n` : ''}
-📸 *Adjunto a continuación la foto / captura del comprobante de pago* (o foto de los billetes).
-📍 *Comparto mi ubicación en tiempo real* para coordinar la entrega.
-
-¡Muchas gracias! Quedo a la espera de su confirmación. 🙏
+¡Quedo a la espera de su confirmación! 🙏
     `.trim();
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
