@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
+import { getLiveExchangeRate } from '@/lib/exchange-rate';
 import {
   StorefrontClient,
   type ProductItem,
@@ -246,6 +247,9 @@ export default async function TenantStorefrontPage({
     return null;
   }
 
+  // Fetch live exchange rate from Binance / Paralelo API
+  const liveRate = await getLiveExchangeRate('binance');
+
   let tenantConfig: TenantConfig = {
     id: 'demo-tenant',
     name: tenantSlug
@@ -255,6 +259,8 @@ export default async function TenantStorefrontPage({
     slug: tenantSlug,
     whatsappPhone: '34600123456',
     welcomeMessage: 'Catálogo interactivo con pedidos por WhatsApp',
+    exchangeRateVES: liveRate,
+    showVES: true,
   };
 
   let products: ProductItem[] = DEMO_PRODUCTS;
@@ -279,10 +285,12 @@ export default async function TenantStorefrontPage({
         id: String(doc.id),
         name: doc.name || tenantConfig.name,
         slug: doc.slug || tenantSlug,
-        theme: doc.theme || 'fluid-pwa',
+        theme: doc.theme || 'basic-banner',
         whatsappPhone: doc.whatsappPhone || '34600123456',
         welcomeMessage: doc.branding?.welcomeMessage || undefined,
         primaryColor: doc.branding?.primaryColor || undefined,
+        exchangeRateVES: Number(doc.branding?.exchangeRateVES) > 0 ? Number(doc.branding.exchangeRateVES) : liveRate,
+        showVES: doc.branding?.showVES ?? true,
         trelloConfig: doc.trelloConfig || undefined,
       };
 
