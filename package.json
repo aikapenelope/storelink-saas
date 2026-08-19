@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "generate:types": "cross-env PAYLOAD_SECRET=generate-types-only DATABASE_URI='' payload generate:types",
+    "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
+    "migrate:create": "payload migrate:create"
   },
   "keywords": [],
   "author": "",
@@ -45,6 +48,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "cross-env": "^10.1.0",
     "typescript": "^5.9.3"
   }
 }

@@ -108,6 +108,7 @@ export default buildConfig({
       },
     },
     push: false, // Production: use explicit migrations instead of auto-push
+    migrationDir: path.resolve(dirname, 'migrations'),
   }),
   plugins,
 });

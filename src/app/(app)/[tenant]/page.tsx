@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { getLiveExchangeRate } from '@/lib/exchange-rate';
+import type { Tenant } from '@/payload-types';
 import {
   StorefrontClient,
   type ProductItem,
@@ -35,13 +36,16 @@ export async function generateMetadata({
     });
 
     if (tenantResult.docs.length > 0) {
-      const doc = tenantResult.docs[0] as any;
+      const doc = tenantResult.docs[0] as Tenant;
       const title = doc.meta?.title || `${doc.name || storeName} | Catálogo Online Oficial`;
       const description =
         doc.meta?.description ||
         doc.branding?.welcomeMessage ||
         `Haz tus pedidos online en ${doc.name || storeName} con entregas rápidas y atención directa por WhatsApp.`;
-      const logoUrl = doc.branding?.logo?.url || undefined;
+      const logoUrl =
+        typeof doc.branding?.logo === 'object' && doc.branding?.logo?.url
+          ? doc.branding.logo.url
+          : undefined;
 
       return {
         title,
@@ -280,18 +284,18 @@ export default async function TenantStorefrontPage({
     });
 
     if (tenantResult.docs.length > 0) {
-      const doc = tenantResult.docs[0] as any;
+      const doc = tenantResult.docs[0] as Tenant;
+      const branding = doc.branding as any;
       tenantConfig = {
         id: String(doc.id),
         name: doc.name || tenantConfig.name,
         slug: doc.slug || tenantSlug,
         theme: doc.theme || 'basic-banner',
         whatsappPhone: doc.whatsappPhone || '34600123456',
-        welcomeMessage: doc.branding?.welcomeMessage || undefined,
-        primaryColor: doc.branding?.primaryColor || undefined,
-        exchangeRateVES: Number(doc.branding?.exchangeRateVES) > 0 ? Number(doc.branding.exchangeRateVES) : liveRate,
-        showVES: doc.branding?.showVES ?? true,
-        // trelloConfig intentionally NOT passed to client — read server-side in checkout action
+        welcomeMessage: branding?.welcomeMessage || undefined,
+        primaryColor: branding?.primaryColor || undefined,
+        exchangeRateVES: Number(branding?.exchangeRateVES) > 0 ? Number(branding?.exchangeRateVES) : liveRate,
+        showVES: branding?.showVES ?? true,
       };
 
       // Fetch products for this tenant
@@ -306,34 +310,51 @@ export default async function TenantStorefrontPage({
       });
 
       if (productsResult.docs.length > 0) {
-        products = productsResult.docs.map((p: any) => ({
-          id: String(p.id),
-          sku: p.sku || `SKU-${p.id}`,
-          title: p.title,
-          price: Number(p.price) || 0,
-          description: p.description || '',
-          category: p.category
-            ? {
-                id: String(p.category.id || p.category),
-                name: p.category.name || 'General',
-              }
-            : undefined,
-          stockStatus: p.stockStatus || 'in_stock',
-          trackStock: Boolean(p.trackStock),
-          stockQuantity: p.stockQuantity ? Number(p.stockQuantity) : undefined,
-          featured: Boolean(p.featured),
-          variants: Array.isArray(p.variants) ? p.variants : [],
-          modifiers: Array.isArray(p.modifiers) ? p.modifiers : [],
-          images: Array.isArray(p.images)
-            ? p.images.map((img: any) => ({
-                url:
-                  img.image?.url ||
-                  img.image_url ||
-                  img.url ||
-                  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
-              }))
-            : [],
-        }));
+        products = productsResult.docs.map((p) => {
+          const prod = p as any;
+          return {
+            id: String(prod.id),
+            sku: prod.sku || `SKU-${prod.id}`,
+            title: prod.title,
+            price: Number(prod.price) || 0,
+            description: prod.description || '',
+            category: prod.category && typeof prod.category === 'object'
+              ? { id: String(prod.category.id), name: prod.category.name || 'General' }
+              : undefined,
+            stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
+            trackStock: Boolean(prod.trackStock),
+            stockQuantity: prod.stockQuantity ? Number(prod.stockQuantity) : undefined,
+            featured: Boolean(prod.featured),
+            variants: Array.isArray(prod.variants)
+              ? prod.variants.map((v: any) => ({
+                  name: v.name,
+                  sku: v.sku || undefined,
+                  price: Number(v.price) || 0,
+                  stockStatus: v.stockStatus || undefined,
+                }))
+              : [],
+            modifiers: Array.isArray(prod.modifiers)
+              ? prod.modifiers.map((m: any) => ({
+                  groupName: m.groupName,
+                  options: Array.isArray(m.options)
+                    ? m.options.map((opt: any) => ({
+                        name: opt.name,
+                        priceDelta: Number(opt.priceDelta) || 0,
+                      }))
+                    : [],
+                }))
+              : [],
+            images: Array.isArray(prod.images)
+              ? prod.images.map((img: any) => ({
+                  url: (typeof img.image === 'object' && img.image?.url)
+                    ? img.image.url
+                    : typeof img.url === 'string'
+                    ? img.url
+                    : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+                }))
+              : [],
+          };
+        });
 
         // Dynamic categories from loaded products
         const catSet = new Set<string>(['Todos']);

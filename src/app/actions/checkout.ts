@@ -6,6 +6,7 @@ import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { getLiveExchangeRate } from '@/lib/exchange-rate';
 import { Resend } from 'resend';
+import type { Tenant, Product, Customer } from '@/payload-types';
 
 export interface CheckoutCustomerData {
   name: string;
@@ -56,28 +57,33 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       return { success: false, error: 'Por favor completa el nombre y teléfono de contacto' };
     }
 
-    // Initialize Payload for all server-side DB operations
-    const payload = await getPayload({ config });
+    // Server-side price validation: re-read prices from DB if available to prevent manipulation
+    const verifiedItems: CheckoutItemData[] = [];
+    let tenantDoc: Tenant | null = null;
+    let tenantId: number | undefined = undefined;
+    let payload: Awaited<ReturnType<typeof import('payload').getPayload>> | null = null;
 
-    // Resolve tenant from database (single source of truth for config & secrets)
-    let tenantDoc: any = null;
-    let tenantId: any = undefined;
-    const tenantResult = await payload.find({
-      collection: 'tenants',
-      where: { slug: { equals: tenantSlug } },
-      limit: 1,
-      overrideAccess: true, // Server-side: bypass field-level access to read trelloConfig etc.
-    });
-    if (tenantResult.docs.length > 0) {
-      tenantDoc = tenantResult.docs[0];
-      tenantId = tenantDoc.id;
+    try {
+      payload = await getPayload({ config });
+      if (payload && tenantSlug) {
+        const tenantResult = await payload.find({
+          collection: 'tenants',
+          where: { slug: { equals: tenantSlug } },
+          limit: 1,
+          overrideAccess: true,
+        });
+        if (tenantResult?.docs?.length > 0) {
+          tenantDoc = tenantResult.docs[0];
+          tenantId = tenantDoc.id;
+        }
+      }
+    } catch (dbTenantErr) {
+      console.warn('Could not resolve tenant from Payload DB (running in decoupled demo mode):', dbTenantErr);
     }
 
-    // Server-side price validation: re-read prices from DB to prevent client manipulation
-    const verifiedItems: CheckoutItemData[] = [];
     for (const item of items) {
-      let verifiedPrice = item.price; // Fallback to client price for demo products
-      if (tenantId && item.sku) {
+      let verifiedPrice = item.price;
+      if (payload && tenantId && item.sku) {
         try {
           const productMatch = await payload.find({
             collection: 'products',
@@ -90,8 +96,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             limit: 1,
             overrideAccess: true,
           });
-          if (productMatch.docs.length > 0) {
-            verifiedPrice = Number((productMatch.docs[0] as any).price) || item.price;
+          if (productMatch?.docs?.length > 0) {
+            verifiedPrice = Number((productMatch.docs[0] as Product).price) || item.price;
           }
         } catch {
           // If lookup fails, use client price as fallback
@@ -111,173 +117,224 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       minute: '2-digit',
     });
 
-    // Calculate total using verified server-side prices
+    // Calculate total using verified prices
     const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
-    // Resolve exchange rate from tenant config or live API
+    // Resolve exchange rate from tenant config, client request or live API
     const tenantManualRate = Number(tenantDoc?.branding?.exchangeRateVES);
-    const rate = tenantManualRate > 0 ? tenantManualRate : await getLiveExchangeRate('binance');
+    const rate = tenantManualRate > 0
+      ? tenantManualRate
+      : (Number(request.exchangeRateVES) > 0 ? Number(request.exchangeRateVES) : await getLiveExchangeRate('binance'));
     const totalVES = total * rate;
 
-    // 1. Generate Delivery Note PDF (Uint8Array -> Base64)
-    const pdfBytes = generateDeliveryNotePDF({
-      storeName: storeName || 'StoreLink Shop',
-      orderNumber,
-      date: dateFormatted,
-      customerName: customer.name,
-      customerPhone: customer.phone,
-      customerAddress: customer.address,
-      paymentMethod: customer.paymentMethod,
-      currency: currency || 'USD',
-      total,
-      items: verifiedItems,
-    });
-
-    const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
-
-    // 2. Dispatch Order to Merchant's Trello Board (credentials read from DB, NOT from client)
-    let trelloCardUrl: string | undefined = undefined;
-    const trelloConfig = tenantDoc?.trelloConfig;
-    if (trelloConfig?.apiKey && trelloConfig?.token && trelloConfig?.listId) {
-      const trelloRes = await createTrelloOrderCard({
-        apiKey: trelloConfig.apiKey,
-        token: trelloConfig.token,
-        listId: trelloConfig.listId,
+    // 1. Generate Delivery Note PDF (Uint8Array -> Base64) in-memory
+    let pdfBase64: string | undefined = undefined;
+    try {
+      const pdfBytes = generateDeliveryNotePDF({
+        storeName: storeName || 'StoreLink Shop',
         orderNumber,
+        date: dateFormatted,
         customerName: customer.name,
         customerPhone: customer.phone,
         customerAddress: customer.address,
         paymentMethod: customer.paymentMethod,
-        notes: customer.notes,
+        currency: currency || 'USD',
         total,
-        currency,
         items: verifiedItems,
       });
-      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+      pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+    } catch (pdfErr) {
+      console.error('Error generating delivery note PDF:', pdfErr);
     }
 
-    // 3. Save Order and Auto-Update Inventory in Payload CMS Database
-    try {
-      await payload.create({
-        collection: 'orders',
-        overrideAccess: true, // Server action: bypass collection access control
-        data: {
+    // 2. Format WhatsApp Message with Multi-Currency Breakdown
+    const targetPhone = tenantDoc?.whatsappPhone || whatsappPhone || '584121234567';
+    const cleanPhone = targetPhone.replace(/\D/g, '');
+    const itemsList = verifiedItems
+      .map(
+        (item) =>
+          `• [${item.sku || 'N/A'}] ${item.quantity}x ${item.title} ($${item.price.toFixed(2)} c/u) = *$${(item.quantity * item.price).toFixed(2)}*`
+      )
+      .join('\n');
+
+    const vesLine = (showVES ?? true)
+      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${rate.toFixed(2)} Bs/$)`
+      : '';
+
+    const message = `
+🛍️ *NUEVO PEDIDO #${orderNumber}*
+🏪 *Tienda:* ${storeName || 'StoreLink Shop'}
+
+👤 *DATOS DEL CLIENTE:*
+• *Nombre:* ${customer.name}
+• *Teléfono:* ${customer.phone}
+${customer.email ? `• *Email:* ${customer.email}\n` : ''}• *Modalidad:* ${customer.address || 'Retiro en tienda (Pickup)'}
+• *Método de Pago:* ${customer.paymentMethod || 'Efectivo / Transferencia'}
+${customer.notes ? `• *Notas:* ${customer.notes}\n` : ''}
+📦 *PRODUCTOS:*
+${itemsList}
+
+💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency || 'USD'}*${vesLine}
+
+_Generado automáticamente desde la tienda PWA_
+    `.trim();
+
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    // 3. Dispatch Order to Trello (tenant config or global env vars fallback)
+    let trelloCardUrl: string | undefined = undefined;
+    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY;
+    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN;
+    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID;
+
+    if (effectiveTrelloKey && effectiveTrelloToken && effectiveTrelloListId) {
+      try {
+        const trelloRes = await createTrelloOrderCard({
+          apiKey: effectiveTrelloKey,
+          token: effectiveTrelloToken,
+          listId: effectiveTrelloListId,
           orderNumber,
-          status: 'pending',
-          tenant: tenantId,
-          customer: {
-            name: customer.name,
-            phone: customer.phone,
-            address: customer.address || '',
-            paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
-            notes: customer.notes || '',
-          },
-          items: verifiedItems.map((item) => ({
-            sku: item.sku || 'N/A',
-            title: item.title,
-            price: item.price,
-            quantity: item.quantity,
-            subtotal: item.price * item.quantity,
-          })),
-          totalAmount: total,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerAddress: customer.address,
+          paymentMethod: customer.paymentMethod,
+          notes: customer.notes,
+          total,
           currency: currency || 'USD',
-          trelloCardUrl,
-        } as any,
-      });
-
-      // 3.1 Decrement Product Stock in Inventory
-      try {
-        for (const item of verifiedItems) {
-          if (item.sku && item.sku !== 'N/A') {
-            const productMatch = await payload.find({
-              collection: 'products',
-              where: {
-                and: [
-                  { sku: { equals: item.sku } },
-                  { tenant: { equals: tenantId } },
-                ],
-              },
-              limit: 1,
-              overrideAccess: true,
-            });
-
-            if (productMatch.docs.length > 0) {
-              const prod = productMatch.docs[0] as any;
-              if (prod.trackStock && typeof prod.stockQuantity === 'number') {
-                const updatedStock = Math.max(0, prod.stockQuantity - item.quantity);
-                await payload.update({
-                  collection: 'products',
-                  id: prod.id,
-                  overrideAccess: true,
-                  data: {
-                    stockQuantity: updatedStock,
-                    stockStatus: updatedStock === 0 ? 'out_of_stock' : 'in_stock',
-                  } as any,
-                });
-              }
-            }
-          }
-        }
-      } catch (invErr) {
-        console.error('Error updating product inventory:', invErr);
+          items: verifiedItems,
+        });
+        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+      } catch (trelloErr) {
+        console.warn('Trello dispatch non-blocking error:', trelloErr);
       }
+    }
 
-      // 3.2 Upsert Customer into CRM collection
+    // 4. Save Order and Auto-Update Inventory in Payload CMS Database (Graceful Non-Blocking)
+    if (payload) {
       try {
-        const cleanPhone = customer.phone.replace(/\D/g, '');
-        const existingCustomer = await payload.find({
-          collection: 'customers',
-          where: {
-            and: [
-              { phone: { equals: cleanPhone || customer.phone } },
-              { tenant: { equals: tenantId } },
-            ],
-          },
-          limit: 1,
+        await payload.create({
+          collection: 'orders',
           overrideAccess: true,
+          data: {
+            orderNumber,
+            status: 'pending',
+            tenant: tenantId,
+            customer: {
+              name: customer.name,
+              phone: customer.phone,
+              address: customer.address || '',
+              paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
+              notes: customer.notes || '',
+            },
+            items: verifiedItems.map((item) => ({
+              sku: item.sku || 'N/A',
+              title: item.title,
+              price: item.price,
+              quantity: item.quantity,
+              subtotal: item.price * item.quantity,
+            })),
+            totalAmount: total,
+            currency: currency || 'USD',
+            trelloCardUrl,
+          },
         });
 
-        if (existingCustomer.docs.length > 0) {
-          const cust = existingCustomer.docs[0] as any;
-          const newTotalOrders = (cust.totalOrders || 1) + 1;
-          const newTotalSpent = Number((Number(cust.totalSpent || 0) + total).toFixed(2));
-          const tag = newTotalOrders >= 5 ? 'vip' : newTotalOrders >= 2 ? 'frecuente' : 'nuevo';
+        // 4.1 Decrement Product Stock in Inventory
+        if (tenantId) {
+          try {
+            for (const item of verifiedItems) {
+              if (item.sku && item.sku !== 'N/A') {
+                const productMatch = await payload.find({
+                  collection: 'products',
+                  where: {
+                    and: [
+                      { sku: { equals: item.sku } },
+                      { tenant: { equals: tenantId } },
+                    ],
+                  },
+                  limit: 1,
+                  overrideAccess: true,
+                });
 
-          await payload.update({
-            collection: 'customers',
-            id: cust.id,
-            overrideAccess: true,
-            data: {
-              name: customer.name,
-              email: customer.email || cust.email,
-              totalOrders: newTotalOrders,
-              totalSpent: newTotalSpent,
-              lastOrderAt: now.toISOString(),
-              tag,
-            } as any,
-          });
-        } else {
-          await payload.create({
-            collection: 'customers',
-            overrideAccess: true,
-            data: {
-              name: customer.name,
-              phone: cleanPhone || customer.phone,
-              email: customer.email || '',
-              tenant: tenantId,
-              totalOrders: 1,
-              totalSpent: Number(total.toFixed(2)),
-              lastOrderAt: now.toISOString(),
-              tag: 'nuevo',
-              savedAddresses: customer.address ? [{ address: customer.address }] : [],
-            } as any,
-          });
+                if (productMatch?.docs?.length > 0) {
+                  const prod = productMatch.docs[0] as Product;
+                  if (prod.trackStock && typeof prod.stockQuantity === 'number') {
+                    const updatedStock = Math.max(0, prod.stockQuantity - item.quantity);
+                    await payload.update({
+                      collection: 'products',
+                      id: prod.id,
+                      overrideAccess: true,
+                      data: {
+                        stockQuantity: updatedStock,
+                        stockStatus: updatedStock === 0 ? 'out_of_stock' : 'in_stock',
+                      },
+                    });
+                  }
+                }
+              }
+            }
+          } catch (invErr) {
+            console.warn('Inventory update non-blocking warning:', invErr);
+          }
         }
-      } catch (crmErr) {
-        console.error('Error updating customer CRM record:', crmErr);
+
+        // 4.2 Upsert Customer into CRM collection
+        try {
+          const cleanCustPhone = customer.phone.replace(/\D/g, '');
+          const existingCustomer = await payload.find({
+            collection: 'customers',
+            where: {
+              and: [
+                { phone: { equals: cleanCustPhone || customer.phone } },
+                ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+              ],
+            },
+            limit: 1,
+            overrideAccess: true,
+          });
+
+          if (existingCustomer?.docs?.length > 0) {
+            const cust = existingCustomer.docs[0] as Customer;
+            const newTotalOrders = (cust.totalOrders || 1) + 1;
+            const newTotalSpent = Number((Number(cust.totalSpent || 0) + total).toFixed(2));
+            const tag: 'vip' | 'frecuente' | 'nuevo' = newTotalOrders >= 5 ? 'vip' : newTotalOrders >= 2 ? 'frecuente' : 'nuevo';
+
+            await payload.update({
+              collection: 'customers',
+              id: cust.id,
+              overrideAccess: true,
+              data: {
+                name: customer.name,
+                email: customer.email || cust.email,
+                totalOrders: newTotalOrders,
+                totalSpent: newTotalSpent,
+                lastOrderAt: now.toISOString(),
+                tag,
+              },
+            });
+          } else {
+            await payload.create({
+              collection: 'customers',
+              overrideAccess: true,
+              data: {
+                name: customer.name,
+                phone: cleanCustPhone || customer.phone,
+                email: customer.email || '',
+                tenant: tenantId,
+                totalOrders: 1,
+                totalSpent: Number(total.toFixed(2)),
+                lastOrderAt: now.toISOString(),
+                tag: 'nuevo' as const,
+                savedAddresses: customer.address ? [{ address: customer.address }] : [],
+              },
+            });
+          }
+        } catch (crmErr) {
+          console.warn('CRM upsert non-blocking warning:', crmErr);
+        }
+      } catch (dbErr) {
+        console.warn('Order save to database non-blocking warning:', dbErr);
       }
-    } catch (dbErr) {
-      console.error('Error saving order record to Payload database:', dbErr);
     }
 
     // 4. Send Order Confirmation Email with PDF Attachment via Resend (Multi-Tenant BYOK + Platform Fallback)
@@ -365,39 +422,6 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         console.error('Error sending confirmation email via Resend:', emailErr);
       }
     }
-
-    // 5. Format WhatsApp Message with Multi-Currency Breakdown
-    const cleanPhone = whatsappPhone.replace(/\D/g, '');
-    const itemsList = items
-      .map(
-        (item) =>
-          `• [${item.sku || 'N/A'}] ${item.quantity}x ${item.title} ($${item.price.toFixed(2)} c/u) = *$${(item.quantity * item.price).toFixed(2)}*`
-      )
-      .join('\n');
-
-    const vesLine = (showVES ?? true)
-      ? `\n🇻🇪 *Equivalente en Bolívares:* Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa Binance: ${rate.toFixed(2)} Bs/$)`
-      : '';
-
-    const message = `
-🛍️ *NUEVO PEDIDO #${orderNumber}*
-🏪 *Tienda:* ${storeName}
-
-👤 *DATOS DEL CLIENTE:*
-• *Nombre:* ${customer.name}
-• *Teléfono:* ${customer.phone}
-${customer.email ? `• *Email:* ${customer.email}\n` : ''}• *Dirección:* ${customer.address || 'Retiro en tienda'}
-• *Método de Pago:* ${customer.paymentMethod || 'Efectivo / Transferencia'}
-${customer.notes ? `• *Notas:* ${customer.notes}\n` : ''}
-📦 *PRODUCTOS:*
-${itemsList}
-
-💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency}*${vesLine}
-
-_Generado automáticamente desde la tienda PWA_
-    `.trim();
-
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     return {
       success: true,
