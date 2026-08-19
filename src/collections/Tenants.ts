@@ -4,7 +4,7 @@ export const Tenants: CollectionConfig = {
   slug: 'tenants',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'slug', 'whatsappPhone', 'createdAt'],
+    defaultColumns: ['name', 'slug', 'theme', 'whatsappPhone', 'createdAt'],
   },
   access: {
     read: () => true, // Public read so storefronts can read store info
@@ -24,6 +24,21 @@ export const Tenants: CollectionConfig = {
       label: 'Identificador / Subdominio (ej: don-luigi)',
       admin: {
         description: 'Se usará para la URL: tudominio.com/[slug] o [slug].tudominio.com',
+      },
+    },
+    {
+      name: 'theme',
+      type: 'select',
+      label: 'Diseño del Catálogo (Theme UI)',
+      defaultValue: 'fluid-pwa',
+      options: [
+        { label: '📱 Fluid Glass PWA (App Móvil / Delivery)', value: 'fluid-pwa' },
+        { label: '▲ Vercel Clean Minimal (Estilo Vercel Commerce)', value: 'vercel-commerce' },
+        { label: '✨ Editorial Boutique (Moda & Lujo)', value: 'editorial-lookbook' },
+        { label: '⚡ B2B Matrix (Mayorista & Catálogo Rápido)', value: 'b2b-matrix' },
+      ],
+      admin: {
+        description: 'Elige el modelo visual con el que se mostrará tu tienda al público.',
       },
     },
     {

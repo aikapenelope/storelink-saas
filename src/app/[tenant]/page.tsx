@@ -194,6 +194,7 @@ export default async function TenantStorefrontPage({
         id: String(doc.id),
         name: doc.name || tenantConfig.name,
         slug: doc.slug || tenantSlug,
+        theme: doc.theme || 'fluid-pwa',
         whatsappPhone: doc.whatsappPhone || '34600123456',
         welcomeMessage: doc.branding?.welcomeMessage || undefined,
         primaryColor: doc.branding?.primaryColor || undefined,
