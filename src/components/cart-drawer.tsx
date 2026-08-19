@@ -466,19 +466,19 @@ export function CartDrawer({
                           Dirección de Retiro en Tienda:
                         </h5>
                         <p className="text-xs text-slate-700 font-medium leading-relaxed mt-0.5">
-                          Av. Principal de Las Mercedes con Calle París, Edificio Don Luigi, Planta Baja (frente a la Plaza Alfredo Sadel), Caracas, Venezuela.
+                          {pickupLoc}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 pt-2 border-t border-amber-200/60 text-xs text-slate-600 font-semibold">
                       <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <span>Horario de Retiro: Lunes a Domingo de 11:30 AM a 10:00 PM</span>
+                      <span>Horario de Retiro: {pickupSched}</span>
                     </div>
 
                     <p className="text-[11px] text-amber-800 font-medium bg-amber-100/60 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
                       <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                      Tu pedido estará listo para retirar en 20-30 min tras confirmación por WhatsApp.
+                      Tu pedido estará listo para retirar en {pickupTime} tras confirmación por WhatsApp.
                     </p>
                   </div>
                 ) : (
@@ -499,42 +499,51 @@ export function CartDrawer({
                         required={deliveryType === 'delivery'}
                         placeholder="Ej. Los Palos Grandes, Av. Francisco de Miranda"
                         value={customer.address}
-                        onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                        onChange={(e) => setCustomer((prev) => ({ ...prev, address: e.target.value }))}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium shadow-xs"
                       />
                     </div>
 
                     {/* Campo 2: Edificio o casa */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Edificio o casa *
+                        Edificio, casa, piso o apto *
                       </label>
                       <input
                         type="text"
                         required={deliveryType === 'delivery'}
-                        placeholder="Ej. Edif. Ávila, Piso 4, Apto 4-B o Casa N° 12"
+                        placeholder="Ej. Res. Parque Ávila, Torre B, Apto 4-B"
                         value={customer.buildingHouse}
-                        onChange={(e) => setCustomer({ ...customer, buildingHouse: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
+                        onChange={(e) => setCustomer((prev) => ({ ...prev, buildingHouse: e.target.value }))}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium shadow-xs"
                       />
                     </div>
 
-                    {/* Campo 3: Municipio */}
+                    {/* Campo 3: Municipios de Caracas */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Municipio *
+                        Municipio de Entrega *
                       </label>
                       <select
                         value={customer.municipality}
-                        onChange={(e) => setCustomer({ ...customer, municipality: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white font-medium text-slate-800"
+                        onChange={(e) => setCustomer((prev) => ({ ...prev, municipality: e.target.value }))}
+                        className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold shadow-xs"
                       >
-                        <option value="Municipio Hatillo">Municipio Hatillo</option>
-                        <option value="Municipio Baruta">Municipio Baruta</option>
-                        <option value="Municipio Chacao">Municipio Chacao</option>
-                        <option value="Municipio Libertador">Municipio Libertador</option>
-                        <option value="Municipio Sucre">Municipio Sucre</option>
-                        <option value="Otro Municipio / Fuera de Caracas">Otro Municipio / Fuera de Caracas</option>
+                        {deliveryConfig?.zones && deliveryConfig.zones.length > 0 ? (
+                          deliveryConfig.zones.map((zone) => (
+                            <option key={zone.name} value={zone.name}>
+                              {zone.name} {zone.priceDelivery ? `(+$${Number(zone.priceDelivery).toFixed(2)})` : ''}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="Municipio Chacao">Municipio Chacao</option>
+                            <option value="Municipio Baruta">Municipio Baruta</option>
+                            <option value="Municipio Sucre (Petare / Los Dos Caminos)">Municipio Sucre</option>
+                            <option value="Municipio El Hatillo">Municipio El Hatillo</option>
+                            <option value="Municipio Libertador (Centro / Oeste)">Municipio Libertador</option>
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>
@@ -542,7 +551,7 @@ export function CartDrawer({
 
                 {/* 4. Datos del Cliente */}
                 <div className="space-y-3 pt-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Datos del Comprador
                   </h4>
                   <div>
@@ -552,8 +561,8 @@ export function CartDrawer({
                       required
                       placeholder="Ej. Juan Pérez"
                       value={customer.name}
-                      onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      onChange={(e) => setCustomer((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium shadow-xs"
                     />
                   </div>
                   <div>
@@ -571,7 +580,7 @@ export function CartDrawer({
                       <select
                         value={phoneOperator}
                         onChange={(e) => setPhoneOperator(e.target.value)}
-                        className="px-2.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 flex-shrink-0"
+                        className="px-2.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 flex-shrink-0"
                       >
                         <option value="414">0414</option>
                         <option value="424">0424</option>
@@ -588,7 +597,7 @@ export function CartDrawer({
                         placeholder="123 4567"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        className="flex-1 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
                       />
                     </div>
                     <span className="text-[10px] text-slate-400 mt-1 block">
@@ -601,486 +610,493 @@ export function CartDrawer({
                       type="email"
                       placeholder="tucorreo@ejemplo.com (opcional)"
                       value={customer.email}
-                      onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      onChange={(e) => setCustomer((prev) => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
                     />
                   </div>
-                  {/* Payment Method Selector & Verification Section */}
-                  <div className="space-y-3 pt-2 border-t border-slate-100">
-                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      Método de Pago
+                </div>
+
+                {/* 5. Selector de Métodos de Pago Venezolanos y Multidivisa */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                      Método de Pago:
                     </label>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Tasa: {exchangeRateVES.toFixed(2)} Bs/$
+                    </span>
+                  </div>
 
-                    {/* Method Selector Chips */}
-                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('pago_movil')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'pago_movil'
-                            ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                        <span className="text-xs">Pago Móvil (VES)</span>
-                      </button>
+                  {/* Payment Methods Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('pago_movil')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'pago_movil'
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span className="text-xs">Pago Móvil VES</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('zelle')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'zelle'
-                            ? 'border-purple-600 bg-purple-50 text-purple-950 font-bold ring-1 ring-purple-600 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <span className="text-sm font-black text-purple-600 flex-shrink-0">Z</span>
-                        <span className="text-xs">Zelle (USD)</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('zelle')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'zelle'
+                          ? 'border-purple-600 bg-purple-50 text-purple-950 font-bold ring-1 ring-purple-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      <span className="text-xs">Zelle USD</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('binance')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'binance'
-                            ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold ring-1 ring-amber-500 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <span className="text-sm font-black text-amber-500 flex-shrink-0">🟡</span>
-                        <span className="text-xs">Binance Pay</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('binance')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'binance'
+                          ? 'border-amber-600 bg-amber-50 text-amber-950 font-bold ring-1 ring-amber-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span className="text-xs">Binance Pay USDT</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('zinli')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'zinli'
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-600 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <span className="text-sm font-black text-indigo-600 flex-shrink-0">💜</span>
-                        <span className="text-xs">Zinli (USD)</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('zinli')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'zinli'
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <span className="text-xs">Zinli USD</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('banesco_panama')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'banesco_panama'
-                            ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold ring-1 ring-blue-600 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                        <span className="text-xs">Banesco Panamá</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('banesco_panama')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'banesco_panama'
+                          ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold ring-1 ring-blue-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span className="text-xs">Banesco Panamá</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('cash')}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'cash'
-                            ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                        <span className="text-xs">Efectivo ($ / Bs)</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('cash')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'cash'
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <span className="text-xs">Efectivo ($ / Bs)</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodKey('pos')}
-                        className={`col-span-2 sm:col-span-1 p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                          paymentMethodKey === 'pos'
-                            ? 'border-slate-800 bg-slate-100 text-slate-950 font-bold ring-1 ring-slate-800 shadow-xs'
-                            : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                        }`}
-                      >
-                        <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />
-                        <span className="text-xs">Punto en Tienda</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethodKey('pos')}
+                      className={`col-span-2 sm:col-span-1 p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
+                        paymentMethodKey === 'pos'
+                          ? 'border-slate-800 bg-slate-100 text-slate-950 font-bold ring-1 ring-slate-800 shadow-xs'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                      <span className="text-xs">Punto en Tienda</span>
+                    </button>
+                  </div>
+
+                  {/* Merchant Receptor Card with Per-Field 1-Click Copy */}
+                  {paymentMethodKey === 'pago_movil' && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
+                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
+                          Datos para Pago Móvil
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {/* Banco */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Banco Receptores</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{pmBank}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(pmBank, 'pm_banco')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'pm_banco' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'pm_banco' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
+
+                        {/* Teléfono */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Teléfono</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{pmPhone}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(pmPhone.replace(/\D/g, ''), 'pm_phone')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'pm_phone' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'pm_phone' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
+
+                        {/* RIF */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">C.I. / RIF</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{pmIdDoc}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(pmIdDoc.replace(/[-.\s]/g, ''), 'pm_rif')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'pm_rif' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'pm_rif' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
+
+                        {/* Titular */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{pmHolder}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(pmHolder, 'pm_titular')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'pm_titular' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'pm_titular' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
+
+                        {/* Monto VES */}
+                        {showVES && (
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-emerald-400 font-bold block uppercase">Monto Exacto a Transferir</span>
+                              <span className="font-mono font-black text-emerald-400 text-sm truncate">
+                                Bs. {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(totalVES.toFixed(2), 'pm_monto')}
+                              className="px-2.5 py-1 bg-emerald-900/60 hover:bg-emerald-800 active:scale-95 text-[10px] text-emerald-300 rounded-lg flex items-center gap-1 transition font-bold border border-emerald-700/50"
+                            >
+                              {copiedKey === 'pm_monto' ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+                              <span>{copiedKey === 'pm_monto' ? 'Copiado' : 'Copiar Monto'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  )}
 
-                    {/* Merchant Receptor Card with Per-Field 1-Click Copy */}
-                    {paymentMethodKey === 'pago_movil' && (
-                      <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                        <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
-                            Datos para Pago Móvil
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                  {paymentMethodKey === 'zelle' && (
+                    <div className="bg-purple-950 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
+                      <div className="border-b border-purple-900 pb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-purple-300">
+                          Datos para Pago Zelle
+                        </span>
+                        <span className="text-[10px] text-purple-300/70 font-medium">Toca 'Copiar' en cada campo</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {/* Correo Zelle */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-purple-300 block uppercase">Correo Zelle</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{zelleEmail}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(zelleEmail, 'zelle_email')}
+                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'zelle_email' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zelle_email' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
                         </div>
-                        <div className="space-y-1 text-xs">
-                          {/* Banco */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Banco Receptores</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Banesco (0134)</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('0134', 'pm_banco')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'pm_banco' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'pm_banco' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
 
-                          {/* Teléfono */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Teléfono</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">04141234567</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('04141234567', 'pm_phone')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'pm_phone' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'pm_phone' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
+                        {/* Titular */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-purple-300 block uppercase">Titular</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{zelleHolder}</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(zelleHolder, 'zelle_titular')}
+                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'zelle_titular' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zelle_titular' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
 
-                          {/* RIF */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">C.I. / RIF</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">J-12345678-0</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('J123456780', 'pm_rif')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'pm_rif' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'pm_rif' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
+                        {/* Monto USD */}
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-purple-300 font-bold block uppercase">Monto Exacto USD</span>
+                            <span className="font-mono font-black text-purple-200 text-sm truncate">${total.toFixed(2)} USD</span>
                           </div>
-
-                          {/* Titular */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Don Luigi & Burgers C.A.</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('Don Luigi & Burgers C.A.', 'pm_titular')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'pm_titular' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'pm_titular' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
-
-                          {/* Monto VES */}
-                          {showVES && (
-                            <div className="flex items-center justify-between gap-2 pt-1">
-                              <div className="min-w-0">
-                                <span className="text-[10px] text-emerald-400 font-bold block uppercase">Monto Exacto a Transferir</span>
-                                <span className="font-mono font-black text-emerald-400 text-sm truncate">
-                                  Bs. {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyText(totalVES.toFixed(2), 'pm_monto')}
-                                className="px-2.5 py-1 bg-emerald-900/60 hover:bg-emerald-800 active:scale-95 text-[10px] text-emerald-300 rounded-lg flex items-center gap-1 transition font-bold border border-emerald-700/50"
-                              >
-                                {copiedKey === 'pm_monto' ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
-                                <span>{copiedKey === 'pm_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                              </button>
-                            </div>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(total.toFixed(2), 'zelle_monto')}
+                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold border border-purple-700/50"
+                          >
+                            {copiedKey === 'zelle_monto' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zelle_monto' ? 'Copiado' : 'Copiar Monto'}</span>
+                          </button>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {paymentMethodKey === 'zelle' && (
-                      <div className="bg-purple-950 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                        <div className="border-b border-purple-900 pb-1.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-purple-300">
-                            Datos para Pago Zelle
-                          </span>
-                          <span className="text-[10px] text-purple-300/70 font-medium">Toca 'Copiar' en cada campo</span>
+                  {paymentMethodKey === 'binance' && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
+                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
+                          Datos Binance Pay (USDT)
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {/* Pay ID */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Binance Pay ID</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{binancePayId}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(binancePayId, 'binance_payid')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-amber-400 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'binance_payid' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'binance_payid' ? 'Copiado' : 'Copiar ID'}</span>
+                          </button>
                         </div>
-                        <div className="space-y-1 text-xs">
-                          {/* Correo Zelle */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-purple-300 block uppercase">Correo Zelle</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">pagos@donluigi.com</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('pagos@donluigi.com', 'zelle_email')}
-                              className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'zelle_email' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zelle_email' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
 
-                          {/* Titular */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-purple-300 block uppercase">Titular</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Don Luigi Food Corp LLC</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('Don Luigi Food Corp LLC', 'zelle_titular')}
-                              className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'zelle_titular' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zelle_titular' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
+                        {/* Nickname */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Nickname</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{binanceNick}</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(binanceNick, 'binance_nick')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'binance_nick' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'binance_nick' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
 
-                          {/* Monto USD */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-purple-300 font-bold block uppercase">Monto Exacto USD</span>
-                              <span className="font-mono font-black text-purple-200 text-sm truncate">${total.toFixed(2)} USD</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText(total.toFixed(2), 'zelle_monto')}
-                              className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold border border-purple-700/50"
-                            >
-                              {copiedKey === 'zelle_monto' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zelle_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                            </button>
+                        {/* Monto USDT */}
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-amber-400 font-bold block uppercase">Monto Total USDT</span>
+                            <span className="font-mono font-black text-amber-400 text-sm truncate">{total.toFixed(2)} USDT</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(total.toFixed(2), 'binance_monto')}
+                            className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 active:scale-95 text-[10px] text-amber-300 rounded-lg flex items-center gap-1 transition font-bold border border-amber-700/50"
+                          >
+                            {copiedKey === 'binance_monto' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'binance_monto' ? 'Copiado' : 'Copiar Monto'}</span>
+                          </button>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {paymentMethodKey === 'binance' && (
-                      <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                        <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
-                            Datos Binance Pay (USDT)
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                  {paymentMethodKey === 'zinli' && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
+                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
+                          Datos para Pago Zinli
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {/* Correo Zinli */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Correo Zinli</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{zinliEmail}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(zinliEmail, 'zinli_email')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'zinli_email' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zinli_email' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
                         </div>
-                        <div className="space-y-1 text-xs">
-                          {/* Pay ID */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Binance Pay ID</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">284910381</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('284910381', 'binance_payid')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-amber-400 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'binance_payid' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'binance_payid' ? 'Copiado' : 'Copiar ID'}</span>
-                            </button>
-                          </div>
 
-                          {/* Nickname */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Nickname</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">DonLuigiPay</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('DonLuigiPay', 'binance_nick')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'binance_nick' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'binance_nick' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
+                        {/* Titular */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{zinliHolder}</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(zinliHolder, 'zinli_titular')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'zinli_titular' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zinli_titular' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
 
-                          {/* Monto USDT */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-amber-400 font-bold block uppercase">Monto Total USDT</span>
-                              <span className="font-mono font-black text-amber-400 text-sm truncate">{total.toFixed(2)} USDT</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText(total.toFixed(2), 'binance_monto')}
-                              className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 active:scale-95 text-[10px] text-amber-300 rounded-lg flex items-center gap-1 transition font-bold border border-amber-700/50"
-                            >
-                              {copiedKey === 'binance_monto' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'binance_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                            </button>
+                        {/* Monto USD */}
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-indigo-400 font-bold block uppercase">Monto Total USD</span>
+                            <span className="font-mono font-black text-indigo-400 text-sm truncate">${total.toFixed(2)} USD</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(total.toFixed(2), 'zinli_monto')}
+                            className="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold border border-indigo-700/50"
+                          >
+                            {copiedKey === 'zinli_monto' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'zinli_monto' ? 'Copiado' : 'Copiar Monto'}</span>
+                          </button>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {paymentMethodKey === 'zinli' && (
-                      <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                        <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
-                            Datos para Pago Zinli
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                  {paymentMethodKey === 'banesco_panama' && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
+                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
+                          Banesco Panamá (Transferencia USD)
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {/* Banco */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Banco</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">Banesco Panamá</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText('Banesco Panamá', 'bp_banco')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'bp_banco' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'bp_banco' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
                         </div>
-                        <div className="space-y-1 text-xs">
-                          {/* Correo Zinli */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Correo Zinli</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">pagos@donluigi.com</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('pagos@donluigi.com', 'zinli_email')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'zinli_email' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zinli_email' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
 
-                          {/* Titular */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Don Luigi C.A.</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('Don Luigi C.A.', 'zinli_titular')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'zinli_titular' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zinli_titular' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
+                        {/* Cuenta */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">N° Cuenta Corriente</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{banescoAcc}</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(banescoAcc.replace(/[-.\s]/g, ''), 'bp_cuenta')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-blue-400 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'bp_cuenta' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'bp_cuenta' ? 'Copiado' : 'Copiar N°'}</span>
+                          </button>
+                        </div>
 
-                          {/* Monto USD */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-indigo-400 font-bold block uppercase">Monto Total USD</span>
-                              <span className="font-mono font-black text-indigo-400 text-sm truncate">${total.toFixed(2)} USD</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText(total.toFixed(2), 'zinli_monto')}
-                              className="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold border border-indigo-700/50"
-                            >
-                              {copiedKey === 'zinli_monto' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'zinli_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                            </button>
+                        {/* Titular */}
+                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
+                            <span className="font-mono font-bold text-white text-xs truncate">{banescoHolder}</span>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(banescoHolder, 'bp_titular')}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
+                          >
+                            {copiedKey === 'bp_titular' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'bp_titular' ? 'Copiado' : 'Copiar'}</span>
+                          </button>
+                        </div>
+
+                        {/* Monto USD */}
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-blue-400 font-bold block uppercase">Monto Total USD</span>
+                            <span className="font-mono font-black text-blue-400 text-sm truncate">${total.toFixed(2)} USD</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(total.toFixed(2), 'bp_monto')}
+                            className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 active:scale-95 text-[10px] text-blue-300 rounded-lg flex items-center gap-1 transition font-bold border border-blue-700/50"
+                          >
+                            {copiedKey === 'bp_monto' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedKey === 'bp_monto' ? 'Copiado' : 'Copiar Monto'}</span>
+                          </button>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {paymentMethodKey === 'banesco_panama' && (
-                      <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                        <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-                            Banesco Panamá (Transferencia USD)
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
-                        </div>
-                        <div className="space-y-1 text-xs">
-                          {/* Banco */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Banco</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Banesco Panamá</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('Banesco Panamá', 'bp_banco')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'bp_banco' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'bp_banco' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
-
-                          {/* Cuenta */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">N° Cuenta Corriente</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">102938475610</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('102938475610', 'bp_cuenta')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-blue-400 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'bp_cuenta' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'bp_cuenta' ? 'Copiado' : 'Copiar N°'}</span>
-                            </button>
-                          </div>
-
-                          {/* Titular */}
-                          <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                              <span className="font-mono font-bold text-white text-xs truncate">Don Luigi Corp</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText('Don Luigi Corp', 'bp_titular')}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                            >
-                              {copiedKey === 'bp_titular' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'bp_titular' ? 'Copiado' : 'Copiar'}</span>
-                            </button>
-                          </div>
-
-                          {/* Monto USD */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-blue-400 font-bold block uppercase">Monto Total USD</span>
-                              <span className="font-mono font-black text-blue-400 text-sm truncate">${total.toFixed(2)} USD</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText(total.toFixed(2), 'bp_monto')}
-                              className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 active:scale-95 text-[10px] text-blue-300 rounded-lg flex items-center gap-1 transition font-bold border border-blue-700/50"
-                            >
-                              {copiedKey === 'bp_monto' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'bp_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                            </button>
-                          </div>
-                        </div>
+                  {paymentMethodKey === 'cash' && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 space-y-1 text-xs text-emerald-950 shadow-xs">
+                      <div className="flex items-center gap-2 font-bold text-emerald-900">
+                        <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span>Pago en Efectivo (Dólares o Bolívares)</span>
                       </div>
-                    )}
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        Ten a mano los billetes exactos (sin roturas ni tachaduras). Por políticas de seguridad, por favor envía una foto clara de los billetes por WhatsApp al finalizar el pedido.
+                      </p>
+                    </div>
+                  )}
 
-                    {paymentMethodKey === 'cash' && (
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 space-y-1 text-xs text-emerald-950 shadow-xs">
-                        <div className="flex items-center gap-2 font-bold text-emerald-900">
-                          <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                          <span>Pago en Efectivo (Dólares o Bolívares)</span>
-                        </div>
-                        <p className="text-slate-600 text-[11px] leading-relaxed">
-                          Ten a mano los billetes exactos (sin roturas ni tachaduras). Por políticas de seguridad, por favor envía una foto clara de los billetes por WhatsApp al finalizar el pedido.
-                        </p>
+                  {paymentMethodKey === 'pos' && (
+                    <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3.5 space-y-1 text-xs text-slate-800 shadow-xs">
+                      <div className="flex items-center gap-2 font-bold text-slate-900">
+                        <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                        <span>Punto de Venta / Tarjeta en Tienda</span>
                       </div>
-                    )}
-
-                    {paymentMethodKey === 'pos' && (
-                      <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3.5 space-y-1 text-xs text-slate-800 shadow-xs">
-                        <div className="flex items-center gap-2 font-bold text-slate-900">
-                          <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />
-                          <span>Punto de Venta / Tarjeta en Tienda</span>
-                        </div>
-                        <p className="text-slate-600 text-[11px] leading-relaxed">
-                          Puedes cancelar con tu tarjeta de débito o crédito directamente en caja al momento de retirar tu orden en nuestro establecimiento.
-                        </p>
-                      </div>
-                    )}
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        Puedes cancelar con tu tarjeta de débito o crédito directamente en caja al momento de retirar tu orden en nuestro establecimiento.
+                      </p>
+                    </div>
+                  )}
 
                     {/* Verification Input Fields for Digital Payments */}
                     {paymentMethodKey === 'pago_movil' && (
@@ -1314,14 +1330,13 @@ export function CartDrawer({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Notas Adicionales</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Instrucciones especiales para la entrega o preparación..."
-                      value={customer.notes}
-                      onChange={(e) => setCustomer({ ...customer, notes: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="Instrucciones especiales para la entrega o preparación..."
+                    value={customer.notes}
+                    onChange={(e) => setCustomer((prev) => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs font-medium"
+                  />
                 </div>
               </form>
             </>
