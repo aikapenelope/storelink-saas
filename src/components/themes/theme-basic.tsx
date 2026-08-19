@@ -52,7 +52,7 @@ export function ThemeBasicBanner({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-48 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-36 font-sans w-full max-w-full overflow-x-hidden">
       {/* 0. Live Binance Exchange Rate Top Strip */}
       {showVES && (
         <div className="bg-slate-950 text-slate-200 text-xs py-1.5 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
@@ -272,22 +272,22 @@ export function ThemeBasicBanner({
 
       {/* Floating Bottom Cart Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:bg-slate-800 active:scale-[0.99] transition"
+            className="w-full bg-slate-900 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:bg-slate-800 active:scale-[0.99] transition"
           >
-            <div className="flex items-center gap-3">
-              <span className="bg-emerald-500 text-slate-950 text-xs px-2.5 py-1 rounded-full font-black">
-                {cartCount} {cartCount === 1 ? 'ítem' : 'ítems'}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="bg-emerald-500 text-slate-950 text-xs px-2.5 py-1 rounded-full font-black flex-shrink-0">
+                {cartCount}
               </span>
-              <span className="font-bold text-sm">Enviar Pedido por WhatsApp</span>
+              <span className="font-bold text-xs sm:text-sm truncate">Enviar Pedido WhatsApp</span>
             </div>
-            <div className="text-right">
-              <span className="text-base font-black text-emerald-400 block font-mono">${cartAmount.toFixed(2)}</span>
+            <div className="text-right flex-shrink-0 ml-2">
+              <span className="text-sm sm:text-base font-black text-emerald-400 block font-mono">${cartAmount.toFixed(2)}</span>
               {showVES && (
-                <span className="text-[10px] text-slate-300 font-mono">
-                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                <span className="text-[9px] sm:text-[10px] text-slate-300 font-mono block">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
             </div>

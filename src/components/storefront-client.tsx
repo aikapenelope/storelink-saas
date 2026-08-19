@@ -302,7 +302,7 @@ const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categor
         category: { id: 'c2', name: 'Frenos & Discos' },
         stockStatus: 'in_stock',
         featured: true,
-        images: [{ url: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=600&q=80' }],
+        images: [{ url: 'https://images.unsplash.com/photo-1609630875171-b1321377ee65?auto=format&fit=crop&w=600&q=80' }],
       },
       {
         id: 'm3',
@@ -544,7 +544,7 @@ export function StorefrontClient({
   };
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden">
       {/* Render Active Theme View */}
       {activeTheme === 'basic-banner' && <ThemeBasicBanner {...themeProps} />}
       {activeTheme === 'fashion-boutique' && <ThemeFashionBoutique {...themeProps} />}

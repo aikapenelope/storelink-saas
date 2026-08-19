@@ -53,7 +53,7 @@ export function ThemeMotoParts({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-48 font-sans">
+    <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-36 font-sans w-full max-w-full overflow-x-hidden">
       {/* 1. Pro Automotive Status Bar */}
       <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-3 tracking-wide shadow-md">
         <div className="flex items-center gap-1.5">
@@ -70,19 +70,19 @@ export function ThemeMotoParts({
 
       {/* 2. Moto Pro Header */}
       <header className="sticky top-0 z-40 bg-[#0e1217]/90 backdrop-blur-xl border-b border-neutral-800 shadow-2xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition">
-              <Gauge className="w-7 h-7" />
+        <div className="max-w-6xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-lg sm:text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition flex-shrink-0">
+              <Gauge className="w-5 h-5 sm:w-7 sm:h-7" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
-                  ORIGINAL OEM
+                <h1 className="font-black text-base sm:text-xl tracking-tight text-white truncate">{tenant.name}</h1>
+                <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30 flex-shrink-0">
+                  OEM
                 </span>
               </div>
-              <p className="text-xs text-neutral-400 font-mono hidden sm:flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-neutral-400 font-mono hidden md:flex items-center gap-2 mt-0.5">
                 <span className="text-emerald-400 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
                 </span>
@@ -94,10 +94,10 @@ export function ThemeMotoParts({
 
           <button
             onClick={onOpenCart}
-            className="h-12 px-5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-black font-black text-xs rounded-2xl transition flex items-center gap-2.5 shadow-xl shadow-amber-400/20 active:scale-95 uppercase tracking-wider"
+            className="h-10 sm:h-12 px-3 sm:px-5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-black font-black text-xs rounded-2xl transition flex items-center gap-2 shadow-xl shadow-amber-400/20 active:scale-95 uppercase tracking-wider flex-shrink-0"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Mi Pedido ({cartCount})</span>
+            <span className="hidden sm:inline">Mi Pedido</span>
             <span className="bg-black text-amber-400 text-xs font-mono px-2 py-0.5 rounded-lg font-black">
               ${cartAmount.toFixed(2)}
             </span>
@@ -107,7 +107,7 @@ export function ThemeMotoParts({
 
       {/* 3. Interactive Bike Brand Selector Strip */}
       <section className="max-w-6xl mx-auto px-4 pt-6">
-        <div className="bg-[#141922] border border-neutral-800 rounded-3xl p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-[#141922] border border-neutral-800 rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 w-full min-w-0 max-w-full overflow-hidden">
           <div className="flex items-center gap-3 text-neutral-300">
             <Wrench className="w-5 h-5 text-amber-400" />
             <div>
@@ -117,52 +117,56 @@ export function ThemeMotoParts({
           </div>
 
           {/* Bike Brands */}
-          <div className="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto">
-            {['TODAS', 'BERA', 'EMPIRE', 'YAMAHA', 'HONDA', 'SUZUKI'].map((brand) => (
-              <button
-                key={brand}
-                onClick={() => setSelectedBikeBrand(brand)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-black uppercase transition whitespace-nowrap ${
-                  selectedBikeBrand === brand
-                    ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
-                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                {brand}
-              </button>
-            ))}
+          <div className="w-full md:w-auto min-w-0 max-w-full overflow-x-auto no-scrollbar py-1">
+            <div className="flex gap-2 flex-nowrap">
+              {['TODAS', 'BERA', 'EMPIRE', 'YAMAHA', 'HONDA', 'SUZUKI'].map((brand) => (
+                <button
+                  key={brand}
+                  onClick={() => setSelectedBikeBrand(brand)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-black uppercase transition whitespace-nowrap flex-shrink-0 ${
+                    selectedBikeBrand === brand
+                      ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
+                      : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  {brand}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* 4. Search & Category Filter */}
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
+      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6 w-full min-w-0 max-w-full overflow-hidden">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 w-full min-w-0 max-w-full overflow-hidden">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
             <input
               type="text"
-              placeholder="Buscar por código de pieza, modelo (ej: CG150, DT, SBR, Keeway)..."
+              placeholder="Buscar por pieza, modelo (CG150, DT, SBR, Keeway)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-[#141922] border border-neutral-800 rounded-2xl text-xs sm:text-sm placeholder:text-neutral-500 text-white focus:outline-none focus:border-amber-400 font-mono shadow-inner"
+              className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-[#141922] border border-neutral-800 rounded-2xl text-xs sm:text-sm placeholder:text-neutral-500 text-white focus:outline-none focus:border-amber-400 font-mono shadow-inner"
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-mono uppercase tracking-wider font-bold transition whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
-                    : 'bg-[#141922] text-neutral-400 border border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          <div className="w-full md:w-auto min-w-0 max-w-full overflow-x-auto no-scrollbar py-1">
+            <div className="flex gap-2 flex-nowrap">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 sm:px-4 py-2 rounded-2xl text-xs font-mono uppercase tracking-wider font-bold transition whitespace-nowrap flex-shrink-0 ${
+                    selectedCategory === cat
+                      ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
+                      : 'bg-[#141922] text-neutral-400 border border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -299,25 +303,25 @@ export function ThemeMotoParts({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 text-black p-4 rounded-3xl shadow-2xl flex items-center justify-between hover:shadow-amber-400/20 active:scale-[0.99] transition font-mono font-black"
+            className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 text-black p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:shadow-amber-400/20 active:scale-[0.99] transition font-mono font-black"
           >
-            <div className="flex items-center gap-3">
-              <span className="bg-black text-amber-400 text-xs px-3 py-1 rounded-full font-black">
-                {cartCount} piezas
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="bg-black text-amber-400 text-xs px-2.5 py-1 rounded-full font-black flex-shrink-0">
+                {cartCount}
               </span>
-              <span className="text-xs uppercase tracking-wider">Enviar Orden al Mostrador</span>
+              <span className="text-xs uppercase tracking-wider truncate">Enviar al Mostrador</span>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0 ml-2">
               <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-lg font-black">${cartAmount.toFixed(2)}</span>
-                <ChevronRight className="w-5 h-5 text-black" />
+                <span className="text-sm sm:text-base font-black">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-4 h-4 text-black" />
               </div>
               {showVES && (
-                <span className="text-[10px] text-neutral-900 block font-black">
-                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                <span className="text-[9px] sm:text-[10px] text-neutral-900 block font-black">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
             </div>

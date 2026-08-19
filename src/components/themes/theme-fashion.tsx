@@ -53,9 +53,9 @@ export function ThemeFashionBoutique({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-48 font-sans">
+    <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-36 font-sans w-full max-w-full overflow-x-hidden">
       {/* 1. Haute Couture Top Banner */}
-      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.2em] py-2 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-[#2d2825]">
+      <div className="bg-[#1e1b18] text-[#e8ded5] text-[10px] sm:text-[11px] uppercase tracking-[0.2em] py-2 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-[#2d2825]">
         <span>Colección Textil & Sastrería 2026</span>
         {showVES && (
           <span className="flex items-center gap-1.5 text-amber-400 font-mono bg-white/10 px-2.5 py-0.5 rounded-full text-[10px]">
@@ -67,13 +67,13 @@ export function ThemeFashionBoutique({
 
       {/* 2. Editorial Header */}
       <header className="sticky top-0 z-40 bg-[#fbf9f6]/95 backdrop-blur-md border-b border-[#ece5dd]">
-        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-6">
+          <div className="flex items-center gap-4 sm:gap-6 min-w-0 flex-1">
+            <div className="min-w-0">
               <span className="text-[9px] tracking-[0.3em] text-[#8c827a] uppercase block">
                 Atelier & Studio
               </span>
-              <h1 className="font-serif text-2xl tracking-tight text-[#1c1815] font-normal">
+              <h1 className="font-serif text-lg sm:text-2xl tracking-tight text-[#1c1815] font-normal truncate">
                 {tenant.name}
               </h1>
             </div>
@@ -101,18 +101,14 @@ export function ThemeFashionBoutique({
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <button
               onClick={onOpenCart}
-              className="relative px-6 py-2.5 rounded-full bg-[#1e1b18] text-white text-[11px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-all flex items-center gap-2.5 shadow-md active:scale-95"
+              className="relative px-4 sm:px-6 py-2 sm:py-2.5 rounded-full bg-[#1e1b18] text-white text-[11px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-all flex items-center gap-2 shadow-md active:scale-95 flex-shrink-0"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Bolsa ({cartCount})</span>
-              {cartCount > 0 && (
-                <span className="bg-[#e8ded5] text-[#1e1b18] text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                  ${cartAmount.toFixed(2)}
-                </span>
-              )}
+              <span className="hidden sm:inline">Bolsa</span>
+              <span>({cartCount})</span>
             </button>
           </div>
         </div>
@@ -273,22 +269,22 @@ export function ThemeFashionBoutique({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-md mx-auto px-6 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-[#1e1b18] text-white p-4 rounded-full shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition uppercase tracking-[0.2em] text-xs font-medium border border-[#3e3833]"
+            className="w-full bg-[#1e1b18] text-white p-3.5 sm:p-4 rounded-full shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition uppercase tracking-[0.2em] text-xs font-medium border border-[#3e3833]"
           >
-            <div className="flex items-center gap-3">
-              <span className="bg-[#e8ded5] text-[#1e1b18] text-[10px] font-black px-2.5 py-0.5 rounded-full">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="bg-[#e8ded5] text-[#1e1b18] text-[10px] font-black px-2.5 py-0.5 rounded-full flex-shrink-0">
                 {cartCount}
               </span>
-              <span>Procesar Bolsa</span>
+              <span className="text-xs truncate">Procesar Bolsa</span>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0 ml-2">
               <span className="font-bold text-sm tracking-normal block">${cartAmount.toFixed(2)}</span>
               {showVES && (
-                <span className="text-[9px] text-[#dfd5cb] tracking-normal font-sans font-medium">
-                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                <span className="text-[9px] text-[#dfd5cb] tracking-normal font-sans font-medium block">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
             </div>

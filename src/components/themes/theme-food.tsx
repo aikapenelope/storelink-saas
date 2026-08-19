@@ -52,7 +52,7 @@ export function ThemeFoodDelivery({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#fcfbfa] text-slate-900 pb-48 font-sans">
+    <div className="min-h-screen bg-[#fcfbfa] text-slate-900 pb-36 font-sans w-full max-w-full overflow-x-hidden">
       {/* 0. Live Binance Exchange Rate Top Strip */}
       {showVES && (
         <div className="bg-slate-950 text-slate-200 text-xs py-1.5 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
@@ -73,26 +73,26 @@ export function ThemeFoodDelivery({
 
       {/* 2. Glassmorphic App Bar */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-orange-100 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-orange-500/30 transform hover:rotate-3 transition">
+        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-orange-500/30 transform hover:rotate-3 transition flex-shrink-0">
               🍔
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black tracking-tight text-slate-900">
+                <h1 className="text-base sm:text-xl font-black tracking-tight text-slate-900 truncate">
                   {tenant.name}
                 </h1>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                <span className="bg-emerald-100 text-emerald-800 text-[9px] sm:text-[10px] font-black px-2 sm:px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200 flex-shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> ABIERTO
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 font-semibold mt-0.5">
-                <span className="flex items-center gap-1 text-amber-600">
-                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9 (140+ reseñas)
+              <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 font-semibold mt-0.5">
+                <span className="flex items-center gap-1 text-amber-600 text-[11px] sm:text-xs">
+                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9 (140+)
                 </span>
                 <span>•</span>
-                <span className="flex items-center gap-1 text-slate-600">
+                <span className="flex items-center gap-1 text-slate-600 text-[11px] sm:text-xs">
                   <Clock className="w-3.5 h-3.5 text-orange-500" /> 20-30 min
                 </span>
               </div>
@@ -101,7 +101,7 @@ export function ThemeFoodDelivery({
 
           <button
             onClick={onOpenCart}
-            className="relative px-5 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl transition-all flex items-center gap-2.5 font-black text-xs shadow-lg shadow-orange-500/25 active:scale-95"
+            className="relative px-3.5 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl transition-all flex items-center gap-2 font-black text-xs shadow-lg shadow-orange-500/25 active:scale-95 flex-shrink-0"
           >
             <ShoppingBag className="w-4 h-4" />
             <span className="hidden sm:inline uppercase tracking-wider">Ver Bandeja</span>
@@ -319,28 +319,28 @@ export function ThemeFoodDelivery({
 
       {/* 6. Premium Floating WhatsApp Checkout Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-orange-500/30 hover:shadow-orange-500/20 active:scale-[0.99] transition group"
+            className="w-full bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-orange-500/30 hover:shadow-orange-500/20 active:scale-[0.99] transition group"
           >
-            <div className="flex items-center gap-3">
-              <span className="bg-orange-500 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-sm">
-                {cartCount} {cartCount === 1 ? 'platillo' : 'platillos'}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="bg-orange-500 text-white text-xs font-black px-2.5 py-1 rounded-full shadow-sm flex-shrink-0">
+                {cartCount}
               </span>
-              <div className="text-left">
-                <span className="font-black text-sm block">Completar Pedido</span>
-                <span className="text-[10px] text-orange-300">Directo al WhatsApp del restaurante</span>
+              <div className="text-left min-w-0">
+                <span className="font-black text-xs sm:text-sm block truncate">Completar Pedido</span>
+                <span className="text-[9px] sm:text-[10px] text-orange-300 truncate block">Al WhatsApp del restaurante</span>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0 ml-2">
               <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-lg font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
-                <ChevronRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition" />
+                <span className="text-sm sm:text-lg font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-4 h-4 text-orange-400 group-hover:translate-x-1 transition" />
               </div>
               {showVES && (
-                <span className="text-[10px] text-orange-200 block font-mono">
-                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                <span className="text-[9px] sm:text-[10px] text-orange-200 block font-mono">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
             </div>

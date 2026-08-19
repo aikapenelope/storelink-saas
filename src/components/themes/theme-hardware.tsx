@@ -52,7 +52,7 @@ export function ThemeHardwareStore({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-48 font-sans">
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-36 font-sans w-full max-w-full overflow-x-hidden">
       {/* 1. Contractor & Wholesale Top Strip */}
       <div className="bg-slate-950 text-slate-200 text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-3 border-b border-slate-800">
         <div className="flex items-center gap-1.5">
@@ -69,19 +69,19 @@ export function ThemeHardwareStore({
 
       {/* 2. Ferretería Header */}
       <header className="sticky top-0 z-40 bg-blue-950 text-white shadow-xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition">
-              <Hammer className="w-6 h-6" />
+        <div className="max-w-6xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg sm:text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition flex-shrink-0">
+              <Hammer className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600">
-                  SUMINISTROS PRO
+                <h1 className="font-black text-base sm:text-xl tracking-tight text-white truncate">{tenant.name}</h1>
+                <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600 flex-shrink-0">
+                  PRO
                 </span>
               </div>
-              <p className="text-xs text-blue-200 hidden sm:flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-blue-200 hidden md:flex items-center gap-2 mt-0.5">
                 <span className="flex items-center gap-1 text-emerald-400">
                   <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
                 </span>
@@ -93,10 +93,10 @@ export function ThemeHardwareStore({
 
           <button
             onClick={onOpenCart}
-            className="h-12 px-5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-2xl transition flex items-center gap-2.5 shadow-lg active:scale-95 uppercase tracking-wider"
+            className="h-10 sm:h-12 px-3 sm:px-5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-2xl transition flex items-center gap-2 shadow-lg active:scale-95 uppercase tracking-wider flex-shrink-0"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Cotizar ({cartCount})</span>
+            <span className="hidden sm:inline">Cotizar</span>
             <span className="bg-slate-950 text-amber-400 text-xs px-2 py-0.5 rounded-lg font-mono font-black">
               ${cartAmount.toFixed(2)}
             </span>
@@ -106,31 +106,31 @@ export function ThemeHardwareStore({
 
       {/* 3. Contractor Volume Promo Strip */}
       <section className="max-w-6xl mx-auto px-4 pt-6">
-        <div className="bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-3xl p-6 shadow-xl border border-blue-800 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-blue-800 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="space-y-1 text-center md:text-left">
             <span className="bg-amber-500 text-slate-950 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md inline-block">
               Precios Especiales a Contratistas
             </span>
-            <h2 className="text-xl sm:text-2xl font-black">Descuentos por Volumen a partir de 6 Unidades</h2>
+            <h2 className="text-lg sm:text-2xl font-black">Descuentos por Volumen a partir de 6 Unidades</h2>
             <p className="text-xs text-blue-200">Agrega tus herramientas a la lista y envía la cotización al WhatsApp de ventas.</p>
           </div>
           <div className="flex gap-2">
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 text-center border border-white/15">
-              <span className="block text-lg font-black text-amber-400">-15%</span>
-              <span className="text-[10px] text-blue-200 font-bold uppercase">Mayorista</span>
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 text-center border border-white/15">
+              <span className="block text-base sm:text-lg font-black text-amber-400">-15%</span>
+              <span className="text-[9px] sm:text-[10px] text-blue-200 font-bold uppercase">Mayorista</span>
             </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 text-center border border-white/15">
-              <span className="block text-lg font-black text-emerald-400">100%</span>
-              <span className="text-[10px] text-blue-200 font-bold uppercase">Garantía</span>
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 text-center border border-white/15">
+              <span className="block text-base sm:text-lg font-black text-emerald-400">100%</span>
+              <span className="text-[9px] sm:text-[10px] text-blue-200 font-bold uppercase">Garantía</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. Search & Category Filter */}
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
+      {/* 4. Search & Category Filter (Contained for PWA) */}
+      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6 w-full min-w-0 max-w-full overflow-hidden">
+        <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 w-full min-w-0 max-w-full overflow-hidden">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -141,20 +141,22 @@ export function ThemeHardwareStore({
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-2xl text-xs font-black transition whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'bg-blue-950 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          <div className="w-full md:w-auto min-w-0 max-w-full overflow-x-auto no-scrollbar py-1">
+            <div className="flex items-center gap-2 flex-nowrap">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-black transition whitespace-nowrap flex-shrink-0 ${
+                    selectedCategory === cat
+                      ? 'bg-blue-950 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -286,25 +288,25 @@ export function ThemeHardwareStore({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
-            className="w-full bg-blue-950 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition font-bold border border-blue-800"
+            className="w-full bg-blue-950 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition font-bold border border-blue-800"
           >
-            <div className="flex items-center gap-3">
-              <span className="bg-amber-500 text-slate-950 text-xs px-3 py-1 rounded-full font-black">
-                {cartCount} {cartCount === 1 ? 'artículo' : 'artículos'}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="bg-amber-500 text-slate-950 text-xs px-2.5 py-1 rounded-full font-black flex-shrink-0">
+                {cartCount}
               </span>
-              <span className="text-sm">Solicitar Cotización por WhatsApp</span>
+              <span className="text-xs sm:text-sm truncate">Solicitar Cotización</span>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0 ml-2">
               <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-base font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
-                <ChevronRight className="w-5 h-5 text-amber-400" />
+                <span className="text-sm sm:text-base font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-4 h-4 text-amber-400" />
               </div>
               {showVES && (
-                <span className="text-[10px] text-blue-200 block font-mono font-bold">
-                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                <span className="text-[9px] sm:text-[10px] text-blue-200 block font-mono font-bold">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               )}
             </div>
