@@ -1,8 +1,26 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, Info } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Minus, Info, Check, Sparkles } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
+
+export interface ProductVariant {
+  name: string;
+  sku?: string;
+  price: number;
+  stockStatus: 'in_stock' | 'out_of_stock';
+}
+
+export interface ProductModifierOption {
+  name: string;
+  priceDelta?: number;
+}
+
+export interface ProductModifierGroup {
+  groupName: string;
+  required?: boolean;
+  options: ProductModifierOption[];
+}
 
 export interface ProductItem {
   id: string;
@@ -15,8 +33,12 @@ export interface ProductItem {
     name: string;
   };
   stockStatus: 'in_stock' | 'out_of_stock';
+  trackStock?: boolean;
+  stockQuantity?: number;
   featured?: boolean;
   images?: Array<{ url: string }>;
+  variants?: ProductVariant[];
+  modifiers?: ProductModifierGroup[];
 }
 
 export interface TenantConfig {
@@ -51,6 +73,25 @@ export function StorefrontClient({
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
 
+  // Modal variant & modifier selection state
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<Record<string, ProductModifierOption>>({});
+
+  const handleOpenProductModal = (product: ProductItem) => {
+    setSelectedProduct(product);
+    setSelectedVariant(product.variants && product.variants.length > 0 ? product.variants[0] : null);
+    setSelectedModifiers({});
+  };
+
+  const currentModalPrice = useMemo(() => {
+    if (!selectedProduct) return 0;
+    let base = selectedVariant ? selectedVariant.price : selectedProduct.price;
+    Object.values(selectedModifiers).forEach((mod) => {
+      if (mod.priceDelta) base += mod.priceDelta;
+    });
+    return base;
+  }, [selectedProduct, selectedVariant, selectedModifiers]);
+
   const handleAddToCart = (product: ProductItem, quantity: number) => {
     setCart((prev) => {
       if (quantity <= 0) {
@@ -68,6 +109,32 @@ export function StorefrontClient({
         },
       ];
     });
+  };
+
+  const handleAddCustomizedToCart = () => {
+    if (!selectedProduct) return;
+
+    const modLabels = Object.values(selectedModifiers).map((m) => m.name);
+    const variantLabel = selectedVariant ? selectedVariant.name : '';
+    const customizations = [variantLabel, ...modLabels].filter(Boolean).join(', ');
+
+    const finalTitle = customizations
+      ? `${selectedProduct.title} (${customizations})`
+      : selectedProduct.title;
+
+    const finalSku = selectedVariant?.sku || selectedProduct.sku;
+    const finalId = `${selectedProduct.id}-${customizations.replace(/\s+/g, '-').toLowerCase() || 'base'}`;
+
+    const customizedItem: ProductItem = {
+      ...selectedProduct,
+      id: finalId,
+      sku: finalSku,
+      title: finalTitle,
+      price: currentModalPrice,
+    };
+
+    handleAddToCart(customizedItem, 1);
+    setSelectedProduct(null);
   };
 
   const handleUpdateQuantity = (productId: string, quantity: number) => {
@@ -98,7 +165,7 @@ export function StorefrontClient({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-28">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm">
+      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5">
@@ -166,6 +233,7 @@ export function StorefrontClient({
               const inCart = cart.find((item) => item.id === product.id);
               const qty = inCart ? inCart.quantity : 0;
               const isOutOfStock = product.stockStatus === 'out_of_stock';
+              const hasOptions = (product.variants && product.variants.length > 0) || (product.modifiers && product.modifiers.length > 0);
               const imageUrl =
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
@@ -177,7 +245,7 @@ export function StorefrontClient({
                 >
                   {/* Product Image */}
                   <div
-                    onClick={() => setSelectedProduct(product)}
+                    onClick={() => handleOpenProductModal(product)}
                     className="relative w-24 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
                   >
                     <img
@@ -197,13 +265,13 @@ export function StorefrontClient({
                         {product.sku}
                       </span>
                       {product.featured && (
-                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                          Destacado
+                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                          <Sparkles className="w-2.5 h-2.5" /> Destacado
                         </span>
                       )}
                     </div>
                     <h2
-                      onClick={() => setSelectedProduct(product)}
+                      onClick={() => handleOpenProductModal(product)}
                       className="font-bold text-slate-800 text-sm leading-tight truncate cursor-pointer hover:text-emerald-600 transition"
                     >
                       {product.title}
@@ -213,6 +281,7 @@ export function StorefrontClient({
                     </p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-emerald-700 font-extrabold text-base">
+                        {hasOptions && <span className="text-xs font-normal text-slate-500 mr-1">Desde</span>}
                         ${product.price.toFixed(2)}
                       </span>
 
@@ -221,6 +290,13 @@ export function StorefrontClient({
                         <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 px-2 py-1 rounded-md">
                           Agotado
                         </span>
+                      ) : hasOptions ? (
+                        <button
+                          onClick={() => handleOpenProductModal(product)}
+                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition"
+                        >
+                          Opciones
+                        </button>
                       ) : qty > 0 ? (
                         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-1.5 py-1">
                           <button
@@ -276,17 +352,18 @@ export function StorefrontClient({
         </div>
       )}
 
-      {/* Product Detail Modal */}
+      {/* Interactive Product Customizer Modal */}
       {selectedProduct && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setSelectedProduct(null)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full overflow-hidden shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+            className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-6 duration-200 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative h-64 bg-slate-100">
+            {/* Image Banner */}
+            <div className="relative h-56 bg-slate-100 flex-shrink-0">
               <img
                 src={
                   selectedProduct.images?.[0]?.url ||
@@ -302,28 +379,120 @@ export function StorefrontClient({
                 ✕
               </button>
             </div>
-            <div className="p-5 space-y-3">
+
+            <div className="p-5 space-y-4 flex-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  SKU: {selectedProduct.sku}
+                  SKU: {selectedVariant?.sku || selectedProduct.sku}
                 </span>
                 <span className="text-xl font-black text-emerald-700">
-                  ${selectedProduct.price.toFixed(2)}
+                  ${currentModalPrice.toFixed(2)}
                 </span>
               </div>
-              <h3 className="text-lg font-bold text-slate-900">{selectedProduct.title}</h3>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                {selectedProduct.description || 'Sin descripción detallada.'}
-              </p>
-              <div className="pt-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{selectedProduct.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed mt-1">
+                  {selectedProduct.description || 'Sin descripción detallada.'}
+                </p>
+              </div>
+
+              {/* Variants Section */}
+              {selectedProduct.variants && selectedProduct.variants.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                    Selecciona una opción / Tamaño:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedProduct.variants.map((v) => {
+                      const isSelected = selectedVariant?.name === v.name;
+                      return (
+                        <button
+                          key={v.name}
+                          onClick={() => setSelectedVariant(v)}
+                          className={`p-2.5 rounded-xl border text-left flex justify-between items-center transition ${
+                            isSelected
+                              ? 'border-emerald-600 bg-emerald-50/50 text-emerald-950 ring-1 ring-emerald-600'
+                              : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs font-bold">{v.name}</p>
+                            <p className="text-[11px] text-slate-500">${v.price.toFixed(2)}</p>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-emerald-600" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Modifiers Section */}
+              {selectedProduct.modifiers && selectedProduct.modifiers.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  {selectedProduct.modifiers.map((group) => (
+                    <div key={group.groupName} className="space-y-2">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                        {group.groupName}:
+                      </label>
+                      <div className="space-y-1.5">
+                        {group.options.map((opt) => {
+                          const isSelected = selectedModifiers[group.groupName]?.name === opt.name;
+                          return (
+                            <button
+                              key={opt.name}
+                              onClick={() => {
+                                setSelectedModifiers((prev) => {
+                                  if (isSelected) {
+                                    const next = { ...prev };
+                                    delete next[group.groupName];
+                                    return next;
+                                  }
+                                  return { ...prev, [group.groupName]: opt };
+                                });
+                              }}
+                              className={`w-full p-2.5 rounded-xl border text-left flex justify-between items-center transition ${
+                                isSelected
+                                  ? 'border-emerald-600 bg-emerald-50/50 text-emerald-950'
+                                  : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <span className="text-xs font-medium">{opt.name}</span>
+                              <div className="flex items-center gap-2">
+                                {opt.priceDelta ? (
+                                  <span className="text-xs font-bold text-emerald-700">
+                                    +${opt.priceDelta.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400">Gratis</span>
+                                )}
+                                <div
+                                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                    isSelected
+                                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                                      : 'border-slate-300'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-3 h-3" />}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add to Cart CTA */}
+              <div className="pt-3 sticky bottom-0 bg-white">
                 <button
-                  onClick={() => {
-                    handleAddToCart(selectedProduct, 1);
-                    setSelectedProduct(null);
-                  }}
-                  className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 active:scale-95 transition"
+                  onClick={handleAddCustomizedToCart}
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2"
                 >
-                  Añadir al Carrito (${selectedProduct.price.toFixed(2)})
+                  <ShoppingBag className="w-4 h-4" />
+                  Añadir al Carrito (${currentModalPrice.toFixed(2)})
                 </button>
               </div>
             </div>

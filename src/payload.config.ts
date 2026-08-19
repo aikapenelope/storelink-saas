@@ -4,6 +4,7 @@ import { buildConfig, type Plugin } from 'payload';
 import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
+import { seoPlugin } from '@payloadcms/plugin-seo';
 import { s3Storage } from '@payloadcms/storage-s3';
 import sharp from 'sharp';
 
@@ -27,6 +28,17 @@ const plugins: Plugin[] = [
       customers: {},
     },
     userHasAccessToAllTenants: (user) => (user as any)?.role === 'super-admin',
+  }),
+  seoPlugin({
+    collections: ['products', 'tenants'],
+    uploadsCollection: 'media',
+    generateTitle: ({ doc }: any) => `${doc?.title || doc?.name || 'StoreLink'} | Tienda Online`,
+    generateDescription: ({ doc }: any) =>
+      doc?.description ||
+      doc?.branding?.welcomeMessage ||
+      'Catálogo interactivo con pedidos y facturas por WhatsApp.',
+    generateURL: ({ doc }: any) =>
+      `https://storelink-saas.vercel.app/${doc?.slug || ''}`,
   }),
 ];
 
@@ -73,6 +85,7 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI || process.env.POSTGRES_URL || '',
+      max: 2,
       ssl: {
         rejectUnauthorized: false,
       },
