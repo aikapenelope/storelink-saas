@@ -65,11 +65,40 @@ export const Customers: CollectionConfig = {
       name: 'savedAddresses',
       type: 'array',
       label: 'Direcciones Habituales de Entrega',
+      labels: {
+        singular: 'Dirección Guardada',
+        plural: 'Direcciones Guardadas',
+      },
       fields: [
+        {
+          name: 'label',
+          type: 'text',
+          label: 'Etiqueta (ej: Casa, Oficina, Trabajo)',
+        },
+        {
+          name: 'municipality',
+          type: 'text',
+          label: 'Municipio',
+        },
+        {
+          name: 'residenceZone',
+          type: 'text',
+          label: 'Urbanización / Sector',
+        },
+        {
+          name: 'buildingHouse',
+          type: 'text',
+          label: 'Edificio / Casa / Piso / Apto',
+        },
+        {
+          name: 'referencePoint',
+          type: 'text',
+          label: 'Punto de Referencia',
+        },
         {
           name: 'address',
           type: 'text',
-          label: 'Dirección',
+          label: 'Dirección Completa / Resumen',
         },
       ],
     },

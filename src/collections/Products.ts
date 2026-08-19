@@ -114,6 +114,12 @@ export const Products: CollectionConfig = {
           min: 0,
         },
         {
+          name: 'stockQuantity',
+          type: 'number',
+          label: 'Cantidad en Stock para esta Variante',
+          min: 0,
+        },
+        {
           name: 'stockStatus',
           type: 'select',
           defaultValue: 'in_stock',

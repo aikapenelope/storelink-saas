@@ -28,6 +28,13 @@ export interface Config {
   };
 }
 
+export type DeliveryZone = {
+  id?: string | null;
+  name: string;
+  priceDelivery?: number | null;
+  estimatedTime?: string | null;
+};
+
 export type Tenant = {
   id: number;
   name: string;
@@ -53,6 +60,54 @@ export type Tenant = {
     exchangeRateVES?: number | null;
     primaryColor?: string | null;
     welcomeMessage?: string | null;
+  };
+  pickupConfig?: {
+    enabled?: boolean | null;
+    locationAddress?: string | null;
+    schedule?: string | null;
+    estimatedTime?: string | null;
+    instructions?: string | null;
+  };
+  paymentMethodsConfig?: {
+    pagoMovil?: {
+      enabled?: boolean | null;
+      bank?: string | null;
+      phone?: string | null;
+      idDoc?: string | null;
+      accountHolder?: string | null;
+    };
+    zelle?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    binance?: {
+      enabled?: boolean | null;
+      payId?: string | null;
+      nickname?: string | null;
+    };
+    zinli?: {
+      enabled?: boolean | null;
+      email?: string | null;
+      accountHolder?: string | null;
+    };
+    banescoPanama?: {
+      enabled?: boolean | null;
+      accountNumber?: string | null;
+      accountHolder?: string | null;
+      accountType?: string | null;
+    };
+    cash?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+    pos?: {
+      enabled?: boolean | null;
+      instructions?: string | null;
+    };
+  };
+  deliveryConfig?: {
+    zones?: DeliveryZone[] | null;
   };
   meta?: {
     title?: string | null;
@@ -90,6 +145,7 @@ export type ProductVariant = {
   name: string;
   sku?: string | null;
   price: number;
+  stockQuantity?: number | null;
   stockStatus: 'in_stock' | 'out_of_stock';
 };
 
@@ -144,11 +200,32 @@ export type OrderItem = {
   subtotal?: number | null;
 };
 
+export type OrderDeliveryDetails = {
+  municipality?: string | null;
+  residenceZone?: string | null;
+  buildingHouse?: string | null;
+  referencePoint?: string | null;
+};
+
+export type OrderPaymentDetails = {
+  methodKey?: 'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos' | null;
+  referenceNumber?: string | null;
+  issuingBank?: string | null;
+  issuingPhone?: string | null;
+  senderName?: string | null;
+  senderEmail?: string | null;
+  binanceSenderId?: string | null;
+  paymentStatus?: 'pending_verification' | 'verified' | 'rejected' | null;
+};
+
 export type Order = {
   id: number;
   tenant?: number | Tenant | null;
   orderNumber: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  deliveryType?: 'delivery' | 'pickup' | null;
+  deliveryDetails?: OrderDeliveryDetails | null;
+  paymentDetails?: OrderPaymentDetails | null;
   customer?: {
     name: string;
     phone?: string | null;
@@ -167,7 +244,12 @@ export type Order = {
 
 export type CustomerSavedAddress = {
   id?: string | null;
-  address: string;
+  label?: string | null;
+  municipality?: string | null;
+  residenceZone?: string | null;
+  buildingHouse?: string | null;
+  referencePoint?: string | null;
+  address?: string | null;
 };
 
 export type Customer = {
@@ -176,11 +258,12 @@ export type Customer = {
   name: string;
   phone: string;
   email?: string | null;
-  tag?: 'nuevo' | 'frecuente' | 'vip' | null;
+  tag?: 'nuevo' | 'frecuente' | 'vip' | 'inactivo' | null;
   totalOrders?: number | null;
   totalSpent?: number | null;
   lastOrderAt?: string | null;
   savedAddresses?: CustomerSavedAddress[] | null;
+  notes?: string | null;
   updatedAt: string;
   createdAt: string;
 };

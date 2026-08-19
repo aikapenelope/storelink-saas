@@ -118,6 +118,68 @@ export const Orders: CollectionConfig = {
       defaultValue: 'USD',
     },
     {
+      name: 'deliveryType',
+      type: 'select',
+      label: 'Modalidad de Entrega',
+      defaultValue: 'delivery',
+      options: [
+        { label: '🛵 Envío a Domicilio (Delivery)', value: 'delivery' },
+        { label: '🛍️ Retiro en Tienda (Pickup)', value: 'pickup' },
+      ],
+    },
+    {
+      name: 'deliveryDetails',
+      type: 'group',
+      label: 'Detalles Estructurados de Entrega / Dirección',
+      admin: {
+        condition: (data) => data?.deliveryType === 'delivery',
+      },
+      fields: [
+        { name: 'municipality', type: 'text', label: 'Municipio (ej: Chacao, Baruta)' },
+        { name: 'residenceZone', type: 'text', label: 'Urbanización / Sector' },
+        { name: 'buildingHouse', type: 'text', label: 'Edificio / Casa / Apto / Piso' },
+        { name: 'referencePoint', type: 'text', label: 'Punto de Referencia' },
+      ],
+    },
+    {
+      name: 'paymentDetails',
+      type: 'group',
+      label: 'Detalles y Comprobante de Pago',
+      fields: [
+        {
+          name: 'methodKey',
+          type: 'select',
+          label: 'Método de Pago Utilizado',
+          options: [
+            { label: '🇻🇪 Pago Móvil', value: 'pago_movil' },
+            { label: '🇺🇸 Zelle', value: 'zelle' },
+            { label: '🟡 Binance Pay', value: 'binance' },
+            { label: '🟣 Zinli', value: 'zinli' },
+            { label: '🇵🇦 Banesco Panamá', value: 'banesco_panama' },
+            { label: '💵 Efectivo', value: 'cash' },
+            { label: '💳 Punto de Venta', value: 'pos' },
+          ],
+        },
+        { name: 'referenceNumber', type: 'text', label: 'Número de Referencia / Comprobante / TXID' },
+        { name: 'issuingBank', type: 'text', label: 'Banco Emisor (Pago Móvil)' },
+        { name: 'issuingPhone', type: 'text', label: 'Teléfono Emisor (Pago Móvil)' },
+        { name: 'senderName', type: 'text', label: 'Nombre del Titular Emisor' },
+        { name: 'senderEmail', type: 'email', label: 'Correo Emisor (Zelle / Zinli)' },
+        { name: 'binanceSenderId', type: 'text', label: 'Pay ID / Nickname Emisor de Binance' },
+        {
+          name: 'paymentStatus',
+          type: 'select',
+          label: 'Estado de Verificación del Pago',
+          defaultValue: 'pending_verification',
+          options: [
+            { label: '🟡 Pendiente de Verificación', value: 'pending_verification' },
+            { label: '🟢 Pago Verificado / Conciliado', value: 'verified' },
+            { label: '🔴 Pago Rechazado / Inválido', value: 'rejected' },
+          ],
+        },
+      ],
+    },
+    {
       name: 'trelloCardUrl',
       type: 'text',
       label: 'Enlace a la Tarjeta de Trello',

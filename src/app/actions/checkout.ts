@@ -15,6 +15,23 @@ export interface CheckoutCustomerData {
   address?: string;
   paymentMethod?: string;
   notes?: string;
+  deliveryType?: 'delivery' | 'pickup';
+  deliveryDetails?: {
+    municipality?: string;
+    residenceZone?: string;
+    buildingHouse?: string;
+    referencePoint?: string;
+  };
+  paymentDetails?: {
+    methodKey?: 'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos';
+    referenceNumber?: string;
+    issuingBank?: string;
+    issuingPhone?: string;
+    senderName?: string;
+    senderEmail?: string;
+    binanceSenderId?: string;
+    paymentStatus?: 'pending_verification' | 'verified' | 'rejected';
+  };
 }
 
 export interface CheckoutItemData {
@@ -103,33 +120,47 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           // If lookup fails, use client price as fallback
         }
       }
-      verifiedItems.push({ ...item, price: verifiedPrice });
+      verifiedItems.push({
+        sku: item.sku,
+        title: item.title,
+        quantity: item.quantity,
+        price: verifiedPrice,
+      });
     }
 
-    // Generate unique human-readable order number
-    const now = new Date();
-    const orderNumber = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const dateFormatted = now.toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    // Calculate total using verified prices
     const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
-    // Resolve exchange rate from tenant config, client request or live API
-    const tenantManualRate = Number(tenantDoc?.branding?.exchangeRateVES);
-    const rate = tenantManualRate > 0
-      ? tenantManualRate
-      : (Number(request.exchangeRateVES) > 0 ? Number(request.exchangeRateVES) : await getLiveExchangeRate('binance'));
-    const totalVES = total * rate;
+    // Resolve live exchange rate from tenant configuration or live Binance P2P API
+    let effectiveExchangeRate = request.exchangeRateVES || 910.0;
+    try {
+      if (tenantDoc?.branding?.exchangeRateVES && Number(tenantDoc.branding.exchangeRateVES) > 0) {
+        effectiveExchangeRate = Number(tenantDoc.branding.exchangeRateVES);
+      } else {
+        const liveRate = await getLiveExchangeRate();
+        effectiveExchangeRate = liveRate;
+      }
+    } catch {
+      // Fallback to request rate
+    }
 
-    // 1. Generate Delivery Note PDF (Uint8Array -> Base64) in-memory
+    const totalVES = total * effectiveExchangeRate;
+    const now = new Date();
+    const orderNumber = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
+      .toString()
+      .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(
+      1000 + Math.random() * 9000
+    )}`;
+
+    // 1. Generate Official Delivery Note PDF (Server-Side)
     let pdfBase64: string | undefined = undefined;
     try {
+      const dateFormatted = now.toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
       const pdfBytes = generateDeliveryNotePDF({
         storeName: storeName || 'StoreLink Shop',
         orderNumber,
@@ -142,62 +173,87 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         currency: currency || 'USD',
         total,
         totalVES,
-        exchangeRateVES: rate,
+        exchangeRateVES: effectiveExchangeRate,
         showVES: showVES ?? true,
         items: verifiedItems,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');
     } catch (pdfErr) {
-      console.error('Error generating delivery note PDF:', pdfErr);
+      console.warn('PDF generation non-blocking warning:', pdfErr);
     }
 
-    // 2. Format WhatsApp Message with Multi-Currency Breakdown
-    const targetPhone = tenantDoc?.whatsappPhone || whatsappPhone || '584121234567';
-    const cleanPhone = targetPhone.replace(/\D/g, '');
+    // 2. Build Formatted WhatsApp Order Message
+    const cleanPhone = whatsappPhone.replace(/\D/g, '');
     const itemsList = verifiedItems
       .map(
         (item) =>
-          `• [${item.sku || 'N/A'}] ${item.quantity}x ${item.title} ($${item.price.toFixed(2)} c/u) = *$${(item.quantity * item.price).toFixed(2)}*`
+          `▪️ *${item.quantity}x* ${item.title} — $${(item.price * item.quantity).toFixed(2)}`
       )
       .join('\n');
 
+    const vesLine =
+      showVES && effectiveExchangeRate
+        ? `\n🇻🇪 *Total en Bs.:* Bs. ${totalVES.toLocaleString('es-VE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} _(Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)_`
+        : '';
+
+    const notesLine = customer.notes ? `\n📝 *Notas:* ${customer.notes}` : '';
+    const emailLine = customer.email ? `\n✉️ *Email:* ${customer.email}` : '';
+    const paymentLine = customer.paymentMethod
+      ? `\n💳 *Método de Pago:* ${customer.paymentMethod}`
+      : '';
+
     const message = `
-👋 ¡Hola, *${storeName || 'Don Luigi'}*! Gracias por procesar mi pedido *#${orderNumber}*.
+🛍️ *¡NUEVO PEDIDO #${orderNumber}!*
+🏪 *Tienda:* ${storeName}
+📅 *Fecha:* ${now.toLocaleDateString('es-VE')} ${now.toLocaleTimeString('es-VE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}
 
-📸 Adjunto la foto / captura del comprobante de pago (o foto de los billetes).
-📍 Les comparto mi ubicación en tiempo real para coordinar la entrega.
+👤 *DATOS DEL CLIENTE:*
+▪️ *Nombre:* ${customer.name}
+▪️ *Teléfono:* ${customer.phone}${emailLine}
+📍 *Dirección:* ${customer.address || 'Retiro en local'}${paymentLine}${notesLine}
 
-¡Quedo a la espera de su confirmación! 🙏
+📦 *DETALLE DE PRODUCTOS:*
+${itemsList}
+
+💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency || 'USD'}*${vesLine}
+
+_Generado automáticamente desde la tienda PWA_
     `.trim();
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
-    // 3. Dispatch Order to Trello (Direct API or Autonomous PWA Relay Fallback)
+    // 3. Dispatch Order to Trello (tenant config or global env vars fallback)
     let trelloCardUrl: string | undefined = undefined;
-    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY || '';
-    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN || '';
-    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID || '6a77eee513389b2d14a8b8da';
+    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY;
+    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN;
+    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID;
 
-    try {
-      const trelloRes = await createTrelloOrderCard({
-        apiKey: effectiveTrelloKey,
-        token: effectiveTrelloToken,
-        listId: effectiveTrelloListId,
-        orderNumber,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        paymentMethod: customer.paymentMethod,
-        notes: customer.notes,
-        total,
-        totalVES,
-        exchangeRateVES: rate,
-        currency: currency || 'USD',
-        items: verifiedItems,
-      });
-      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
-    } catch (trelloErr) {
-      console.warn('Trello dispatch non-blocking error:', trelloErr);
+    if (effectiveTrelloKey && effectiveTrelloToken && effectiveTrelloListId) {
+      try {
+        const trelloRes = await createTrelloOrderCard({
+          apiKey: effectiveTrelloKey,
+          token: effectiveTrelloToken,
+          listId: effectiveTrelloListId,
+          orderNumber,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerAddress: customer.address,
+          paymentMethod: customer.paymentMethod,
+          notes: customer.notes,
+          total,
+          currency: currency || 'USD',
+          items: verifiedItems,
+        });
+        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+      } catch (trelloErr) {
+        console.warn('Trello dispatch non-blocking error:', trelloErr);
+      }
     }
 
     // 4. Save Order and Auto-Update Inventory in Payload CMS Database (Graceful Non-Blocking)
@@ -210,9 +266,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             orderNumber,
             status: 'pending',
             tenant: tenantId,
+            deliveryType: customer.deliveryType || 'delivery',
+            deliveryDetails: customer.deliveryDetails || undefined,
+            paymentDetails: customer.paymentDetails || undefined,
             customer: {
               name: customer.name,
               phone: customer.phone,
+              email: customer.email || '',
               address: customer.address || '',
               paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
               notes: customer.notes || '',
@@ -429,7 +489,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
                       <p class="total-usd">Total: $${total.toFixed(2)} USD</p>
                       ${
                         showVES
-                          ? `<p class="total-ves">Equivalente VES: Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${rate.toFixed(2)} Bs/$)</p>`
+                          ? `<p class="total-ves">Equivalente VES: Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)</p>`
                           : ''
                       }
                     </div>

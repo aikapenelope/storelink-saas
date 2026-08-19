@@ -14,6 +14,7 @@ export interface ProductVariant {
   name: string;
   sku?: string;
   price: number;
+  stockQuantity?: number;
   stockStatus: 'in_stock' | 'out_of_stock';
 }
 
@@ -64,6 +65,7 @@ interface StorefrontClientProps {
   tenant: TenantConfig;
   products: ProductItem[];
   categories: string[];
+  isDemo?: boolean;
 }
 
 // Curated Pure Industry Datasets for Live Preview
@@ -429,6 +431,7 @@ export function StorefrontClient({
   tenant,
   products,
   categories,
+  isDemo = false,
 }: StorefrontClientProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -516,15 +519,15 @@ export function StorefrontClient({
   // Active theme dataset (switches products when clicking demo verticals)
   const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['basic-banner'];
   
-  // If products are the initial demo food set OR user switches vertical in preview:
-  const isCustomDbProducts = products.length > 0 && !products.some((p) => p.sku === 'PIZ-001');
-  const activeProducts = (isCustomDbProducts && activeTheme === tenant.theme) ? products : currentVertical.items;
-  const activeCategories = (isCustomDbProducts && activeTheme === tenant.theme) ? categories : currentVertical.categories;
+  // Real database products check: strictly depends on whether real products exist from DB (isDemo is false)
+  const hasRealDbProducts = !isDemo && products.length > 0;
+  const activeProducts = (hasRealDbProducts && activeTheme === tenant.theme) ? products : currentVertical.items;
+  const activeCategories = (hasRealDbProducts && activeTheme === tenant.theme) ? categories : currentVertical.categories;
 
   const activeTenantConfig: TenantConfig = {
     ...tenant,
-    name: (isCustomDbProducts && activeTheme === tenant.theme) ? tenant.name : currentVertical.name,
-    welcomeMessage: (isCustomDbProducts && activeTheme === tenant.theme) ? tenant.welcomeMessage : currentVertical.welcome,
+    name: (hasRealDbProducts && activeTheme === tenant.theme) ? tenant.name : currentVertical.name,
+    welcomeMessage: (hasRealDbProducts && activeTheme === tenant.theme) ? tenant.welcomeMessage : currentVertical.welcome,
     exchangeRateVES: tenant.exchangeRateVES || 910.0,
     showVES: tenant.showVES ?? true,
   };

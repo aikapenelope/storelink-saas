@@ -170,6 +170,26 @@ export function CartDrawer({
           address: formattedAddress,
           paymentMethod: paymentLabel,
           notes: customer.notes,
+          deliveryType,
+          deliveryDetails:
+            deliveryType === 'delivery'
+              ? {
+                  municipality: customer.municipality,
+                  residenceZone: customer.address,
+                  buildingHouse: customer.buildingHouse,
+                  referencePoint: '',
+                }
+              : undefined,
+          paymentDetails: {
+            methodKey: paymentMethodKey,
+            referenceNumber: paymentVerification.referenceNumber,
+            issuingBank: paymentVerification.issuingBank,
+            issuingPhone: paymentVerification.issuingPhone,
+            senderName: paymentVerification.senderName,
+            senderEmail: paymentVerification.senderEmail,
+            binanceSenderId: paymentVerification.binancePayId,
+            paymentStatus: 'pending_verification',
+          },
         },
         items: items.map((i) => ({
           sku: i.sku,
