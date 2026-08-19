@@ -116,6 +116,7 @@ export async function POST(
     const skuIdx = csvHeaders.findIndex((h) => h === 'sku' || h === 'codigo');
     const titleIdx = csvHeaders.findIndex((h) => h === 'title' || h === 'nombre' || h === 'producto');
     const priceIdx = csvHeaders.findIndex((h) => h === 'price' || h === 'precio');
+    const catIdx = csvHeaders.findIndex((h) => h === 'category' || h === 'categoria' || h === 'rubro');
     const descIdx = csvHeaders.findIndex((h) => h === 'description' || h === 'descripcion');
     const stockIdx = csvHeaders.findIndex((h) => h === 'stock' || h === 'cantidad' || h === 'stock_quantity');
 
@@ -134,6 +135,9 @@ export async function POST(
     let updatedCount = 0;
     const errors: Array<{ line: number; error: string }> = [];
 
+    // Cache categories to avoid duplicate finds/creates in loop
+    const categoryCache = new Map<string, string | number>();
+
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
       const title = cols[titleIdx];
@@ -141,10 +145,45 @@ export async function POST(
       const sku = skuIdx !== -1 && cols[skuIdx] ? cols[skuIdx] : `SKU-GS-${Date.now()}-${i}`;
       const description = descIdx !== -1 ? cols[descIdx] : '';
       const stockQuantity = stockIdx !== -1 ? parseInt(cols[stockIdx], 10) || 0 : undefined;
+      const rawCategory = catIdx !== -1 && cols[catIdx] ? cols[catIdx].trim() : '';
 
       if (!title) continue;
 
       try {
+        let categoryId: string | number | undefined;
+        if (rawCategory) {
+          const catSlug = rawCategory.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          if (categoryCache.has(catSlug)) {
+            categoryId = categoryCache.get(catSlug);
+          } else {
+            const existingCat = await payload.find({
+              collection: 'categories',
+              where: {
+                and: [
+                  { tenant: { equals: tenantId } },
+                  { slug: { equals: catSlug } },
+                ],
+              },
+              limit: 1,
+            });
+            if (existingCat.docs.length > 0) {
+              categoryId = existingCat.docs[0].id;
+              categoryCache.set(catSlug, categoryId);
+            } else {
+              const newCat = await payload.create({
+                collection: 'categories',
+                data: {
+                  name: rawCategory,
+                  slug: catSlug,
+                  tenant: tenantId as any,
+                },
+              });
+              categoryId = newCat.id;
+              categoryCache.set(catSlug, categoryId);
+            }
+          }
+        }
+
         const existing = await payload.find({
           collection: 'products',
           where: {
@@ -164,6 +203,7 @@ export async function POST(
               title,
               price,
               description,
+              category: categoryId as any,
               stockQuantity,
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
@@ -178,6 +218,7 @@ export async function POST(
               sku,
               price,
               description,
+              category: categoryId as any,
               tenant: tenantId as any,
               stockQuantity,
               trackStock: stockQuantity !== undefined,

@@ -135,6 +135,8 @@ export type User = {
 export type Category = {
   id: number;
   name: string;
+  slug?: string | null;
+  order?: number | null;
   tenant?: number | Tenant | null;
   updatedAt: string;
   createdAt: string;
