@@ -33,15 +33,15 @@ export const Tenants: CollectionConfig = {
       name: 'theme',
       type: 'select',
       label: 'Diseño del Catálogo (Theme UI)',
-      defaultValue: 'fluid-pwa',
+      defaultValue: 'food-delivery',
       options: [
-        { label: '📱 Fluid Glass PWA (App Móvil / Delivery)', value: 'fluid-pwa' },
-        { label: '▲ Vercel Clean Minimal (Estilo Vercel Commerce)', value: 'vercel-commerce' },
-        { label: '✨ Editorial Boutique (Moda & Lujo)', value: 'editorial-lookbook' },
-        { label: '⚡ B2B Matrix (Mayorista & Catálogo Rápido)', value: 'b2b-matrix' },
+        { label: '🍔 Comida & Restaurantes (Delivery & Menú)', value: 'food-delivery' },
+        { label: '👗 Tienda de Ropa & Moda (Boutique Lookbook)', value: 'fashion-boutique' },
+        { label: '🏍️ Repuestos de Moto & Accesorios (Moto Pro)', value: 'moto-parts' },
+        { label: '🔧 Ferretería & Herramientas (Ferretería Industrial)', value: 'hardware-store' },
       ],
       admin: {
-        description: 'Elige el modelo visual con el que se mostrará tu tienda al público.',
+        description: 'Elige el modelo visual especializado para tu tipo de comercio.',
       },
     },
     {
@@ -100,7 +100,7 @@ export const Tenants: CollectionConfig = {
         {
           name: 'primaryColor',
           type: 'text',
-          defaultValue: '#16a34a',
+          defaultValue: '#f97316',
           label: 'Color Primario (Hexadecimal)',
         },
         {

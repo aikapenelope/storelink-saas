@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Check, Layers } from 'lucide-react';
+import { ShoppingBag, Check, Layers, Sparkles } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
-import { ThemeFluidPWA } from './themes/theme-fluid-pwa';
-import { ThemeVercelCommerce } from './themes/theme-vercel-commerce';
-import { ThemeEditorial } from './themes/theme-editorial';
-import { ThemeB2BMatrix } from './themes/theme-b2b-matrix';
+import { ThemeFoodDelivery } from './themes/theme-food';
+import { ThemeFashionBoutique } from './themes/theme-fashion';
+import { ThemeMotoParts } from './themes/theme-moto';
+import { ThemeHardwareStore } from './themes/theme-hardware';
 
 export interface ProductVariant {
   name: string;
@@ -49,7 +49,7 @@ export interface TenantConfig {
   id: string;
   name: string;
   slug: string;
-  theme?: 'fluid-pwa' | 'vercel-commerce' | 'editorial-lookbook' | 'b2b-matrix' | string;
+  theme?: 'food-delivery' | 'fashion-boutique' | 'moto-parts' | 'hardware-store' | string;
   whatsappPhone: string;
   currency?: string;
   primaryColor?: string;
@@ -67,6 +67,248 @@ interface StorefrontClientProps {
   categories: string[];
 }
 
+// Vertical Datasets for Live Theme Preview
+const VERTICAL_PRODUCTS: Record<string, { name: string; welcome: string; categories: string[]; items: ProductItem[] }> = {
+  'food-delivery': {
+    name: 'Don Luigi & Burgers',
+    welcome: 'Comida artesanal preparada al momento. Pide y recibe por WhatsApp.',
+    categories: ['Todos', 'Hamburguesas', 'Pizzas', 'Pastas', 'Bebidas', 'Postres'],
+    items: [
+      {
+        id: 'f1',
+        sku: 'BUR-001',
+        title: 'Smash Burger Doble con Cheddar',
+        price: 9.5,
+        description: 'Doble carne angus 180g, queso cheddar fundido, cebolla caramelizada y salsa especial.',
+        category: { id: 'c1', name: 'Hamburguesas' },
+        stockStatus: 'in_stock',
+        featured: true,
+        variants: [
+          { name: 'Simple (1 carne)', sku: 'BUR-001-S', price: 7.5, stockStatus: 'in_stock' },
+          { name: 'Doble (2 carnes)', sku: 'BUR-001-D', price: 9.5, stockStatus: 'in_stock' },
+          { name: 'Triple (3 carnes)', sku: 'BUR-001-T', price: 12.0, stockStatus: 'in_stock' },
+        ],
+        modifiers: [
+          {
+            groupName: 'Extras irresistibles',
+            options: [
+              { name: 'Bacon Ahumado Crujiente', priceDelta: 1.5 },
+              { name: 'Huevo a la Plancha', priceDelta: 1.0 },
+              { name: 'Papas Fritas Medianas', priceDelta: 2.5 },
+            ],
+          },
+        ],
+        images: [{ url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'f2',
+        sku: 'PIZ-001',
+        title: 'Pizza Margarita Artesanal',
+        price: 12.5,
+        description: 'Tomates San Marzano, mozzarella fresca di bufala, albahaca y aceite de oliva virgen extra.',
+        category: { id: 'c2', name: 'Pizzas' },
+        stockStatus: 'in_stock',
+        featured: true,
+        variants: [
+          { name: 'Mediana (6 porciones)', sku: 'PIZ-001-M', price: 12.5, stockStatus: 'in_stock' },
+          { name: 'Familiar (8 porciones)', sku: 'PIZ-001-L', price: 16.0, stockStatus: 'in_stock' },
+        ],
+        images: [{ url: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'f3',
+        sku: 'PAS-001',
+        title: 'Fettuccine Alfredo con Trufa',
+        price: 13.5,
+        description: 'Pasta fresca al huevo con crema de mantequilla trufada y queso parmesano.',
+        category: { id: 'c3', name: 'Pastas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'f4',
+        sku: 'BEB-001',
+        title: 'Limonada de Coco Frappé',
+        price: 4.0,
+        description: 'Limón fresco batido con leche de coco cremosa y hielo.',
+        category: { id: 'c4', name: 'Bebidas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80' }],
+      },
+    ],
+  },
+  'fashion-boutique': {
+    name: 'AURA Boutique & Studio',
+    welcome: 'Prendas exclusivas, cortes contemporáneos y tejidos sostenibles.',
+    categories: ['Todos', 'Camisetas', 'Vestidos', 'Chaquetas', 'Pantalones', 'Accesorios'],
+    items: [
+      {
+        id: 'fa1',
+        sku: 'AUR-TOP-01',
+        title: 'Camiseta Heavyweight Minimalist 260GSM',
+        price: 28.0,
+        description: 'Algodón orgánico peinado de alto gramaje con corte boxy fit.',
+        category: { id: 'c1', name: 'Camisetas' },
+        stockStatus: 'in_stock',
+        featured: true,
+        variants: [
+          { name: 'Talla S - Negro Mate', sku: 'AUR-01-S', price: 28.0, stockStatus: 'in_stock' },
+          { name: 'Talla M - Negro Mate', sku: 'AUR-01-M', price: 28.0, stockStatus: 'in_stock' },
+          { name: 'Talla L - Negro Mate', sku: 'AUR-01-L', price: 28.0, stockStatus: 'in_stock' },
+          { name: 'Talla XL - Negro Mate', sku: 'AUR-01-XL', price: 28.0, stockStatus: 'in_stock' },
+        ],
+        images: [{ url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'fa2',
+        sku: 'AUR-VES-02',
+        title: 'Vestido Midi de Lino Natural',
+        price: 65.0,
+        description: 'Lino 100% transpirable con escote cruzado y lazada en cintura.',
+        category: { id: 'c2', name: 'Vestidos' },
+        stockStatus: 'in_stock',
+        featured: true,
+        variants: [
+          { name: 'Talla S - Blanco Crudo', sku: 'AUR-V02-S', price: 65.0, stockStatus: 'in_stock' },
+          { name: 'Talla M - Blanco Crudo', sku: 'AUR-V02-M', price: 65.0, stockStatus: 'in_stock' },
+          { name: 'Talla L - Blanco Crudo', sku: 'AUR-V02-L', price: 65.0, stockStatus: 'in_stock' },
+        ],
+        images: [{ url: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'fa3',
+        sku: 'AUR-JKT-03',
+        title: 'Chaqueta Denim Vintage Washed',
+        price: 85.0,
+        description: 'Denim resistente con botones metálicos envejecidos y forro suave.',
+        category: { id: 'c3', name: 'Chaquetas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        variants: [
+          { name: 'Talla M', sku: 'AUR-J03-M', price: 85.0, stockStatus: 'in_stock' },
+          { name: 'Talla L', sku: 'AUR-J03-L', price: 85.0, stockStatus: 'in_stock' },
+        ],
+        images: [{ url: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'fa4',
+        sku: 'AUR-ACC-04',
+        title: 'Bolso Tote en Cuero Sintético Premium',
+        price: 49.0,
+        description: 'Diseño estructurado con compartimiento interno para laptop.',
+        category: { id: 'c4', name: 'Accesorios' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80' }],
+      },
+    ],
+  },
+  'moto-parts': {
+    name: 'MotoRepuestos El Piloto Pro',
+    welcome: 'Repuestos genuinos, cilindros, kits de tracción y lubricantes para motos.',
+    categories: ['Todos', 'Motor & Cilindros', 'Frenos & Discos', 'Transmisión', 'Lubricantes', 'Cascos & Seguridad'],
+    items: [
+      {
+        id: 'm1',
+        sku: 'MOT-CIL-150',
+        title: 'Kit de Cilindro y Pistón Completo 150cc',
+        price: 42.0,
+        description: 'Compatible con Empire Horse, Owen, Bera SBR y matrices CG150. Incluye aros y pasador.',
+        category: { id: 'c1', name: 'Motor & Cilindros' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'm2',
+        sku: 'MOT-FRE-CER',
+        title: 'Pastillas de Freno Cerámicas de Alto Rendimiento',
+        price: 14.5,
+        description: 'Compuesto cerámico de frenado en frío/calor sin desgaste prematuro del disco.',
+        category: { id: 'c2', name: 'Frenos & Discos' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'm3',
+        sku: 'MOT-TRX-428',
+        title: 'Cadena Reforzada O-Ring 428H-128L Dorada',
+        price: 22.0,
+        description: 'Acero templado con retenes O-Ring antiestiramiento y eslabón de unión rápido.',
+        category: { id: 'c3', name: 'Transmisión' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'm4',
+        sku: 'MOT-LUB-10W40',
+        title: 'Aceite 4T 10W-40 Full Sintético 1L',
+        price: 12.0,
+        description: 'Norma JASO MA2 / API SN para máxima protección de embrague y caja de cambios.',
+        category: { id: 'c4', name: 'Lubricantes' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=600&q=80' }],
+      },
+    ],
+  },
+  'hardware-store': {
+    name: 'Ferretería & Suministros El Maestro',
+    welcome: 'Herramientas eléctricas, manuales, plomería y construcción con cotización al WhatsApp.',
+    categories: ['Todos', 'Herramientas Eléctricas', 'Herramientas Manuales', 'Plomería & Bombas', 'Seguridad Industrial'],
+    items: [
+      {
+        id: 'h1',
+        sku: 'FER-TAL-20V',
+        title: 'Taladro Percutor Inalámbrico Brushless 20V + 2 Baterías',
+        price: 89.0,
+        description: 'Motor sin escobillas, 60 Nm de torque, mandril metálico 1/2" y maletín rígido.',
+        category: { id: 'c1', name: 'Herramientas Eléctricas' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'h2',
+        sku: 'FER-LLV-12P',
+        title: 'Juego de Llaves Combinadas Cromo Vanadio (8mm a 24mm)',
+        price: 28.5,
+        description: 'Set de 12 llaves pulidas espejo con estuche de lona enrollable resistente.',
+        category: { id: 'c2', name: 'Herramientas Manuales' },
+        stockStatus: 'in_stock',
+        featured: true,
+        images: [{ url: 'https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'h3',
+        sku: 'FER-AMO-850',
+        title: 'Amoladora Angular 4-1/2" 850W con Guarda Rápida',
+        price: 45.0,
+        description: '11.000 RPM, mango auxiliar ergonómico y sistema de disipación de polvo.',
+        category: { id: 'c1', name: 'Herramientas Eléctricas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=600&q=80' }],
+      },
+      {
+        id: 'h4',
+        sku: 'FER-BOM-05HP',
+        title: 'Bomba de Agua Periférica 1/2 HP 110V',
+        price: 36.0,
+        description: 'Impulsor de bronce, altura máxima 35 metros y caudal de 35 L/min.',
+        category: { id: 'c3', name: 'Plomería & Bombas' },
+        stockStatus: 'in_stock',
+        featured: false,
+        images: [{ url: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=600&q=80' }],
+      },
+    ],
+  },
+};
+
 export function StorefrontClient({
   tenant,
   products,
@@ -77,7 +319,7 @@ export function StorefrontClient({
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
 
   // Active theme (defaults to tenant.theme, allows live preview toggle)
-  const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'fluid-pwa');
+  const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'food-delivery');
 
   // Modal variant & modifier selection state
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -155,10 +397,20 @@ export function StorefrontClient({
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const totalCartAmount = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
+  // Active theme dataset (switches products if previewing demo verticals)
+  const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['food-delivery'];
+  const activeProducts = products.length > 0 ? products : currentVertical.items;
+  const activeCategories = categories.length > 1 ? categories : currentVertical.categories;
+  const activeTenantConfig: TenantConfig = {
+    ...tenant,
+    name: tenant.name || currentVertical.name,
+    welcomeMessage: tenant.welcomeMessage || currentVertical.welcome,
+  };
+
   const themeProps = {
-    tenant,
-    products,
-    categories,
+    tenant: activeTenantConfig,
+    products: activeProducts,
+    categories: activeCategories,
     cartCount: totalCartCount,
     cartAmount: totalCartAmount,
     cart,
@@ -169,52 +421,52 @@ export function StorefrontClient({
 
   return (
     <div className="relative min-h-screen">
-      {/* Live Interactive Theme Switcher Bar (Top Floating Tag) */}
-      <div className="fixed top-2 right-2 z-50 flex items-center gap-1 bg-black/80 backdrop-blur-md border border-white/20 p-1 rounded-full shadow-2xl text-[11px] text-white">
-        <span className="px-2 py-0.5 font-bold flex items-center gap-1 text-slate-300">
-          <Layers className="w-3 h-3" /> Tema:
+      {/* Live Interactive Vertical Catalog Switcher Bar */}
+      <div className="fixed top-3 right-3 z-50 flex items-center gap-1 bg-slate-950/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full shadow-2xl text-[11px] text-white">
+        <span className="px-2 font-bold flex items-center gap-1 text-slate-300">
+          <Layers className="w-3.5 h-3.5 text-amber-400" /> Catálogo:
         </span>
         <button
-          onClick={() => setActiveTheme('fluid-pwa')}
-          className={`px-2.5 py-1 rounded-full font-medium transition ${
-            activeTheme === 'fluid-pwa' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-white/10'
+          onClick={() => setActiveTheme('food-delivery')}
+          className={`px-3 py-1 rounded-full font-bold transition ${
+            activeTheme === 'food-delivery' ? 'bg-orange-500 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
           }`}
         >
-          PWA
+          🍔 Comida
         </button>
         <button
-          onClick={() => setActiveTheme('vercel-commerce')}
-          className={`px-2.5 py-1 rounded-full font-medium transition ${
-            activeTheme === 'vercel-commerce' ? 'bg-white text-black font-bold' : 'hover:bg-white/10'
+          onClick={() => setActiveTheme('fashion-boutique')}
+          className={`px-3 py-1 rounded-full font-bold transition ${
+            activeTheme === 'fashion-boutique' ? 'bg-[#ebdcd0] text-[#2d2825] shadow-sm' : 'hover:bg-white/10 text-slate-300'
           }`}
         >
-          Vercel
+          👗 Ropa
         </button>
         <button
-          onClick={() => setActiveTheme('editorial-lookbook')}
-          className={`px-2.5 py-1 rounded-full font-medium transition ${
-            activeTheme === 'editorial-lookbook' ? 'bg-[#ebdcd0] text-[#2d2825] font-bold' : 'hover:bg-white/10'
+          onClick={() => setActiveTheme('moto-parts')}
+          className={`px-3 py-1 rounded-full font-bold transition ${
+            activeTheme === 'moto-parts' ? 'bg-amber-400 text-black shadow-sm' : 'hover:bg-white/10 text-slate-300'
           }`}
         >
-          Boutique
+          🏍️ Motos
         </button>
         <button
-          onClick={() => setActiveTheme('b2b-matrix')}
-          className={`px-2.5 py-1 rounded-full font-medium transition ${
-            activeTheme === 'b2b-matrix' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-white/10'
+          onClick={() => setActiveTheme('hardware-store')}
+          className={`px-3 py-1 rounded-full font-bold transition ${
+            activeTheme === 'hardware-store' ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white/10 text-slate-300'
           }`}
         >
-          B2B
+          🔧 Ferretería
         </button>
       </div>
 
       {/* Render Active Theme View */}
-      {activeTheme === 'vercel-commerce' && <ThemeVercelCommerce {...themeProps} />}
-      {activeTheme === 'editorial-lookbook' && <ThemeEditorial {...themeProps} />}
-      {activeTheme === 'b2b-matrix' && <ThemeB2BMatrix {...themeProps} />}
-      {activeTheme === 'fluid-pwa' && <ThemeFluidPWA {...themeProps} />}
+      {activeTheme === 'fashion-boutique' && <ThemeFashionBoutique {...themeProps} />}
+      {activeTheme === 'moto-parts' && <ThemeMotoParts {...themeProps} />}
+      {activeTheme === 'hardware-store' && <ThemeHardwareStore {...themeProps} />}
+      {(activeTheme === 'food-delivery' || !activeTheme) && <ThemeFoodDelivery {...themeProps} />}
 
-      {/* Interactive Product Customizer Modal */}
+      {/* Shared Interactive Product Customizer Modal */}
       {selectedProduct && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
