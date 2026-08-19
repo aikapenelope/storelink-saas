@@ -7,26 +7,10 @@ export const Orders: CollectionConfig = {
     defaultColumns: ['orderNumber', 'customer', 'totalAmount', 'status', 'createdAt'],
   },
   access: {
-    read: ({ req: { user } }) => {
-      if (!user) return false;
-      if (user.role === 'super-admin') return true;
-      return {
-        tenant: {
-          equals: user.tenant,
-        },
-      };
-    },
+    read: ({ req: { user } }) => Boolean(user),
     create: () => true, // Allows server action to record customer orders
-    update: ({ req: { user } }) => {
-      if (!user) return false;
-      if (user.role === 'super-admin') return true;
-      return {
-        tenant: {
-          equals: user.tenant,
-        },
-      };
-    },
-    delete: ({ req: { user } }) => user?.role === 'super-admin',
+    update: ({ req: { user } }) => Boolean(user),
+    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
   },
   fields: [
     {

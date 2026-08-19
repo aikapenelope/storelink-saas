@@ -148,6 +148,91 @@ const DEMO_PRODUCTS: ProductItem[] = [
       },
     ],
   },
+  {
+    id: 'p5',
+    sku: 'BUR-001',
+    title: 'Smash Burger Doble con Cheddar',
+    price: 9.5,
+    description:
+      'Doble carne angus madurada, doble queso cheddar fundido, cebolla caramelizada y salsa secreta en pan brioche.',
+    category: { id: 'c4', name: 'Hamburguesas' },
+    stockStatus: 'in_stock',
+    featured: true,
+    variants: [
+      { name: 'Simple (1 carne)', sku: 'BUR-001-S', price: 7.5, stockStatus: 'in_stock' },
+      { name: 'Doble (2 carnes)', sku: 'BUR-001-D', price: 9.5, stockStatus: 'in_stock' },
+      { name: 'Triple (3 carnes)', sku: 'BUR-001-T', price: 12.0, stockStatus: 'in_stock' },
+    ],
+    modifiers: [
+      {
+        groupName: 'Extras irresistibles',
+        options: [
+          { name: 'Bacon Ahumado Crujiente', priceDelta: 1.5 },
+          { name: 'Huevo Frito a la Plancha', priceDelta: 1.0 },
+          { name: 'Pepinillos Dulces Extra', priceDelta: 0.5 },
+        ],
+      },
+    ],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'p6',
+    sku: 'PAS-001',
+    title: 'Fettuccine Alfredo con Trufa',
+    price: 13.5,
+    description:
+      'Pasta fresca al huevo con salsa cremosa de mantequilla de trufa negra y parmesano de 24 meses.',
+    category: { id: 'c5', name: 'Pastas' },
+    stockStatus: 'in_stock',
+    featured: false,
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'p7',
+    sku: 'BEB-002',
+    title: 'Limonada de Coco Helada',
+    price: 4.0,
+    description:
+      'Zumo de limón fresco batido con crema de coco cremosa y hielo frapé.',
+    category: { id: 'c2', name: 'Bebidas' },
+    stockStatus: 'in_stock',
+    featured: false,
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'p8',
+    sku: 'ROP-001',
+    title: 'Camiseta Oversize Heavyweight Minimal',
+    price: 28.0,
+    description:
+      'Algodón orgánico 260 GSM con corte holgado y costuras reforzadas.',
+    category: { id: 'c6', name: 'Colección' },
+    stockStatus: 'in_stock',
+    featured: true,
+    variants: [
+      { name: 'Talla S - Negro', sku: 'ROP-001-S-BLK', price: 28.0, stockStatus: 'in_stock' },
+      { name: 'Talla M - Negro', sku: 'ROP-001-M-BLK', price: 28.0, stockStatus: 'in_stock' },
+      { name: 'Talla L - Negro', sku: 'ROP-001-L-BLK', price: 28.0, stockStatus: 'in_stock' },
+      { name: 'Talla XL - Negro', sku: 'ROP-001-XL-BLK', price: 28.0, stockStatus: 'in_stock' },
+    ],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
 ];
 
 export default async function TenantStorefrontPage({

@@ -8,6 +8,9 @@ export const Tenants: CollectionConfig = {
   },
   access: {
     read: () => true, // Public read so storefronts can read store info
+    create: ({ req: { user } }) => (user as any)?.role === 'super-admin',
+    update: ({ req: { user } }) => Boolean(user),
+    delete: ({ req: { user } }) => (user as any)?.role === 'super-admin',
   },
   fields: [
     {

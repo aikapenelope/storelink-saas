@@ -8,6 +8,9 @@ export const Products: CollectionConfig = {
   },
   access: {
     read: () => true, // Public read so storefront can display items
+    create: ({ req: { user } }) => Boolean(user),
+    update: ({ req: { user } }) => Boolean(user),
+    delete: ({ req: { user } }) => Boolean(user),
   },
   fields: [
     {

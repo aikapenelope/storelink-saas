@@ -26,6 +26,7 @@ const plugins: Plugin[] = [
       categories: {},
       orders: {},
       customers: {},
+      media: {},
     },
     userHasAccessToAllTenants: (user) => (user as any)?.role === 'super-admin',
   }),
