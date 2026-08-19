@@ -172,32 +172,32 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
-    // 3. Dispatch Order to Trello (tenant config or global env vars fallback)
+    // 3. Dispatch Order to Trello (Direct API or Autonomous PWA Relay Fallback)
     let trelloCardUrl: string | undefined = undefined;
-    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY;
-    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN;
-    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID;
+    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY || '';
+    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN || '';
+    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID || '6a77eee513389b2d14a8b8da';
 
-    if (effectiveTrelloKey && effectiveTrelloToken && effectiveTrelloListId) {
-      try {
-        const trelloRes = await createTrelloOrderCard({
-          apiKey: effectiveTrelloKey,
-          token: effectiveTrelloToken,
-          listId: effectiveTrelloListId,
-          orderNumber,
-          customerName: customer.name,
-          customerPhone: customer.phone,
-          customerAddress: customer.address,
-          paymentMethod: customer.paymentMethod,
-          notes: customer.notes,
-          total,
-          currency: currency || 'USD',
-          items: verifiedItems,
-        });
-        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
-      } catch (trelloErr) {
-        console.warn('Trello dispatch non-blocking error:', trelloErr);
-      }
+    try {
+      const trelloRes = await createTrelloOrderCard({
+        apiKey: effectiveTrelloKey,
+        token: effectiveTrelloToken,
+        listId: effectiveTrelloListId,
+        orderNumber,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerAddress: customer.address,
+        paymentMethod: customer.paymentMethod,
+        notes: customer.notes,
+        total,
+        totalVES,
+        exchangeRateVES: rate,
+        currency: currency || 'USD',
+        items: verifiedItems,
+      });
+      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+    } catch (trelloErr) {
+      console.warn('Trello dispatch non-blocking error:', trelloErr);
     }
 
     // 4. Save Order and Auto-Update Inventory in Payload CMS Database (Graceful Non-Blocking)

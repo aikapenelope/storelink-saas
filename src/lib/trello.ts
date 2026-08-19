@@ -43,8 +43,31 @@ export async function createTrelloOrderCard(payload: TrelloOrderPayload): Promis
 
     const targetListId = listId || '6a77eee513389b2d14a8b8da';
 
+    // If direct Trello keys are not present in env, relay via authorized pwa-martes endpoint
     if (!apiKey || !token) {
-      console.warn('Trello API Key or Token missing');
+      try {
+        const relayRes = await fetch('https://pwa-martes.vercel.app/api/pedido', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: customerName,
+            whatsapp: customerPhone,
+            correo: 'cliente@pedido.com',
+            direccion: customerAddress || 'Retiro en tienda',
+            productos: items.map((i) => ({ name: i.title, qty: i.quantity, sku: i.sku || 'N/A' })),
+            pago: paymentMethod || 'Pago Móvil / Zelle',
+            nota: notes || '',
+            total,
+          }),
+        });
+
+        if (relayRes.ok) {
+          const relayData = await relayRes.json();
+          return { success: true, cardId: relayData.taskId };
+        }
+      } catch (relayErr) {
+        console.warn('PWA Trello relay failed:', relayErr);
+      }
       return { success: false, error: 'Credenciales de Trello no configuradas' };
     }
 
