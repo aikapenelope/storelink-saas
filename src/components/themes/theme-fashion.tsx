@@ -31,7 +31,7 @@ export function ThemeFashionBoutique({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeGender, setActiveGender] = useState<'ALL' | 'WOMEN' | 'MEN'>('ALL');
 
-  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const exchangeRate = tenant.exchangeRateVES || 910.0;
   const showVES = tenant.showVES ?? true;
 
   const filteredProducts = useMemo(() => {
@@ -50,9 +50,14 @@ export function ThemeFashionBoutique({
   return (
     <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-36 font-sans">
       {/* 1. Haute Couture Top Banner */}
-      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.25em] py-2 px-4 text-center font-medium flex items-center justify-center gap-2">
-        <span>Colección Textil & Moda 2026</span>
-        {showVES && <span className="text-[#a89d91]">| Tasa Ref: {exchangeRate.toFixed(2)} Bs/$</span>}
+      <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.2em] py-2 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-[#2d2825]">
+        <span>Colección Textil & Sastrería 2026</span>
+        {showVES && (
+          <span className="flex items-center gap-1.5 text-amber-400 font-mono bg-white/10 px-2.5 py-0.5 rounded-full text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            Tasa Oficial Binance P2P: {exchangeRate.toFixed(2)} Bs/$
+          </span>
+        )}
       </div>
 
       {/* 2. Editorial Header */}

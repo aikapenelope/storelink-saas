@@ -30,7 +30,7 @@ export function ThemeHardwareStore({
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const exchangeRate = tenant.exchangeRateVES || 910.0;
   const showVES = tenant.showVES ?? true;
 
   const filteredProducts = useMemo(() => {
@@ -52,11 +52,12 @@ export function ThemeHardwareStore({
       <div className="bg-slate-950 text-slate-200 text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-3 border-b border-slate-800">
         <div className="flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5 text-amber-400" />
-          <span>VENTAS AL MAYOR Y DETAL • HERRAMIENTAS Y EQUIPOS CON FACTURA FISCAL</span>
+          <span>VENTAS AL MAYOR Y DETAL • SUMINISTROS & FERRETERÍA</span>
         </div>
         {showVES && (
-          <span className="bg-slate-800 text-amber-400 px-2 py-0.5 rounded font-mono text-[10px]">
-            TASA: {exchangeRate.toFixed(2)} Bs/$
+          <span className="bg-slate-800 text-amber-400 px-2.5 py-0.5 rounded-full font-mono text-[10px] flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            TASA OFICIAL BINANCE P2P: {exchangeRate.toFixed(2)} Bs/$
           </span>
         )}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, Info, Store, MapPin, MessageCircle } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Minus, CheckCircle2 } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -30,6 +30,9 @@ export function ThemeBasicBanner({
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const exchangeRate = tenant.exchangeRateVES || 910.0;
+  const showVES = tenant.showVES ?? true;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -44,7 +47,19 @@ export function ThemeBasicBanner({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
+      {/* 0. Live Binance Exchange Rate Top Strip */}
+      {showVES && (
+        <div className="bg-slate-950 text-slate-200 text-xs py-1.5 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
+          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span className="text-amber-400 font-extrabold">Tasa Oficial Binance P2P:</span>
+          <span className="font-mono bg-slate-800 text-white px-2 py-0.5 rounded text-[11px]">
+            {exchangeRate.toFixed(2)} Bs/$
+          </span>
+          <span className="text-[10px] text-slate-400 hidden sm:inline">• Actualizado en tiempo real</span>
+        </div>
+      )}
+
       {/* 1. Header Banner Image (Plan Básico Hero Banner) */}
       <div className="relative h-44 sm:h-60 w-full bg-slate-800 overflow-hidden">
         <img
@@ -109,7 +124,7 @@ export function ThemeBasicBanner({
               placeholder="Buscar productos en el catálogo..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 font-medium"
             />
           </div>
 
@@ -134,7 +149,7 @@ export function ThemeBasicBanner({
         {/* 4. Simple Clean Product List/Grid */}
         {filteredProducts.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-            <p className="text-slate-400 text-sm">No hay productos disponibles en esta sección.</p>
+            <p className="text-slate-400 text-sm font-bold">No hay productos disponibles en esta sección.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -148,6 +163,8 @@ export function ThemeBasicBanner({
               const imageUrl =
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+
+              const priceInVES = product.price * exchangeRate;
 
               return (
                 <div
@@ -165,7 +182,7 @@ export function ThemeBasicBanner({
                         alt={product.title}
                         className="w-full h-full object-cover hover:scale-105 transition duration-300"
                       />
-                      <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-mono px-2 py-0.5 rounded">
+                      <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-mono px-2 py-0.5 rounded font-bold">
                         {product.sku}
                       </div>
                     </div>
@@ -186,10 +203,20 @@ export function ThemeBasicBanner({
 
                   {/* Pricing & Add Action */}
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-slate-900 font-extrabold text-base">
-                      {hasOptions && <span className="text-xs font-normal text-slate-500 mr-1">Desde</span>}
-                      ${product.price.toFixed(2)}
-                    </span>
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        {hasOptions && <span className="text-[10px] text-slate-400">Desde</span>}
+                        <span className="text-slate-900 font-extrabold text-base">
+                          ${product.price.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold">USD</span>
+                      </div>
+                      {showVES && (
+                        <span className="text-[11px] font-mono font-bold text-slate-500 block">
+                          Bs. {priceInVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
 
                     <div>
                       {isOutOfStock ? (
@@ -251,7 +278,14 @@ export function ThemeBasicBanner({
               </span>
               <span className="font-bold text-sm">Enviar Pedido por WhatsApp</span>
             </div>
-            <span className="text-base font-black text-emerald-400">${cartAmount.toFixed(2)}</span>
+            <div className="text-right">
+              <span className="text-base font-black text-emerald-400 block font-mono">${cartAmount.toFixed(2)}</span>
+              {showVES && (
+                <span className="text-[10px] text-slate-300 font-mono">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
           </button>
         </div>
       )}

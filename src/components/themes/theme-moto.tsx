@@ -31,7 +31,7 @@ export function ThemeMotoParts({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBikeBrand, setSelectedBikeBrand] = useState('TODAS');
 
-  const exchangeRate = tenant.exchangeRateVES || 56.5;
+  const exchangeRate = tenant.exchangeRateVES || 910.0;
   const showVES = tenant.showVES ?? true;
 
   const filteredProducts = useMemo(() => {
@@ -53,11 +53,12 @@ export function ThemeMotoParts({
       <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-3 tracking-wide shadow-md">
         <div className="flex items-center gap-1.5">
           <Zap className="w-3.5 h-3.5 fill-black" />
-          <span>REPUESTOS Y ACCESORIOS DE MOTO 100% ORIGINALES CON ENVÍO DIRECTO</span>
+          <span>REPUESTOS Y ACCESORIOS DE MOTO CON ENVÍO DIRECTO</span>
         </div>
         {showVES && (
-          <span className="bg-black text-amber-400 px-2 py-0.5 rounded font-mono text-[10px]">
-            TASA: {exchangeRate.toFixed(2)} Bs/$
+          <span className="bg-black text-amber-400 px-2.5 py-0.5 rounded-full font-mono text-[10px] flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            TASA BINANCE P2P: {exchangeRate.toFixed(2)} Bs/$
           </span>
         )}
       </div>

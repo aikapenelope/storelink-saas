@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight, Check, Tag } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 
 interface ThemeProps {
@@ -30,6 +30,9 @@ export function ThemeFoodDelivery({
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const exchangeRate = tenant.exchangeRateVES || 910.0;
+  const showVES = tenant.showVES ?? true;
+
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -45,6 +48,18 @@ export function ThemeFoodDelivery({
 
   return (
     <div className="min-h-screen bg-[#fcfbfa] text-slate-900 pb-36 font-sans">
+      {/* 0. Live Binance Exchange Rate Top Strip */}
+      {showVES && (
+        <div className="bg-slate-950 text-slate-200 text-xs py-1.5 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
+          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span className="text-amber-400 font-extrabold">Tasa Oficial Binance P2P:</span>
+          <span className="font-mono bg-slate-800 text-white px-2 py-0.5 rounded text-[11px]">
+            {exchangeRate.toFixed(2)} Bs/$
+          </span>
+          <span className="text-[10px] text-slate-400 hidden sm:inline">• Actualizado en tiempo real</span>
+        </div>
+      )}
+
       {/* 1. Dynamic Top Banner */}
       <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 shadow-inner">
         <Sparkles className="w-3.5 h-3.5 animate-spin" />
@@ -131,7 +146,7 @@ export function ThemeFoodDelivery({
               placeholder="Buscar platillos, ingredientes, bebidas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white border border-orange-100 rounded-2xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-xs"
+              className="w-full pl-11 pr-4 py-3 bg-white border border-orange-100 rounded-2xl text-xs sm:text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-xs font-medium"
             />
           </div>
 
@@ -169,6 +184,8 @@ export function ThemeFoodDelivery({
               const imageUrl =
                 product.images?.[0]?.url ||
                 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80';
+
+              const priceInVES = product.price * exchangeRate;
 
               return (
                 <div
@@ -235,12 +252,18 @@ export function ThemeFoodDelivery({
                   {/* Pricing & Add to Cart */}
                   <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">
-                        {hasOptions ? 'Desde' : 'Precio'}
-                      </span>
-                      <span className="text-xl font-black text-slate-950">
-                        ${product.price.toFixed(2)}
-                      </span>
+                      <div className="flex items-baseline gap-1">
+                        {hasOptions && <span className="text-[10px] text-slate-400">Desde</span>}
+                        <span className="text-xl font-black text-slate-950">
+                          ${product.price.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold">USD</span>
+                      </div>
+                      {showVES && (
+                        <span className="text-[11px] font-mono font-bold text-slate-500 block">
+                          Bs. {priceInVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </div>
 
                     <div>
@@ -305,9 +328,16 @@ export function ThemeFoodDelivery({
                 <span className="text-[10px] text-orange-300">Directo al WhatsApp del restaurante</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-black text-amber-400">${cartAmount.toFixed(2)}</span>
-              <ChevronRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition" />
+            <div className="text-right">
+              <div className="flex items-center gap-1.5 justify-end">
+                <span className="text-lg font-black text-amber-400 font-mono">${cartAmount.toFixed(2)}</span>
+                <ChevronRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition" />
+              </div>
+              {showVES && (
+                <span className="text-[10px] text-orange-200 block font-mono">
+                  Bs. {(cartAmount * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
           </button>
         </div>
