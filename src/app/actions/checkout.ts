@@ -206,54 +206,44 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       : '';
 
     const message = `
-🛍️ *¡NUEVO PEDIDO #${orderNumber}!*
-🏪 *Tienda:* ${storeName}
-📅 *Fecha:* ${now.toLocaleDateString('es-VE')} ${now.toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}
+¡Hola, ${storeName || 'Don Luigi'}! 👋
+Acabo de registrar mi pedido *#${orderNumber}*.
 
-👤 *DATOS DEL CLIENTE:*
-▪️ *Nombre:* ${customer.name}
-▪️ *Teléfono:* ${customer.phone}${emailLine}
-📍 *Dirección:* ${customer.address || 'Retiro en local'}${paymentLine}${notesLine}
+👤 *Cliente:* ${customer.name}
+📍 *Modalidad:* ${customer.address || 'Retiro en Tienda (Pickup)'}
+💰 *Total a Pagar:* $${total.toFixed(2)} USD${vesLine}
 
-📦 *DETALLE DE PRODUCTOS:*
-${itemsList}
-
-💰 *TOTAL A PAGAR: $${total.toFixed(2)} ${currency || 'USD'}*${vesLine}
-
-_Generado automáticamente desde la tienda PWA_
+📎 Adjunto mi comprobante / captura de pago y comparto mi *ubicación en tiempo real* para coordinar el despacho. ¡Muchas gracias!
     `.trim();
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
-    // 3. Dispatch Order to Trello (tenant config or global env vars fallback)
+    // 3. Dispatch Order to Trello (Direct API or Autonomous PWA Relay Fallback)
     let trelloCardUrl: string | undefined = undefined;
-    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY;
-    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN;
-    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID;
+    const effectiveTrelloKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY || '';
+    const effectiveTrelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN || '';
+    const effectiveTrelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID || '6a77eee513389b2d14a8b8da';
 
-    if (effectiveTrelloKey && effectiveTrelloToken && effectiveTrelloListId) {
-      try {
-        const trelloRes = await createTrelloOrderCard({
-          apiKey: effectiveTrelloKey,
-          token: effectiveTrelloToken,
-          listId: effectiveTrelloListId,
-          orderNumber,
-          customerName: customer.name,
-          customerPhone: customer.phone,
-          customerAddress: customer.address,
-          paymentMethod: customer.paymentMethod,
-          notes: customer.notes,
-          total,
-          currency: currency || 'USD',
-          items: verifiedItems,
-        });
-        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
-      } catch (trelloErr) {
-        console.warn('Trello dispatch non-blocking error:', trelloErr);
-      }
+    try {
+      const trelloRes = await createTrelloOrderCard({
+        apiKey: effectiveTrelloKey,
+        token: effectiveTrelloToken,
+        listId: effectiveTrelloListId,
+        orderNumber,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerAddress: customer.address,
+        paymentMethod: customer.paymentMethod,
+        notes: customer.notes,
+        total,
+        totalVES,
+        exchangeRateVES: effectiveExchangeRate,
+        currency: currency || 'USD',
+        items: verifiedItems,
+      });
+      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+    } catch (trelloErr) {
+      console.warn('Trello dispatch non-blocking error:', trelloErr);
     }
 
     // 4. Save Order and Auto-Update Inventory in Payload CMS Database (Graceful Non-Blocking)
