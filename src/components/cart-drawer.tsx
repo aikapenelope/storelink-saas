@@ -52,10 +52,11 @@ export function CartDrawer({
   onClearCart,
 }: CartDrawerProps) {
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
+  const [phoneOperator, setPhoneOperator] = useState('414');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   const [customer, setCustomer] = useState({
     name: '',
-    phone: '',
     email: '',
     address: '',
     residenceZone: '',
@@ -77,10 +78,18 @@ export function CartDrawer({
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customer.name.trim() || !customer.phone.trim()) {
-      alert('Por favor ingresa tu nombre y número de teléfono para el pedido.');
+    if (!customer.name.trim()) {
+      alert('Por favor ingresa tu nombre completo.');
       return;
     }
+
+    const cleanPhoneDigits = phoneNumber.replace(/\D/g, '');
+    if (cleanPhoneDigits.length < 7) {
+      alert('Por favor ingresa un número de teléfono de 7 dígitos válido (ej. 123 4567).');
+      return;
+    }
+
+    const fullFormattedPhone = `+58 ${phoneOperator} ${cleanPhoneDigits}`;
 
     if (deliveryType === 'delivery') {
       if (
@@ -111,7 +120,7 @@ export function CartDrawer({
         showVES,
         customer: {
           name: customer.name,
-          phone: customer.phone,
+          phone: fullFormattedPhone,
           email: customer.email,
           address: formattedAddress,
           paymentMethod: customer.paymentMethod,
@@ -408,15 +417,43 @@ export function CartDrawer({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Teléfono WhatsApp *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="Ej. 0412 123 4567 o +58 412..."
-                      value={customer.phone}
-                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Teléfono WhatsApp *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      {/* Fixed Venezuelan Prefix */}
+                      <span className="px-2.5 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1 flex-shrink-0 select-none shadow-xs">
+                        <span>🇻🇪</span>
+                        <span>+58</span>
+                      </span>
+
+                      {/* Operator Code Selector */}
+                      <select
+                        value={phoneOperator}
+                        onChange={(e) => setPhoneOperator(e.target.value)}
+                        className="px-2.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 flex-shrink-0"
+                      >
+                        <option value="414">0414</option>
+                        <option value="424">0424</option>
+                        <option value="412">0412</option>
+                        <option value="416">0416</option>
+                        <option value="426">0426</option>
+                      </select>
+
+                      {/* 7-digit Phone Number Input */}
+                      <input
+                        type="tel"
+                        required
+                        maxLength={8}
+                        placeholder="123 4567"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Recibirás la confirmación de tu pedido al WhatsApp: +58 ({phoneOperator}) {phoneNumber || '...'}
+                    </span>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico (para recibir comprobante y PDF)</label>

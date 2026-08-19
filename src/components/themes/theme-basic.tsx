@@ -52,7 +52,7 @@ export function ThemeBasicBanner({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-48 font-sans">
       {/* 0. Live Binance Exchange Rate Top Strip */}
       {showVES && (
         <div className="bg-slate-950 text-slate-200 text-xs py-1.5 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-slate-800">
@@ -74,12 +74,9 @@ export function ThemeBasicBanner({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        {/* DEMOS MARTES Switcher on Banner Top-Left */}
-        <div className="absolute top-3 left-4 z-20">
-          <DemosMartesSwitcher
-            activeTheme={activeTheme}
-            onSelectTheme={onSelectTheme}
-          />
+        {/* Plan Badge */}
+        <div className="absolute top-3 left-4 bg-white/90 backdrop-blur-md text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+          Plan Básico
         </div>
       </div>
 
@@ -275,7 +272,7 @@ export function ThemeBasicBanner({
 
       {/* Floating Bottom Cart Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
             className="w-full bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between hover:bg-slate-800 active:scale-[0.99] transition"

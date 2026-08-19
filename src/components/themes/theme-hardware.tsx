@@ -52,7 +52,7 @@ export function ThemeHardwareStore({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-36 font-sans">
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-48 font-sans">
       {/* 1. Contractor & Wholesale Top Strip */}
       <div className="bg-slate-950 text-slate-200 text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-3 border-b border-slate-800">
         <div className="flex items-center gap-1.5">
@@ -69,33 +69,25 @@ export function ThemeHardwareStore({
 
       {/* 2. Ferretería Header */}
       <header className="sticky top-0 z-40 bg-blue-950 text-white shadow-xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap sm:flex-nowrap">
-            {/* DEMOS MARTES Switcher (First element in Header) */}
-            <DemosMartesSwitcher
-              activeTheme={activeTheme}
-              onSelectTheme={onSelectTheme}
-            />
-
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg sm:text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition flex-shrink-0">
-                <Hammer className="w-5 h-5 sm:w-6 sm:h-6" />
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-md border-2 border-amber-400 transform hover:scale-105 transition">
+              <Hammer className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
+                <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600">
+                  SUMINISTROS PRO
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-black text-base sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                  <span className="bg-blue-800/80 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-600">
-                    PRO
-                  </span>
-                </div>
-                <p className="text-xs text-blue-200 hidden md:flex items-center gap-2 mt-0.5">
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
-                  </span>
-                  <span>•</span>
-                  <span>Herramientas & Plomería</span>
-                </p>
-              </div>
+              <p className="text-xs text-blue-200 hidden sm:flex items-center gap-2 mt-0.5">
+                <span className="flex items-center gap-1 text-emerald-400">
+                  <CheckCircle2 className="w-3 h-3" /> Despacho Inmediato
+                </span>
+                <span>•</span>
+                <span>Herramientas Manuales, Eléctricas & Plomería</span>
+              </p>
             </div>
           </div>
 
@@ -294,7 +286,7 @@ export function ThemeHardwareStore({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
             className="w-full bg-blue-950 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition font-bold border border-blue-800"

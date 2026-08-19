@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag, Check, Layers } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
+import { DemosMartesSwitcher } from './demos-martes-switcher';
 import { ThemeBasicBanner } from './themes/theme-basic';
 import { ThemeFoodDelivery } from './themes/theme-food';
 import { ThemeFashionBoutique } from './themes/theme-fashion';
@@ -712,6 +713,12 @@ export function StorefrontClient({
         whatsappPhone={tenant.whatsappPhone}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={() => setCart([])}
+      />
+
+      {/* PWA Fixed Bottom Store Demo Switcher Bar */}
+      <DemosMartesSwitcher
+        activeTheme={activeTheme}
+        onSelectTheme={setActiveTheme}
       />
     </div>
   );

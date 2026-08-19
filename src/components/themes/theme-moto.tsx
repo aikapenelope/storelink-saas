@@ -53,7 +53,7 @@ export function ThemeMotoParts({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-36 font-sans">
+    <div className="min-h-screen bg-[#0a0c10] text-neutral-100 selection:bg-amber-400 selection:text-black pb-48 font-sans">
       {/* 1. Pro Automotive Status Bar */}
       <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black text-xs py-1.5 px-4 text-center font-black flex items-center justify-center gap-3 tracking-wide shadow-md">
         <div className="flex items-center gap-1.5">
@@ -70,33 +70,25 @@ export function ThemeMotoParts({
 
       {/* 2. Moto Pro Header */}
       <header className="sticky top-0 z-40 bg-[#0e1217]/90 backdrop-blur-xl border-b border-neutral-800 shadow-2xl">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap sm:flex-nowrap">
-            {/* DEMOS MARTES Switcher (First element in Header) */}
-            <DemosMartesSwitcher
-              activeTheme={activeTheme}
-              onSelectTheme={onSelectTheme}
-            />
-
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-lg sm:text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition flex-shrink-0">
-                <Gauge className="w-6 h-6 sm:w-7 sm:h-7" />
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-black flex items-center justify-center font-black text-xl shadow-lg shadow-amber-400/20 border border-amber-300 transform hover:scale-105 transition">
+              <Gauge className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-black text-lg sm:text-xl tracking-tight text-white">{tenant.name}</h1>
+                <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
+                  ORIGINAL OEM
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-black text-base sm:text-xl tracking-tight text-white">{tenant.name}</h1>
-                  <span className="bg-amber-400/10 text-amber-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-amber-400/30">
-                    OEM
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-400 font-mono hidden md:flex items-center gap-2 mt-0.5">
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
-                  </span>
-                  <span>•</span>
-                  <span>Cilindros, Frenos, Cadenas y Lubricantes</span>
-                </p>
-              </div>
+              <p className="text-xs text-neutral-400 font-mono hidden sm:flex items-center gap-2 mt-0.5">
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Stock en Almacén
+                </span>
+                <span>•</span>
+                <span>Cilindros, Frenos, Cadenas y Lubricantes</span>
+              </p>
             </div>
           </div>
 
@@ -307,7 +299,7 @@ export function ThemeMotoParts({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-lg mx-auto px-4 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
             className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 text-black p-4 rounded-3xl shadow-2xl flex items-center justify-between hover:shadow-amber-400/20 active:scale-[0.99] transition font-mono font-black"

@@ -53,7 +53,7 @@ export function ThemeFashionBoutique({
   }, [products, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-36 font-sans">
+    <div className="min-h-screen bg-[#fbf9f6] text-[#1e1b18] selection:bg-[#dfd5cb] pb-48 font-sans">
       {/* 1. Haute Couture Top Banner */}
       <div className="bg-[#1e1b18] text-[#e8ded5] text-[11px] uppercase tracking-[0.2em] py-2 px-4 text-center font-bold flex items-center justify-center gap-2 border-b border-[#2d2825]">
         <span>Colección Textil & Sastrería 2026</span>
@@ -67,19 +67,13 @@ export function ThemeFashionBoutique({
 
       {/* 2. Editorial Header */}
       <header className="sticky top-0 z-40 bg-[#fbf9f6]/95 backdrop-blur-md border-b border-[#ece5dd]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-6 flex-wrap sm:flex-nowrap">
-            {/* DEMOS MARTES Switcher (First element in Header) */}
-            <DemosMartesSwitcher
-              activeTheme={activeTheme}
-              onSelectTheme={onSelectTheme}
-            />
-
+        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-6">
             <div>
               <span className="text-[9px] tracking-[0.3em] text-[#8c827a] uppercase block">
                 Atelier & Studio
               </span>
-              <h1 className="font-serif text-xl sm:text-2xl tracking-tight text-[#1c1815] font-normal">
+              <h1 className="font-serif text-2xl tracking-tight text-[#1c1815] font-normal">
                 {tenant.name}
               </h1>
             </div>
@@ -279,7 +273,7 @@ export function ThemeFashionBoutique({
 
       {/* 6. Floating Checkout Footer Bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 z-40 max-w-md mx-auto px-6 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-20 left-0 right-0 z-40 max-w-md mx-auto px-6 animate-in slide-in-from-bottom-4 duration-300">
           <button
             onClick={onOpenCart}
             className="w-full bg-[#1e1b18] text-white p-4 rounded-full shadow-2xl flex items-center justify-between hover:bg-black active:scale-[0.99] transition uppercase tracking-[0.2em] text-xs font-medium border border-[#3e3833]"
