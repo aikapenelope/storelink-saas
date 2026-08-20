@@ -76,6 +76,9 @@ if (
 export default buildConfig({
   admin: {
     user: Users.slug,
+    components: {
+      beforeDashboard: ['@/components/admin/MerchantDashboard#MerchantDashboard'],
+    },
     importMap: {
       baseDir: path.resolve(dirname),
     },
@@ -88,8 +91,8 @@ export default buildConfig({
     fallbackLanguage: 'es',
   },
   email: resendAdapter({
-    defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@storelink.app',
-    defaultFromName: process.env.RESEND_FROM_NAME || 'StoreLink Notificaciones',
+    defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app',
+    defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
     apiKey: process.env.RESEND_API_KEY || '', // Empty string: Payload skips email if no key is set
   }),
   sharp: sharp as any,
