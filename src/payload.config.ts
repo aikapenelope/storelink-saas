@@ -47,7 +47,7 @@ const plugins: Plugin[] = [
   }),
 ];
 
-// Optional: Cloudflare R2 / AWS S3 for storage
+// Cloudflare R2 / AWS S3 Storage
 if (
   process.env.R2_ENDPOINT &&
   process.env.R2_ACCESS_KEY_ID &&
@@ -57,7 +57,15 @@ if (
   plugins.push(
     s3Storage({
       collections: {
-        media: true,
+        media: {
+          generateFileURL: ({ filename, prefix }) => {
+            if (process.env.R2_PUBLIC_URL) {
+              const baseUrl = process.env.R2_PUBLIC_URL.replace(/\/$/, '');
+              return prefix ? `${baseUrl}/${prefix}/${filename}` : `${baseUrl}/${filename}`;
+            }
+            return `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/api/media/file/${filename}`;
+          },
+        },
       },
       bucket: process.env.R2_BUCKET,
       config: {
