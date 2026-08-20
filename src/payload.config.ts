@@ -84,9 +84,6 @@ if (
 export default buildConfig({
   admin: {
     user: Users.slug,
-    components: {
-      beforeDashboard: ['@/components/admin/MerchantDashboard#MerchantDashboard'],
-    },
     importMap: {
       baseDir: path.resolve(dirname),
     },
