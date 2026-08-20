@@ -113,9 +113,9 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI || process.env.POSTGRES_URL || '',
-      max: 1, // Scalable for Vercel Serverless Lambdas sharing Supabase pooler
-      idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 5000,
+      max: 10, // Optimal for concurrent RSC (generateMetadata + Page) with Supabase Transaction Pooler (6543)
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 15000,
       ssl: {
         rejectUnauthorized: false,
       },
