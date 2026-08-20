@@ -23,6 +23,8 @@ declare global {
 
 export default function FlowLandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [workflowExpanded, setWorkflowExpanded] = useState(false);
+  const [faqExpanded, setFaqExpanded] = useState(false);
   const [currentYear, setCurrentYear] = useState('2026');
 
   useEffect(() => {
@@ -32,83 +34,94 @@ export default function FlowLandingPage() {
   return (
     <div className="overflow-x-hidden bg-[#0c0418] text-slate-950 antialiased selection:bg-violet-500 selection:text-white font-sans">
       {/* ========================================================================= */}
-      {/* HERO SECTION                                                              */}
+      {/* 1. HERO SECTION (FOCO PRINCIPAL #1)                                       */}
       {/* ========================================================================= */}
       <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-b from-white via-[#f0eaff] to-[#7C3AED]">
         {/* Ambient Glows */}
-        <div className="pointer-events-none absolute left-1/2 top-20 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-white/90 blur-3xl"></div>
-        <div className="pointer-events-none absolute -left-32 top-1/3 h-96 w-96 rounded-full bg-fuchsia-300/30 blur-3xl"></div>
-        <div className="pointer-events-none absolute -right-24 top-1/2 h-96 w-96 rounded-full bg-indigo-400/40 blur-3xl"></div>
+        <div className="pointer-events-none absolute left-1/2 top-10 h-72 w-72 sm:h-96 sm:w-96 -translate-x-1/2 rounded-full bg-white/90 blur-3xl"></div>
+        <div className="pointer-events-none absolute -left-20 top-1/3 h-64 w-64 sm:h-96 sm:w-96 rounded-full bg-fuchsia-300/30 blur-3xl"></div>
 
         {/* Navigation */}
-        <nav className="relative z-50 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
-          <Link href="#inicio" className="flex items-center gap-2.5" aria-label="Flow by Martes, inicio">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-lg shadow-violet-500/30 ring-2 ring-white/70">
-              <iconify-icon icon="solar:bolt-bold-duotone" width="24" height="24"></iconify-icon>
+        <nav className="relative z-50 mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 md:px-8">
+          <Link href="#inicio" className="flex items-center gap-2" aria-label="Flow by Martes, inicio">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-md shadow-violet-500/30 ring-2 ring-white/70">
+              <iconify-icon icon="solar:bolt-bold-duotone" width="22" height="22"></iconify-icon>
             </span>
-            <div className="flex flex-col">
-              <span className="text-xl font-extrabold tracking-tight text-slate-950">Flow</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-violet-700">by Martes</span>
+            <div className="flex flex-col text-left">
+              <span className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-950 leading-tight">Flow</span>
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-violet-700">by Martes</span>
             </div>
           </Link>
 
-          <div className="hidden items-center gap-8 text-sm font-semibold text-slate-700 md:flex">
-            <a href="#como-funciona" className="transition hover:text-[#7C3AED]">Cómo funciona</a>
-            <a href="#todo-en-uno" className="transition hover:text-[#7C3AED]">Qué incluye</a>
-            <a href="#catalogo-demo" className="transition hover:text-[#7C3AED]">Catálogo E-commerce</a>
-            <a href="#control" className="transition hover:text-[#7C3AED]">Tu control</a>
+          {/* Desktop Nav */}
+          <div className="hidden items-center gap-6 lg:gap-8 text-xs lg:text-sm font-semibold text-slate-700 md:flex">
+            <a href="#video" className="transition hover:text-[#7C3AED] flex items-center gap-1">
+              <iconify-icon icon="solar:play-circle-bold" className="text-violet-600"></iconify-icon>
+              Ver Video
+            </a>
+            <a href="#catalogo-demo" className="transition hover:text-[#7C3AED]">Demo Don Luigi</a>
+            <a href="#control" className="transition hover:text-[#7C3AED]">Cómo funciona</a>
             <a href="#precio" className="transition hover:text-[#7C3AED]">Precios</a>
+            <a href="#diagnostico" className="transition hover:text-[#7C3AED]">Diagnóstico</a>
           </div>
 
-          <div className="hidden items-center gap-3 md:flex">
+          {/* Header CTA + Acceso Admin */}
+          <div className="hidden items-center gap-2.5 md:flex">
             <Link
               href="/admin"
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/90 px-4 py-2 text-xs font-extrabold text-slate-900 shadow-sm backdrop-blur transition hover:bg-slate-950 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/90 px-4 py-2 text-xs font-extrabold text-slate-900 shadow-sm backdrop-blur transition hover:bg-slate-950 hover:text-white hover:border-slate-950"
             >
-              <iconify-icon icon="solar:user-bold" width="14" height="14"></iconify-icon>
-              <span>Login Panel</span>
+              <iconify-icon icon="solar:shield-user-bold" width="15" height="15" className="text-[#7C3AED]"></iconify-icon>
+              <span>Acceso Admin</span>
             </Link>
 
             <a
               href="#diagnostico"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-xs font-bold text-white shadow-xl shadow-slate-950/20 transition duration-200 hover:-translate-y-0.5 hover:bg-[#7C3AED]"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-bold text-white shadow-lg transition duration-200 hover:bg-[#7C3AED]"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Diagnóstico con IA al instante
+              Diagnóstico con IA
             </a>
           </div>
 
+          {/* Mobile Menu Button */}
           <button
+            id="menuButton"
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-900/10 bg-white/80 text-slate-900 shadow-sm backdrop-blur md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-900/10 bg-white/80 text-slate-900 shadow-sm backdrop-blur md:hidden"
             aria-label="Abrir menú"
           >
-            <iconify-icon icon={mobileMenuOpen ? "solar:close-circle-bold" : "solar:hamburger-menu-linear"} width="22" height="22" style={{ strokeWidth: 1.5 }}></iconify-icon>
+            <iconify-icon icon={mobileMenuOpen ? "solar:close-circle-bold" : "solar:hamburger-menu-linear"} width="20" height="20"></iconify-icon>
           </button>
         </nav>
 
         {/* Mobile Menu Dropdown */}
         {mobileMenuOpen && (
-          <div className="relative z-50 mx-5 rounded-2xl border border-white/60 bg-white/95 p-5 shadow-2xl backdrop-blur-lg md:hidden">
+          <div className="relative z-50 mx-4 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur-lg md:hidden">
             <div className="flex flex-col gap-1 text-sm font-semibold text-slate-800">
-              <a href="#como-funciona" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 hover:bg-violet-50">Cómo funciona</a>
-              <a href="#todo-en-uno" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 hover:bg-violet-50">Qué incluye</a>
-              <a href="#catalogo-demo" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 hover:bg-violet-50">Catálogo E-commerce</a>
-              <a href="#control" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 hover:bg-violet-50">Tu control</a>
-              <a href="#precio" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-3 hover:bg-violet-50">Precios</a>
+              <a href="#video" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50 flex items-center gap-2">
+                <iconify-icon icon="solar:play-circle-bold" className="text-[#7C3AED]"></iconify-icon>
+                Ver Video Demostrativo
+              </a>
+              <a href="#catalogo-demo" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Demo Don Luigi</a>
+              <a href="#control" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Cómo funciona & Control</a>
+              <a href="#precio" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Precios</a>
+              <a href="#diagnostico" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Diagnóstico & FAQs</a>
+              
               <Link
                 href="/admin"
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-violet-100 px-4 py-3 text-center font-bold text-[#7C3AED]"
+                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-violet-100 px-4 py-3 text-center font-bold text-[#7C3AED] hover:bg-violet-200 transition"
               >
-                <iconify-icon icon="solar:user-bold" width="16" height="16"></iconify-icon>
-                <span>Login Panel</span>
+                <iconify-icon icon="solar:shield-user-bold" width="16" height="16"></iconify-icon>
+                <span>Acceso Admin</span>
               </Link>
+
               <a
                 href="#diagnostico"
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3.5 text-center font-bold text-white shadow-lg"
+                className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-center font-bold text-white shadow-lg"
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
                 Diagnóstico con IA al instante
@@ -117,66 +130,67 @@ export default function FlowLandingPage() {
           </div>
         )}
 
-        {/* Hero Main Content */}
-        <main id="inicio" className="relative z-20 mx-auto flex max-w-7xl flex-col items-center px-5 pb-28 pt-12 text-center md:px-8 md:pb-36 md:pt-20">
-          {/* Top Badge */}
-          <div className="mb-7 inline-flex items-center gap-2.5 rounded-full border border-violet-300 bg-white/80 px-4 py-1.5 text-xs font-bold text-violet-900 shadow-sm backdrop-blur-md">
+        {/* Hero Content */}
+        <main id="inicio" className="relative z-20 mx-auto flex max-w-7xl flex-col items-center px-4 pb-20 pt-8 text-center sm:px-6 md:pb-28 md:pt-14">
+          
+          {/* Short & Crisp Badge */}
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-300 bg-white/85 px-3.5 py-1.5 text-[11px] sm:text-xs font-bold text-violet-900 shadow-sm backdrop-blur-md">
             <span className="relative flex h-2 w-2">
               <span className="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative h-2 w-2 rounded-full bg-emerald-500"></span>
             </span>
-            Tecnología con Estándar de Estados Unidos · Automatización Total
+            ⚡ Ventas 24/7 en Piloto Automático · 0% Comisiones
           </div>
 
           {/* Main Headline */}
-          <h1 className="max-w-5xl text-4xl font-extrabold leading-[1.08] tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
+          <h1 className="max-w-5xl text-3xl font-extrabold leading-[1.12] tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
             Tu negocio vendiendo 24/7 en piloto automático.<br />
             <span className="bg-gradient-to-r from-[#7C3AED] via-violet-600 to-indigo-600 bg-clip-text text-transparent">
-              Automatización definitiva para tus ventas.
+              Atención y ventas sin descanso.
             </span>
           </h1>
 
-          {/* Subtitle */}
-          <p className="mt-7 max-w-3xl text-base font-normal leading-relaxed text-slate-700 sm:text-lg md:text-xl">
-            No se trata de que estés haciendo las cosas mal: estás bien, pero con Flow desbloqueas una productividad y escala masiva. Respuestas instantáneas por WhatsApp e Instagram con IA, e-commerce de grado internacional que procesa ventas de punta a punta y <strong>0% comisiones</strong>. Todo mientras te enfocas en crecer.
+          {/* Short, Direct Subtitle */}
+          <p className="mt-4 sm:mt-5 max-w-2xl text-sm sm:text-base md:text-lg leading-relaxed text-slate-700 font-normal">
+            Flow atiende tu WhatsApp e Instagram en segundos, responde las dudas de tu empresa con IA, guía a tus clientes a tu catálogo e-commerce y cobra con <strong>0% comisiones</strong>.
           </p>
 
-          {/* CTA Buttons */}
-          <div className="mt-9 flex w-full flex-col items-center justify-center gap-3.5 sm:w-auto sm:flex-row">
+          {/* Action Buttons (Thumb Friendly on Mobile) */}
+          <div className="mt-7 flex w-full flex-col items-center justify-center gap-3 sm:w-auto sm:flex-row">
             <a
               href="#diagnostico"
-              className="group inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-slate-950 px-7 py-4 text-sm font-bold text-white shadow-2xl shadow-violet-950/30 transition duration-200 hover:-translate-y-0.5 hover:bg-[#7C3AED] sm:w-auto"
+              className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3.5 text-xs sm:text-sm font-bold text-white shadow-xl transition duration-200 hover:bg-[#7C3AED] sm:w-auto"
             >
               Diagnóstico con IA al instante
-              <iconify-icon icon="solar:arrow-right-linear" width="18" height="18" className="transition group-hover:translate-x-1" style={{ strokeWidth: 2 }}></iconify-icon>
+              <iconify-icon icon="solar:arrow-right-linear" width="16" height="16" className="transition group-hover:translate-x-1"></iconify-icon>
             </a>
             <a
               href="#catalogo-demo"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900/15 bg-white/90 px-6 py-4 text-sm font-bold text-slate-800 shadow-sm backdrop-blur transition hover:bg-white sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900/15 bg-white/90 px-5 py-3.5 text-xs sm:text-sm font-bold text-slate-800 shadow-sm backdrop-blur transition hover:bg-white sm:w-auto"
             >
-              <iconify-icon icon="solar:eye-bold" width="18" height="18" className="text-violet-600"></iconify-icon>
-              Probar catálogo interactivo
+              <iconify-icon icon="solar:shop-2-bold" width="16" height="16" className="text-violet-600"></iconify-icon>
+              Probar Demo Don Luigi en vivo
             </a>
           </div>
 
-          {/* Trust Badges */}
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-slate-600">
-            <span className="flex items-center gap-1.5">
-              <iconify-icon icon="solar:shield-check-bold" width="16" height="16" className="text-emerald-600"></iconify-icon>
-              0% de comisión por venta
+          {/* Trust Chips */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] sm:text-xs font-semibold text-slate-600">
+            <span className="flex items-center gap-1">
+              <iconify-icon icon="solar:shield-check-bold" width="14" height="14" className="text-emerald-600"></iconify-icon>
+              0% comisión
             </span>
-            <span className="flex items-center gap-1.5">
-              <iconify-icon icon="solar:bolt-circle-bold" width="16" height="16" className="text-violet-600"></iconify-icon>
-              Auditoría de 5 minutos en WhatsApp/Instagram
+            <span className="flex items-center gap-1">
+              <iconify-icon icon="solar:bolt-circle-bold" width="14" height="14" className="text-violet-600"></iconify-icon>
+              Responde en 1s
             </span>
-            <span className="flex items-center gap-1.5">
-              <iconify-icon icon="solar:card-2-bold" width="16" height="16" className="text-indigo-600"></iconify-icon>
-              Sin tarjeta de crédito
+            <span className="flex items-center gap-1">
+              <iconify-icon icon="solar:card-2-bold" width="14" height="14" className="text-indigo-600"></iconify-icon>
+              Sin tarjeta
             </span>
           </div>
 
           {/* ========================================================================= */}
-          {/* FLOATING CONVERSATION CARDS (Payload Black-on-Black Style)                */}
+          {/* FLOATING CONVERSATION CARDS (Desktop/Tablet Ambient)                      */}
           {/* ========================================================================= */}
           
           {/* Floating Card 1: Top Left (WhatsApp Live Sale) */}
@@ -242,192 +256,159 @@ export default function FlowLandingPage() {
           </div>
 
           {/* ========================================================================= */}
-          {/* COMPACT CRM-STYLE DASHBOARD (Payload CMS Pure Black-on-Black Contrast)    */}
+          {/* COMPACT CRM DASHBOARD (Payload CMS Pure Black Style - Mobile Optimized)   */}
           {/* ========================================================================= */}
-          <div className="mt-14 w-full max-w-5xl rounded-2xl border border-neutral-800 bg-black/90 p-2 shadow-2xl shadow-black/90 backdrop-blur-2xl md:p-3 relative z-20">
-            <div className="overflow-hidden rounded-xl border border-neutral-800 bg-[#000000] text-left text-white shadow-2xl">
+          <div className="mt-10 sm:mt-12 w-full max-w-5xl rounded-2xl border border-neutral-800 bg-black/90 p-2 shadow-2xl shadow-black/90 backdrop-blur-2xl relative z-20 text-white">
+            <div className="overflow-hidden rounded-xl border border-neutral-800 bg-[#000000] text-left">
+              
               {/* Top Bar (Payload Style) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 bg-[#0a0a0a] px-4 py-2.5 sm:px-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-3.5 py-2 sm:px-5">
                 {/* Breadcrumbs */}
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="flex h-6 w-6 items-center justify-center rounded bg-white text-black font-black text-[11px]">FL</span>
-                  <span className="font-extrabold text-white">Flow by Martes</span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="flex h-5 w-5 items-center justify-center rounded bg-white text-black font-black text-[10px]">FL</span>
+                  <span className="font-extrabold text-white text-[11px] sm:text-xs">Flow</span>
                   <span className="text-neutral-600">/</span>
-                  <span className="font-bold text-emerald-400">Don Luigi & Burgers</span>
-                  <span className="hidden sm:inline-block rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-mono text-neutral-300 border border-neutral-800">donluigi.martes.app</span>
+                  <span className="font-bold text-emerald-400 text-[11px] sm:text-xs truncate max-w-[120px] sm:max-w-none">Don Luigi & Burgers</span>
                 </div>
 
-                {/* Quick Action Bar */}
-                <div className="flex items-center gap-2 text-xs font-semibold">
-                  <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded bg-white px-3 py-1 text-black hover:bg-neutral-200 transition shadow-sm text-[11px] font-bold">
-                    <iconify-icon icon="solar:shop-2-bold" width="13" height="13"></iconify-icon>
-                    <span>Ver Tienda PWA</span>
+                {/* Quick Action Bar (Connected to Real Link) */}
+                <div className="flex items-center gap-1.5 text-xs font-semibold">
+                  <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-white px-2.5 py-1 text-black hover:bg-neutral-200 transition text-[10px] sm:text-[11px] font-bold">
+                    <iconify-icon icon="solar:shop-2-bold" width="12" height="12"></iconify-icon>
+                    <span>Ver Tienda</span>
                   </a>
-                  <span className="hidden sm:inline-flex items-center gap-1 rounded bg-neutral-900 px-2.5 py-1 text-neutral-200 hover:bg-neutral-800 border border-neutral-800 transition cursor-pointer text-[11px]">
-                    <iconify-icon icon="solar:add-circle-bold" width="13" height="13" className="text-emerald-400"></iconify-icon>
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded bg-neutral-900 px-2 py-1 text-neutral-300 border border-neutral-800 text-[10px]">
+                    <iconify-icon icon="solar:add-circle-bold" width="12" height="12" className="text-emerald-400"></iconify-icon>
                     + Producto
-                  </span>
-                  <span className="hidden md:inline-flex items-center gap-1 rounded bg-neutral-900 px-2.5 py-1 text-neutral-200 hover:bg-neutral-800 border border-neutral-800 transition cursor-pointer text-[11px]">
-                    <iconify-icon icon="logos:google-sheets" width="12" height="12"></iconify-icon>
-                    Sheets Sync
                   </span>
                 </div>
               </div>
 
               {/* CRM Layout: Sidebar + Main Content */}
-              <div className="grid lg:grid-cols-[12.5rem_1fr] min-h-[25rem]">
-                {/* CRM Sidebar Navigation (Payload Pure Black) */}
+              <div className="grid lg:grid-cols-[12rem_1fr]">
+                {/* CRM Sidebar Navigation */}
                 <aside className="hidden lg:block border-r border-neutral-800 bg-[#050505] p-3 space-y-3 text-xs">
                   <div>
-                    <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">Módulos CRM</p>
+                    <p className="px-2 text-[9px] font-bold uppercase tracking-wider text-neutral-500">Módulos CRM</p>
                     <div className="mt-1.5 space-y-1">
                       <div className="flex items-center gap-2 rounded bg-neutral-900 px-2.5 py-1.5 font-bold text-white border border-neutral-700">
-                        <iconify-icon icon="solar:chart-2-bold" width="14" height="14" className="text-white"></iconify-icon>
-                        <span>Dashboard General</span>
+                        <iconify-icon icon="solar:chart-2-bold" width="13" height="13"></iconify-icon>
+                        <span>Dashboard</span>
                       </div>
-                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white hover:bg-neutral-900 transition">
-                        <iconify-icon icon="solar:cart-large-2-linear" width="14" height="14"></iconify-icon>
+                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white transition">
+                        <iconify-icon icon="solar:cart-large-2-linear" width="13" height="13"></iconify-icon>
                         <span>Pedidos & Ventas</span>
-                        <span className="ml-auto rounded bg-neutral-800 px-1.5 py-0.2 text-[9px] font-bold text-white border border-neutral-700">3</span>
+                        <span className="ml-auto rounded bg-neutral-800 px-1 py-0.2 text-[8px] font-bold text-white">3</span>
                       </div>
-                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white hover:bg-neutral-900 transition">
-                        <iconify-icon icon="solar:users-group-rounded-linear" width="14" height="14"></iconify-icon>
+                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white transition">
+                        <iconify-icon icon="solar:users-group-rounded-linear" width="13" height="13"></iconify-icon>
                         <span>Clientes & VIPs</span>
                       </div>
-                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white hover:bg-neutral-900 transition">
-                        <iconify-icon icon="solar:box-linear" width="14" height="14"></iconify-icon>
-                        <span>Inventario & Stock</span>
-                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">Operaciones</p>
-                    <div className="mt-1.5 space-y-1 text-neutral-400">
-                      <div className="flex items-center gap-2 px-2.5 py-1.5 hover:text-white hover:bg-neutral-900 rounded transition">
-                        <iconify-icon icon="solar:wallet-money-linear" width="14" height="14"></iconify-icon>
-                        <span>Tasa Oficial & Pagos</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-emerald-500/30 bg-emerald-950/20 p-2.5">
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                  <div className="rounded border border-emerald-500/30 bg-emerald-950/20 p-2 text-[10px]">
+                    <div className="flex items-center gap-1 font-bold text-emerald-400">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Agente Conectado
+                      Agente Activo 24/7
                     </div>
-                    <p className="mt-1 text-[10px] text-neutral-400 leading-tight">Cerrando ventas en WhatsApp e Instagram.</p>
+                    <p className="mt-0.5 text-neutral-400">Cerrando ventas sin colas.</p>
                   </div>
                 </aside>
 
                 {/* Dashboard Main Grid Content */}
-                <div className="bg-[#000000] p-3.5 sm:p-4 space-y-3">
-                  {/* Compact KPI Row */}
+                <div className="bg-[#000000] p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+                  {/* Compact KPI 2x2 Grid on Mobile */}
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5">
-                      <span className="text-[10px] text-neutral-400 font-medium">💵 Ventas Hoy</span>
-                      <p className="mt-1 text-lg font-extrabold text-white font-mono">$145.00</p>
-                      <p className="text-[10px] text-emerald-400 font-mono">Bs. 10.150 (+18%)</p>
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">💵 Ventas Hoy</span>
+                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white font-mono">$145.00</p>
+                      <p className="text-[9px] text-emerald-400 font-mono">Bs. 10.150 (+18%)</p>
                     </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5">
-                      <span className="text-[10px] text-neutral-400 font-medium">🛍️ Ventas Totales</span>
-                      <p className="mt-1 text-lg font-extrabold text-white font-mono">$1.280.00</p>
-                      <p className="text-[10px] text-neutral-300 font-mono">Bs. 89.600 (84 ped)</p>
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">🛍️ Total Mes</span>
+                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white font-mono">$1.280.00</p>
+                      <p className="text-[9px] text-neutral-300 font-mono">84 pedidos</p>
                     </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5">
-                      <span className="text-[10px] text-neutral-400 font-medium">👑 Clientes CRM</span>
-                      <p className="mt-1 text-lg font-extrabold text-white">18 Clientes</p>
-                      <p className="text-[10px] text-amber-400 font-bold">4 VIP Activos</p>
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">👑 Clientes CRM</span>
+                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white">18 Clientes</p>
+                      <p className="text-[9px] text-amber-400 font-bold">4 VIPs</p>
                     </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5">
-                      <span className="text-[10px] text-neutral-400 font-medium">⏳ Por Despachar</span>
-                      <p className="mt-1 text-lg font-extrabold text-amber-300">3 Pedidos</p>
-                      <p className="text-[10px] text-neutral-400">2 Delivery · 1 Pickup</p>
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">⏳ Despachos</span>
+                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-amber-300">3 Órdenes</p>
+                      <p className="text-[9px] text-neutral-400">Listos para enviar</p>
                     </div>
                   </div>
 
-                  {/* Compact Split */}
-                  <div className="grid gap-2.5 lg:grid-cols-[1.1fr_0.9fr]">
-                    {/* Left: 7 Days & Stock Alert */}
-                    <div className="space-y-2.5">
-                      {/* Stock Alert */}
-                      <div className="flex items-center justify-between rounded border border-amber-500/30 bg-amber-950/20 px-3 py-1.5 text-xs">
-                        <span className="flex items-center gap-1.5 text-amber-200 text-[10px] font-semibold">
-                          <iconify-icon icon="solar:danger-triangle-bold" className="text-amber-400"></iconify-icon>
-                          Stock Crítico:
-                        </span>
-                        <div className="flex gap-1.5">
-                          <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] text-amber-300 font-bold border border-amber-500/30">Pizza Margarita (2 uds)</span>
-                          <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] text-red-300 font-bold border border-red-500/30">Papas Rústicas (Agotado)</span>
-                        </div>
+                  {/* Compact Split: Left (Chart 7 Days) | Right (Mini CRM + Orders) */}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {/* Left: 7-Day Chart */}
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5 sm:p-3">
+                      <div className="flex items-center justify-between text-xs pb-1 border-b border-neutral-800">
+                        <span className="font-bold text-neutral-300 text-[10px] sm:text-[11px]">📊 Ventas Últimos 7 Días</span>
+                        <span className="text-[9px] text-neutral-400 font-mono">$1.090 Total</span>
                       </div>
-
-                      {/* 7-Day Chart */}
-                      <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-3">
-                        <div className="flex items-center justify-between text-xs pb-1.5 border-b border-neutral-800">
-                          <span className="font-bold text-neutral-300 text-[11px]">📊 Ventas de los Últimos 7 Días</span>
-                          <span className="text-[10px] text-neutral-400 font-mono">$1.090 Total</span>
+                      <div className="mt-2 grid grid-cols-7 gap-1 items-end h-14 sm:h-16">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-neutral-800 rounded-t h-5"></div>
+                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Lun</span>
                         </div>
-                        <div className="mt-2.5 grid grid-cols-7 gap-1.5 items-end h-16">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-neutral-800 rounded-t h-6"></div>
-                            <span className="text-[8px] text-neutral-500 font-mono">Lun</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-neutral-700 rounded-t h-9"></div>
-                            <span className="text-[8px] text-neutral-500 font-mono">Mar</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-neutral-800 rounded-t h-7"></div>
-                            <span className="text-[8px] text-neutral-500 font-mono">Mie</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-neutral-600 rounded-t h-11"></div>
-                            <span className="text-[8px] text-neutral-500 font-mono">Jue</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-neutral-500 rounded-t h-13"></div>
-                            <span className="text-[8px] text-neutral-500 font-mono">Vie</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-emerald-500 rounded-t h-16"></div>
-                            <span className="text-[8px] text-emerald-400 font-bold font-mono">Sab</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <div className="w-full bg-white rounded-t h-11"></div>
-                            <span className="text-[8px] text-white font-bold font-mono">Hoy</span>
-                          </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-neutral-700 rounded-t h-8"></div>
+                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Mar</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-neutral-800 rounded-t h-6"></div>
+                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Mie</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-neutral-600 rounded-t h-9"></div>
+                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Jue</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-neutral-500 rounded-t h-11"></div>
+                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Vie</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-emerald-500 rounded-t h-14"></div>
+                          <span className="text-[7px] sm:text-[8px] text-emerald-400 font-bold font-mono">Sab</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="w-full bg-white rounded-t h-10"></div>
+                          <span className="text-[7px] sm:text-[8px] text-white font-bold font-mono">Hoy</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Right: CRM & Orders Stream */}
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-3 space-y-2">
-                      <div className="flex items-center justify-between text-xs pb-1.5 border-b border-neutral-800 font-bold text-neutral-300">
-                        <span className="text-[11px]">👥 Clientes CRM & Pedidos</span>
-                        <span className="text-[9px] text-emerald-400">En Vivo</span>
+                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5 sm:p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs pb-1 border-b border-neutral-800 font-bold text-neutral-300">
+                        <span className="text-[10px] sm:text-[11px]">👥 Pedidos en Tiempo Real</span>
+                        <span className="text-[8px] text-emerald-400 font-mono">🟢 En Vivo</span>
                       </div>
 
-                      <div className="space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between rounded bg-[#111111] p-2 border border-neutral-800">
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center justify-between rounded bg-[#111111] p-1.5 sm:p-2 border border-neutral-800">
                           <div>
-                            <p className="font-bold text-white text-[10px]">Carlos Pérez <span className="text-[9px] text-amber-300 font-mono">👑 VIP</span></p>
-                            <p className="text-[9px] text-neutral-400">#ORD-104 · Delivery Chacao</p>
+                            <p className="font-bold text-white text-[10px]">Carlos Pérez <span className="text-[8px] text-amber-300 font-mono">👑 VIP</span></p>
+                            <p className="text-[8px] sm:text-[9px] text-neutral-400">#ORD-104 · Chacao</p>
                           </div>
                           <div className="text-right">
                             <p className="font-mono font-bold text-white text-[10px]">$24.50</p>
-                            <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[8px] text-emerald-400 font-bold">🟢 Entregado</span>
+                            <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[7px] sm:text-[8px] text-emerald-400 font-bold">Entregado</span>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between rounded bg-[#111111] p-2 border border-neutral-800">
+                        <div className="flex items-center justify-between rounded bg-[#111111] p-1.5 sm:p-2 border border-neutral-800">
                           <div>
-                            <p className="font-bold text-white text-[10px]">Ana Morales <span className="text-[9px] text-neutral-300 font-mono">🔁 Recurrente</span></p>
-                            <p className="text-[9px] text-neutral-400">#ORD-103 · Pickup</p>
+                            <p className="font-bold text-white text-[10px]">Ana Morales <span className="text-[8px] text-neutral-300 font-mono">🔁 Recurrente</span></p>
+                            <p className="text-[8px] sm:text-[9px] text-neutral-400">#ORD-103 · Pickup</p>
                           </div>
                           <div className="text-right">
                             <p className="font-mono font-bold text-white text-[10px]">$18.00</p>
-                            <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[8px] text-amber-400 font-bold">🟡 Pendiente</span>
+                            <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[7px] sm:text-[8px] text-amber-400 font-bold">Pendiente</span>
                           </div>
                         </div>
                       </div>
@@ -439,881 +420,602 @@ export default function FlowLandingPage() {
           </div>
 
           {/* Subtle bottom gradient transition */}
-          <div className="pointer-events-none absolute bottom-0 left-0 h-40 w-full bg-gradient-to-t from-[#0c0418] via-[#0c0418]/80 to-transparent"></div>
+          <div className="pointer-events-none absolute bottom-0 left-0 h-28 sm:h-40 w-full bg-gradient-to-t from-[#0c0418] via-[#0c0418]/80 to-transparent"></div>
         </main>
       </div>
 
       {/* ========================================================================= */}
-      {/* HIGH CONVICTION SCALING SECTION                                           */}
+      {/* 2. VIDEO SHOWCASE (FOCO PRINCIPAL #2: CONTENEDOR DEDICADO DE VIDEO)       */}
       {/* ========================================================================= */}
-      <section className="relative bg-[#0c0418] py-24 text-white md:py-32">
-        <div className="mx-auto max-w-7xl px-5 md:px-8">
+      <section id="video" className="relative bg-[#0c0418] py-16 sm:py-24 text-white border-b border-white/5">
+        <div className="pointer-events-none absolute left-1/2 top-10 h-80 w-80 -translate-x-1/2 rounded-full bg-violet-700/20 blur-3xl"></div>
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 md:px-8 relative z-10">
+          
           <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/40 bg-violet-500/15 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-violet-300">
-              Tecnología de Punta · Estándar USA
+            <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/40 bg-violet-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-violet-300">
+              <iconify-icon icon="solar:play-circle-bold" width="16" height="16" className="text-emerald-400"></iconify-icon>
+              Video Demostrativo
             </span>
-            <h2 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl lg:text-6xl">
-              Estás haciendo las cosas bien.<br />
-              <span className="text-[#7C3AED]">Con Flow tu negocio escala al siguiente nivel.</span>
+            <h2 className="mt-3.5 text-2xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
+              Mira cómo vende Flow en 60 segundos.
             </h2>
-            <p className="mt-6 text-base leading-relaxed text-slate-300 sm:text-lg">
-              No necesitas cambiar tu forma de trabajar ni complicarte con herramientas difíciles. Flow es la solución definitiva: pensada, probada y estructurada con la mayor tecnología de Estados Unidos para que tu WhatsApp e Instagram vendan sin descanso.
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-300 font-medium">
+              Descubre cómo un cliente escribe por WhatsApp, la IA responde con los datos de tu empresa, envía el enlace de compra y organiza el pedido al instante.
             </p>
           </div>
 
-          <div className="mt-16 grid gap-6 md:grid-cols-3">
-            {/* Card 1 */}
-            <div className="card-glow rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-8 backdrop-blur-xl transition duration-300 hover:border-violet-400/60 hover:-translate-y-1">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white shadow-lg shadow-violet-500/30">
-                <iconify-icon icon="solar:moon-stars-bold-duotone" width="28" height="28"></iconify-icon>
-              </div>
-              <h3 className="mt-6 text-xl font-bold tracking-tight text-white">Ventas activas 24/7 mientras duermes</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-300">
-                Tus clientes pueden consultar, armar pedidos y pagar a las 11:00 p. m. o un domingo por la mañana. Flow responde en segundos con precisión quirúrgica.
-              </p>
-            </div>
+          <div className="mt-8 sm:mt-10 rounded-3xl border-2 border-violet-500/30 bg-gradient-to-b from-[#180d2d] to-[#0a0316] p-2.5 sm:p-4 shadow-2xl shadow-violet-950/60 backdrop-blur-xl">
+            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-slate-950 border border-white/10 flex items-center justify-center group cursor-pointer">
+              <div className="absolute inset-0 bg-gradient-to-tr from-black via-slate-950 to-violet-950/80"></div>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-600/20 via-transparent to-transparent"></div>
 
-            {/* Card 2 */}
-            <div className="card-glow rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-8 backdrop-blur-xl transition duration-300 hover:border-emerald-400/60 hover:-translate-y-1">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30">
-                <iconify-icon icon="solar:dollar-minimalistic-bold-duotone" width="28" height="28"></iconify-icon>
-              </div>
-              <h3 className="mt-6 text-xl font-bold tracking-tight text-white">0% Comisiones: Todo el margen es tuyo</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-300">
-                No te quitamos porcentaje de tus ventas. Tienes la potencia de un Shopify integrado con agentes de IA de última generación por una tarifa plana insuperable.
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div className="card-glow rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-8 backdrop-blur-xl transition duration-300 hover:border-indigo-400/60 hover:-translate-y-1">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30">
-                <iconify-icon icon="solar:tuning-square-2-bold-duotone" width="28" height="28"></iconify-icon>
-              </div>
-              <h3 className="mt-6 text-xl font-bold tracking-tight text-white">Automatización completa de punta a punta</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-300">
-                Desde la primera pregunta, pasando por el catálogo interactivo, confirmación de stock, cálculo de tasas y reporte para despacho. Todo fluye solo.
-              </p>
-            </div>
-          </div>
-
-          {/* High Tech Banner */}
-          <div className="mt-12 rounded-3xl border border-violet-500/30 bg-gradient-to-r from-violet-950/80 via-slate-900 to-violet-950/80 p-8 text-center md:p-10 shadow-2xl">
-            <div className="mx-auto max-w-3xl">
-              <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
-                <iconify-icon icon="solar:check-circle-bold" width="16" height="16"></iconify-icon>
-                Ecosistema Blindado y Confiable
-              </span>
-              <h3 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl text-white">
-                “Es como tener a tu mejor vendedor y a tu gerente de operaciones trabajando en equipo 24 horas al día.”
-              </h3>
-              <p className="mt-3 text-sm text-slate-300">
-                Tus clientes reciben una experiencia VIP al instante y tu equipo se enfoca únicamente en empacar y crecer.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* HOW IT WORKS                                                              */}
-      {/* ========================================================================= */}
-      <section id="como-funciona" className="relative overflow-hidden bg-[#0c0418] py-24 text-white md:py-32">
-        <div className="pointer-events-none absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-violet-700/20 blur-3xl"></div>
-        <div className="relative mx-auto max-w-7xl px-5 md:px-8">
-          <div className="mx-auto max-w-4xl text-center">
-            <span className="text-xs font-bold uppercase tracking-widest text-violet-400">Sencillo, rápido y probado</span>
-            <h2 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl lg:text-6xl">
-              Cómo vende Flow por ti en 4 pasos.
-            </h2>
-            <p className="mt-5 text-base leading-relaxed text-slate-400 sm:text-lg">
-              Sin cambiar tu número actual de WhatsApp ni obligar a tus clientes a descargar nada raro. Flow se adapta a tus productos y habla como tú.
-            </p>
-          </div>
-
-          <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Step 1 */}
-            <div className="card-glow relative rounded-3xl border border-white/15 bg-white/[0.04] p-7 backdrop-blur-xl transition hover:border-violet-400/60">
-              <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white font-bold shadow-lg">1</span>
-                <div className="flex items-center gap-2">
-                  <iconify-icon icon="logos:whatsapp-icon" width="24" height="24"></iconify-icon>
-                  <iconify-icon icon="skill-icons:instagram" width="24" height="24"></iconify-icon>
+              <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center">
+                <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-gradient-to-tr from-[#7C3AED] to-emerald-400 text-slate-950 shadow-2xl shadow-violet-500/50 transition duration-300 group-hover:scale-110">
+                  <iconify-icon icon="solar:play-bold" width="32" height="32" className="ml-1 text-white"></iconify-icon>
                 </div>
-              </div>
-              <h3 className="mt-5 text-lg font-bold text-white">El cliente te escribe</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Por WhatsApp o Instagram a cualquier hora. Preguntando precios, modelos o combos.
-              </p>
-            </div>
-
-            {/* Step 2 */}
-            <div className="card-glow relative rounded-3xl border border-white/15 bg-white/[0.04] p-7 backdrop-blur-xl transition hover:border-violet-400/60">
-              <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white font-bold shadow-lg">2</span>
-                <iconify-icon icon="solar:magic-stick-3-bold-duotone" width="24" height="24" className="text-violet-300"></iconify-icon>
-              </div>
-              <h3 className="mt-5 text-lg font-bold text-white">Flow responde en segundos</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Con precio exacto, disponibilidad en tiempo real y el tono cercano y profesional de tu marca.
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="card-glow relative rounded-3xl border border-white/15 bg-white/[0.04] p-7 backdrop-blur-xl transition hover:border-violet-400/60">
-              <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white font-bold shadow-lg">3</span>
-                <iconify-icon icon="solar:cart-check-bold-duotone" width="24" height="24" className="text-violet-300"></iconify-icon>
-              </div>
-              <h3 className="mt-5 text-lg font-bold text-white">Cierra la venta con e-commerce</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Redirecciona a tu catálogo web interactivo o toma los datos de entrega y pago directo en el chat.
-              </p>
-            </div>
-
-            {/* Step 4 */}
-            <div className="card-glow relative rounded-3xl border border-white/15 bg-white/[0.04] p-7 backdrop-blur-xl transition hover:border-violet-400/60">
-              <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white font-bold shadow-lg">4</span>
-                <iconify-icon icon="solar:box-minimalistic-bold-duotone" width="24" height="24" className="text-violet-300"></iconify-icon>
-              </div>
-              <h3 className="mt-5 text-lg font-bold text-white">Tu equipo solo despacha</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                El pedido entra organizado a tu panel con nota de entrega lista y cliente registrado en tu CRM.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* ALL IN ONE ECOSYSTEM                                                      */}
-      {/* ========================================================================= */}
-      <section id="todo-en-uno" className="bg-[#f8f7fb] py-24 md:py-32">
-        <div className="mx-auto max-w-7xl px-5 md:px-8">
-          <div className="grid items-end gap-8 lg:grid-cols-2">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[#7C3AED]">
-                <iconify-icon icon="solar:layers-minimalistic-bold" width="16" height="16"></iconify-icon>
-                Ecosistema Integral Centralizado
-              </div>
-              <h2 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-4xl md:text-5xl">
-                No son 5 herramientas sueltas.<br />Es un solo sistema definitivo.
-              </h2>
-            </div>
-            <p className="text-base leading-relaxed text-slate-600 sm:text-lg font-medium">
-              Conectamos tus conversaciones de WhatsApp e Instagram con tu e-commerce, CRM, inventario y equipo en un solo ecosistema inteligente. Automatización total para que tu negocio destaque a un nivel sin igual.
-            </p>
-          </div>
-
-          <div className="mt-16 grid gap-6 lg:grid-cols-2">
-            {/* Card 1: Meta AI Agents */}
-            <article className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 transition duration-300 hover:border-violet-400 hover:shadow-2xl hover:-translate-y-1 md:p-10">
-              <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 p-3 text-[#7C3AED] shadow-sm">
-                  <iconify-icon icon="solar:chat-square-like-bold-duotone" width="32" height="32"></iconify-icon>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3.5 py-1.5">
-                  <iconify-icon icon="logos:whatsapp-icon" width="20" height="20"></iconify-icon>
-                  <span className="text-slate-300">|</span>
-                  <iconify-icon icon="skill-icons:instagram" width="20" height="20"></iconify-icon>
-                  <span className="text-xs font-bold text-slate-800 ml-1">Meta Conectado</span>
-                </div>
-              </div>
-              <h3 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-950">Agentes de IA en WhatsApp e Instagram</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600 font-medium">
-                Responden dudas complejas, envían fotos de productos, recomiendan opciones, recuperan carritos abandonados y concretan pagos las 24 horas sin sonar nunca como un robot genérico.
-              </p>
-              <div className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
-                <div className="flex items-center justify-between text-xs font-bold text-violet-900">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                    Atención Multicanal Inteligente
-                  </span>
-                  <span className="text-[#7C3AED]">Sin colas de espera</span>
-                </div>
-              </div>
-            </article>
-
-            {/* Card 2: International Grade E-commerce */}
-            <article className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 transition duration-300 hover:border-violet-400 hover:shadow-2xl hover:-translate-y-1 md:p-10">
-              <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 p-3 text-[#7C3AED] shadow-sm">
-                  <iconify-icon icon="solar:shop-2-bold-duotone" width="32" height="32"></iconify-icon>
-                </div>
-                <span className="rounded-full bg-emerald-100 px-3.5 py-1 text-xs font-extrabold text-emerald-800 border border-emerald-200">
-                  0% Comisiones
-                </span>
-              </div>
-              <h3 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-950">E-commerce de Grado Internacional</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600 font-medium">
-                Tus clientes ven fotos en alta resolución, precios en dólares o bolívares y compran en 2 clics desde su celular. El agente los redirecciona o ellos compran directamente con checkout instantáneo.
-              </p>
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1.5">
-                    <iconify-icon icon="solar:card-check-bold" width="18" height="18" className="text-violet-600"></iconify-icon>
-                    Pagos: Pago Móvil, Zelle, Tarjeta, Efectivo
-                  </span>
-                  <span className="text-emerald-700 font-bold">Ultra Rápido</span>
-                </div>
-              </div>
-            </article>
-
-            {/* Card 3: CRM & Real-time Inventory */}
-            <article className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 transition duration-300 hover:border-violet-400 hover:shadow-2xl hover:-translate-y-1 md:p-10">
-              <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 p-3 text-[#7C3AED] shadow-sm">
-                  <iconify-icon icon="solar:users-group-rounded-bold-duotone" width="32" height="32"></iconify-icon>
-                </div>
-                <span className="rounded-full bg-violet-100 px-3.5 py-1 text-xs font-extrabold text-[#7C3AED] border border-violet-200">
-                  CRM Flow
-                </span>
-              </div>
-              <h3 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-950">CRM, Pedidos e Inventario en Tiempo Real</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600 font-medium">
-                Cada cliente que escribe queda guardado automáticamente con su historial de compras, dirección y preferencias. Sabes exactamente qué tienes en stock, qué se vendió y a quién hacerle re-marketing.
-              </p>
-              <div className="mt-6 grid grid-cols-3 gap-2.5 text-center text-xs">
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
-                  <p className="text-slate-500 font-bold text-[11px]">Pedidos Hoy</p>
-                  <p className="text-xl font-extrabold text-slate-950">42</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
-                  <p className="text-slate-500 font-bold text-[11px]">Clientes CRM</p>
-                  <p className="text-xl font-extrabold text-slate-950">1,240</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
-                  <p className="text-slate-500 font-bold text-[11px]">Stock Alerta</p>
-                  <p className="text-xl font-extrabold text-emerald-600">Al día</p>
-                </div>
-              </div>
-            </article>
-
-            {/* Card 4: Team Operations Flow */}
-            <article className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 transition duration-300 hover:border-violet-400 hover:shadow-2xl hover:-translate-y-1 md:p-10">
-              <div className="flex items-center justify-between">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 p-3 text-[#7C3AED] shadow-sm">
-                  <iconify-icon icon="solar:clipboard-check-bold-duotone" width="32" height="32"></iconify-icon>
-                </div>
-                <span className="rounded-full bg-slate-100 px-3.5 py-1 text-xs font-extrabold text-slate-800 border border-slate-200">
-                  Cero Enredos
-                </span>
-              </div>
-              <h3 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-950">Flujo Colaborativo para tu Equipo</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600 font-medium">
-                Un tablero Kanban visual donde cada orden pasa por sus fases: nuevo pedido, pago verificado, preparación y despacho. Tu equipo sabe exactamente qué hacer sin que tú tengas que estar encima.
-              </p>
-              <div className="mt-6 grid grid-cols-3 gap-2.5 text-xs font-bold">
-                <div className="rounded-xl bg-violet-100/70 p-3 text-center text-violet-950 border border-violet-200">
-                  ✓ Pagado
-                </div>
-                <div className="rounded-xl bg-amber-100/70 p-3 text-center text-amber-950 border border-amber-200">
-                  ⚡ En Cocina
-                </div>
-                <div className="rounded-xl bg-emerald-100/70 p-3 text-center text-emerald-950 border border-emerald-200">
-                  🚀 En Delivery
-                </div>
-              </div>
-            </article>
-          </div>
-
-          {/* Digital Presence Callout */}
-          <div className="card-glow-strong mt-8 rounded-3xl bg-slate-950 p-8 text-white md:p-10 border border-white/10">
-            <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
-              <div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-violet-300">
-                  <iconify-icon icon="solar:global-bold-duotone" width="26" height="26"></iconify-icon>
-                </div>
-                <h3 className="mt-5 text-2xl font-extrabold tracking-tight md:text-3xl">
-                  También construimos tu presencia digital y tienda web a medida
+                
+                <h3 className="mt-4 text-base sm:text-xl font-extrabold text-white">
+                  Haz clic para reproducir el recorrido en video
                 </h3>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-300 sm:text-base font-normal">
-                  Creamos tu e-commerce y catálogo profesional exactamente como lo sueñes o como nos lo envíes. Todo conectado directamente con tus números de WhatsApp y cuentas de Instagram oficiales.
+                <p className="mt-1 text-xs text-slate-400 font-mono">
+                  Duración: 1:15 min · Demostración en tiempo real
                 </p>
               </div>
-              <a href="#diagnostico" className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-4 text-sm font-bold text-slate-950 shadow-xl transition duration-200 hover:bg-violet-100">
-                Quiero mi catálogo así
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18" style={{ strokeWidth: 2 }}></iconify-icon>
-              </a>
+
+              <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-[11px] text-slate-400 font-mono z-10 hidden sm:flex">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Flow Video Tour HD
+                </span>
+                <span>0:00 / 1:15</span>
+              </div>
             </div>
           </div>
+
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* LIVE INTERACTIVE CATALOG DEMO                                             */}
+      {/* 3. LIVE INTERACTIVE DEMO DON LUIGI (FOCO PRINCIPAL #3: CONECTADO REAL)     */}
       {/* ========================================================================= */}
-      <section id="catalogo-demo" className="bg-white py-24 md:py-32">
-        <div className="mx-auto max-w-7xl px-5 md:px-8">
+      <section id="catalogo-demo" className="bg-white py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
+          
           <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[#7C3AED]">
-              <iconify-icon icon="solar:smartphone-2-bold" width="16" height="16"></iconify-icon>
-              Catálogo E-commerce en Vivo
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-[#7C3AED]">
+              <iconify-icon icon="solar:smartphone-2-bold" width="15" height="15"></iconify-icon>
+              Demo en Vivo · Conectado en Tiempo Real
             </span>
-            <h2 className="mt-5 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl md:text-5xl">
-              Así es el catálogo moderno que tendrán tus clientes.
+            <h2 className="mt-3.5 text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-slate-950">
+              Prueba el catálogo de Don Luigi aquí mismo.
             </h2>
-            <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg font-medium">
-              Un e-commerce ultra veloz, visual y diseñado para vender. <strong>Puedes simular compras reales desde el catálogo aquí mismo</strong>, probar cómo se agregan los productos al carrito y experimentar todo el flujo de pedidos tal como lo vivirán tus clientes. Lo personalizamos con tu logo, colores, fotos y categorías a tu medida.
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-600 font-medium">
+              <strong>Puedes simular un pedido real directamente en la tienda aquí abajo</strong>. Diseñado para celulares, con carga instantánea y checkout en 2 clics. Lo adaptamos con tu logo, fotos, precios y categorías.
             </p>
           </div>
 
-          {/* Live Embed Frame Container */}
-          <div className="card-glow-strong relative mt-12 overflow-hidden rounded-3xl border border-slate-800 bg-[#0f0a1c] p-2.5 md:p-4 shadow-2xl">
+          <div className="card-glow-strong relative mt-8 sm:mt-10 overflow-hidden rounded-3xl border border-slate-800 bg-[#0f0a1c] p-2 sm:p-3 shadow-2xl">
             {/* Browser Top Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#160f27] px-4 py-3 text-white border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full bg-red-500"></span>
-                <span className="h-3 w-3 rounded-full bg-amber-500"></span>
-                <span className="h-3 w-3 rounded-full bg-emerald-500"></span>
-                <span className="ml-2 hidden text-xs font-bold text-slate-300 sm:inline">Tienda PWA Don Luigi · Prueba interactiva en vivo</span>
-              </div>
-
-              <div className="flex flex-1 max-w-md items-center justify-center">
-                <div className="flex w-full items-center gap-2 rounded-xl bg-slate-900 px-4 py-1.5 text-xs text-slate-300 font-mono border border-white/10">
-                  <iconify-icon icon="solar:lock-bold" className="text-emerald-400" width="14" height="14"></iconify-icon>
-                  <span className="truncate">https://donluigi.martes.app</span>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#160f27] px-3.5 py-2.5 text-white border-b border-white/10">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                <span className="ml-1 text-[11px] font-bold text-slate-300 truncate">Tienda PWA Don Luigi</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <a
-                  href="/don-luigi"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-violet-600 shadow-md"
-                >
-                  <span>Abrir en pantalla completa</span>
-                  <iconify-icon icon="solar:arrow-right-up-linear" width="14" height="14"></iconify-icon>
+                <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-[#7C3AED] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-violet-600 shadow-sm">
+                  <span>Abrir pantalla completa</span>
+                  <iconify-icon icon="solar:arrow-right-up-linear" width="12" height="12"></iconify-icon>
                 </a>
               </div>
             </div>
 
             {/* Embedded Interactive Iframe */}
-            <div className="relative h-[52rem] w-full overflow-hidden rounded-b-2xl bg-slate-100">
-              <iframe
+            <div className="relative h-[36rem] sm:h-[46rem] md:h-[52rem] w-full overflow-hidden rounded-b-xl bg-slate-100">
+              <iframe 
                 id="catalogFrame"
-                src="/don-luigi"
-                title="Catálogo E-commerce Demo Flow"
+                src="/don-luigi" 
+                title="Catálogo E-commerce Demo Don Luigi" 
                 className="h-full w-full border-0"
                 loading="lazy"
                 allow="payment; geolocation"
               ></iframe>
             </div>
 
-            {/* Bottom Feature Callout under Embed */}
-            <div className="mt-4 grid gap-4 p-2 sm:grid-cols-3 text-white">
-              <div className="flex items-center gap-3.5 rounded-2xl bg-white/[0.06] p-4 border border-white/10">
-                <iconify-icon icon="solar:cart-check-bold" width="24" height="24" className="text-emerald-400 shrink-0"></iconify-icon>
-                <p className="text-xs text-slate-200"><strong>Simula tu pedido:</strong> Agrega hamburguesas o pizzas y mira lo fácil que es el checkout.</p>
+            {/* Bottom Feature Callout */}
+            <div className="mt-3 grid gap-2 p-1 sm:grid-cols-3 text-white text-xs">
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-3 border border-white/10">
+                <iconify-icon icon="solar:cart-check-bold" width="20" height="20" className="text-emerald-400 shrink-0"></iconify-icon>
+                <p className="text-slate-200"><strong>Prueba el carrito:</strong> Agrega hamburguesas o pizzas y mira lo fácil que es el checkout.</p>
               </div>
-              <div className="flex items-center gap-3.5 rounded-2xl bg-white/[0.06] p-4 border border-white/10">
-                <iconify-icon icon="solar:shield-check-bold" width="24" height="24" className="text-violet-400 shrink-0"></iconify-icon>
-                <p className="text-xs text-slate-200"><strong>0% comisiones:</strong> Todo lo que cobras por tu catálogo va 100% directo a tus cuentas.</p>
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-3 border border-white/10">
+                <iconify-icon icon="solar:shield-check-bold" width="20" height="20" className="text-violet-400 shrink-0"></iconify-icon>
+                <p className="text-slate-200"><strong>0% comisiones:</strong> Pagos directos a tu Pago Móvil, Zelle o cuenta bancaria.</p>
               </div>
-              <div className="flex items-center gap-3.5 rounded-2xl bg-white/[0.06] p-4 border border-white/10">
-                <iconify-icon icon="solar:chat-round-dots-bold" width="24" height="24" className="text-indigo-400 shrink-0"></iconify-icon>
-                <p className="text-xs text-slate-200"><strong>Conexión con la IA:</strong> El agente manda el link del carrito directo al chat del cliente.</p>
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-3 border border-white/10">
+                <iconify-icon icon="solar:chat-round-dots-bold" width="20" height="20" className="text-indigo-400 shrink-0"></iconify-icon>
+                <p className="text-slate-200"><strong>Conectado a la IA:</strong> El agente manda el link directo al chat del cliente.</p>
               </div>
             </div>
           </div>
+
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* CONTROL SECTION: KNOWLEDGE BASE, 24/7 ATTENTION & END-TO-END FLOW        */}
+      {/* 4. CÓMO FUNCIONA & CONTROL (TARJETAS + BOTÓN DE DESPLIEGUE EDGE-TO-EDGE)    */}
       {/* ========================================================================= */}
-      <section id="control" className="relative bg-[#070110] py-24 text-white md:py-32 overflow-hidden border-t border-b border-white/5">
-        <div className="mx-auto max-w-7xl px-5 md:px-8">
-          {/* Section Header */}
+      <section id="control" className="relative bg-[#070110] py-16 sm:py-24 text-white overflow-hidden border-t border-b border-white/5">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
+          
           <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-violet-300 mb-4">
-              Atención Inteligente 24/7 · Gestión de Venta de Principio a Fin
+            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-violet-300 mb-3">
+              Atención Inteligente 24/7 · Gestión de Principio a Fin
             </span>
-            <h2 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
               Tú tienes el control absoluto.<br />
               <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-emerald-400 bg-clip-text text-transparent">
                 Atención humana, conocimiento de tu empresa y ventas guiadas.
               </span>
             </h2>
-            <p className="mt-5 text-base leading-relaxed text-slate-300 sm:text-lg">
-              Flow tiene todo el conocimiento de tu empresa (FAQs, envíos, métodos de pago y políticas) y responde las 24 horas en segundos. Recuerda a tus clientes por su nombre, los envía a la tienda con el link de compra y <strong>los espera en el chat para confirmar el pago y dejárselo listo a tu equipo de despacho</strong>.
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-300 font-medium">
+              Flow tiene todo el conocimiento de tu negocio (FAQs, envíos, métodos de pago y políticas) y responde las 24 horas en segundos. Recuerda a tus clientes por su nombre, los envía a la tienda con el link de compra y <strong>los espera en el chat para confirmar el pago</strong>.
             </p>
           </div>
 
+          {/* 3 Core Highlight Cards */}
+          <div className="mt-8 grid gap-4 sm:grid-cols-3 text-left">
+            <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/30 to-black/40 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm mb-1.5">
+                <iconify-icon icon="solar:user-check-bold" width="18" height="18"></iconify-icon>
+                <span>Conoce a tu Cliente</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed font-medium">
+                Sabe el nombre de tu cliente y sus compras previas. Retoma la charla con total familiaridad sin sentirse como un interrogatorio.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-950/30 to-black/40 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-violet-300 font-bold text-xs sm:text-sm mb-1.5">
+                <iconify-icon icon="solar:database-bold" width="18" height="18"></iconify-icon>
+                <span>Knowledge Base & FAQs 24/7</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed font-medium">
+                Tiene la información clave: zonas de delivery, formas de pago, garantías y políticas para responder dudas en segundos.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-fuchsia-500/30 bg-gradient-to-b from-fuchsia-950/30 to-black/40 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-fuchsia-400 font-bold text-xs sm:text-sm mb-1.5">
+                <iconify-icon icon="solar:bag-check-bold" width="18" height="18"></iconify-icon>
+                <span>Gestión de Principio a Fin</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed font-medium">
+                Envía el link al catálogo, espera al cliente en el chat para recibir el comprobante y deja la orden lista para tu despacho.
+              </p>
+            </div>
+          </div>
+
+          {/* Edge-to-Edge Expansion Trigger Bar */}
+          <div className="mt-6">
+            <button 
+              type="button" 
+              onClick={() => setWorkflowExpanded(!workflowExpanded)}
+              className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-950/60 via-slate-900 to-violet-950/60 hover:border-violet-400/60 transition duration-300 shadow-xl text-left group cursor-pointer"
+            >
+              <div className="flex items-center gap-3.5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600/25 text-violet-300 border border-violet-500/30 group-hover:bg-[#7C3AED] group-hover:text-white transition">
+                  <iconify-icon icon="solar:diagram-up-bold" width="20" height="20"></iconify-icon>
+                </span>
+                <div>
+                  <p className="text-xs sm:text-sm font-extrabold text-white">
+                    {workflowExpanded ? 'Ocultar caso detallado' : 'Ver caso real paso a paso (Ferretería & Repuestos)'}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-medium">Diagrama visual de cómo Flow atiende a Carlos Mendoza con tornillos 1/2"</p>
+                </div>
+              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-violet-300 group-hover:bg-white group-hover:text-slate-950 transition">
+                <iconify-icon icon="solar:alt-arrow-down-linear" width="18" height="18" className={`transition duration-300 ${workflowExpanded ? 'rotate-180' : ''}`}></iconify-icon>
+              </div>
+            </button>
+          </div>
+
           {/* Node Graph Canvas Container */}
-          <div className="relative mt-14 rounded-3xl border border-white/15 bg-gradient-to-b from-[#110722] to-[#0a0316] p-6 sm:p-10 lg:p-12 shadow-2xl overflow-hidden">
-            {/* Ambient Canvas Glow */}
-            <div className="pointer-events-none absolute -left-20 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-emerald-600/15 blur-3xl"></div>
-            <div className="pointer-events-none absolute -right-20 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-fuchsia-600/15 blur-3xl"></div>
+          {workflowExpanded && (
+            <div className="relative mt-6 rounded-3xl border border-white/15 bg-gradient-to-b from-[#110722] to-[#0a0316] p-4 sm:p-8 lg:p-10 shadow-2xl overflow-hidden transition-all duration-500">
+              <div className="pointer-events-none absolute -left-20 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-emerald-600/15 blur-3xl"></div>
+              <div className="pointer-events-none absolute -right-20 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-fuchsia-600/15 blur-3xl"></div>
 
-            {/* Node Graph Wrapper */}
-            <div className="relative grid gap-8 lg:grid-cols-[18rem_1fr_21rem] items-center z-10">
-              {/* ================= LEFT COLUMN: Cliente & Knowledge ================= */}
-              <div className="space-y-6 flex flex-col justify-center">
-                {/* Left Node 1: Cliente Preguntando */}
-                <div className="relative rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 via-[#130b24] to-slate-950 p-4 shadow-xl backdrop-blur-md transition hover:border-emerald-400">
-                  <div className="flex items-center justify-between">
+              <div className="relative grid gap-6 lg:grid-cols-[17rem_1fr_20rem] items-center z-10">
+                {/* Left Column */}
+                <div className="space-y-4 sm:space-y-5 flex flex-col justify-center">
+                  <div className="relative rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 via-[#130b24] to-slate-950 p-4 shadow-xl backdrop-blur-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 font-bold shadow-md">
+                          <iconify-icon icon="logos:whatsapp-icon" width="16" height="16"></iconify-icon>
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-white">Carlos Mendoza</p>
+                          <p className="text-[10px] text-emerald-400 font-medium">Cliente en WhatsApp</p>
+                        </div>
+                      </div>
+                      <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    </div>
+                    
+                    <div className="mt-2.5 rounded-xl bg-black/50 p-2.5 text-xs leading-relaxed text-slate-200 border border-emerald-500/20">
+                      “¡Buenas tardes! ¿Tienen <strong>tornillos hexagonales de 1/2 pulgada</strong> y <strong>empacaduras</strong>? ¿Hacen envíos hoy en Caracas y qué pagos aceptan?”
+                    </div>
+                  </div>
+
+                  <div className="relative rounded-2xl border-2 border-violet-500/40 bg-gradient-to-b from-violet-950/40 via-[#130b24] to-slate-950 p-4 shadow-xl backdrop-blur-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-md">
+                          <iconify-icon icon="solar:database-bold" width="16" height="16"></iconify-icon>
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-white">Knowledge & FAQs de tu Empresa</p>
+                          <p className="text-[10px] text-violet-300 font-medium">Información Oficial</p>
+                        </div>
+                      </div>
+                      <span className="rounded bg-violet-500/20 px-2 py-0.5 text-[8px] font-bold text-violet-300 font-mono">BASE DE DATOS</span>
+                    </div>
+                    
+                    <div className="mt-2.5 space-y-1.5 text-xs">
+                      <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
+                        <iconify-icon icon="solar:document-text-bold" className="text-amber-400 shrink-0" width="15" height="15"></iconify-icon>
+                        <span><strong>FAQs & Envíos:</strong> Delivery activo hoy en Caracas + Pagos (Pago Móvil / Zelle)</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
+                        <iconify-icon icon="solar:user-check-bold" className="text-emerald-400 shrink-0" width="15" height="15"></iconify-icon>
+                        <span><strong>Memoria:</strong> Carlos Mendoza (Taller Mecánico · Cliente frecuente)</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
+                        <iconify-icon icon="solar:clock-circle-bold" className="text-violet-400 shrink-0" width="15" height="15"></iconify-icon>
+                        <span><strong>24/7 en Segundos:</strong> Respuestas inmediatas sin esperas</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Center Column */}
+                <div className="relative rounded-3xl border-2 border-violet-400/50 bg-gradient-to-b from-[#1c0e35] via-[#120724] to-[#0e041c] p-5 sm:p-6 shadow-2xl backdrop-blur-xl max-w-md mx-auto w-full">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20">
-                        <iconify-icon icon="logos:whatsapp-icon" width="18" height="18"></iconify-icon>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-[#7C3AED] text-white shadow-md">
+                        <iconify-icon icon="solar:bolt-bold-duotone" width="20" height="20"></iconify-icon>
                       </div>
                       <div>
-                        <p className="text-xs font-extrabold text-white">Carlos Mendoza</p>
-                        <p className="text-[10px] text-emerald-400 font-medium">Cliente en WhatsApp</p>
+                        <h4 className="text-xs sm:text-sm font-extrabold text-white">Asistente Inteligente Flow</h4>
+                        <p className="text-[10px] text-violet-300 font-semibold">Atendiendo y gestionando la venta</p>
                       </div>
                     </div>
-                    <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
-                  </div>
-                  
-                  <div className="mt-3 rounded-xl bg-black/50 p-3 text-xs leading-relaxed text-slate-200 border border-emerald-500/20">
-                    “¡Buenas tardes! ¿Tienen <strong>tornillos hexagonales de 1/2 pulgada</strong> y <strong>empacaduras</strong>? ¿Hacen envíos hoy en Caracas y qué pagos aceptan?”
-                  </div>
-
-                  {/* Connection Port Right */}
-                  <div className="hidden lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full bg-[#0c0418] border-2 border-emerald-400 shadow-[0_0_12px_#10b981]">
-                    <div className="h-2.5 w-2.5 rounded-full bg-emerald-400"></div>
-                  </div>
-                </div>
-
-                {/* Left Node 2: Knowledge Base & FAQs de la Empresa */}
-                <div className="relative rounded-2xl border-2 border-violet-500/40 bg-gradient-to-b from-violet-950/40 via-[#130b24] to-slate-950 p-4 shadow-xl backdrop-blur-md transition hover:border-violet-400">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-md shadow-violet-500/20">
-                        <iconify-icon icon="solar:database-bold" width="18" height="18"></iconify-icon>
-                      </div>
-                      <div>
-                        <p className="text-xs font-extrabold text-white">Knowledge & FAQs de tu Empresa</p>
-                        <p className="text-[10px] text-violet-300 font-medium">Información Oficial</p>
-                      </div>
-                    </div>
-                    <span className="rounded bg-violet-500/20 px-2 py-0.5 text-[9px] font-bold text-violet-300 font-mono">BASE DE DATOS</span>
-                  </div>
-                  
-                  {/* Clean Business Information Points */}
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
-                      <iconify-icon icon="solar:document-text-bold" className="text-amber-400 shrink-0" width="16" height="16"></iconify-icon>
-                      <span><strong>FAQs & Envíos:</strong> Delivery activo hoy en Caracas + Pagos (Pago Móvil / Zelle)</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
-                      <iconify-icon icon="solar:user-check-bold" className="text-emerald-400 shrink-0" width="16" height="16"></iconify-icon>
-                      <span><strong>Memoria:</strong> Cliente Carlos (Taller Mecánico en Caracas · Cliente frecuente)</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 rounded-lg bg-black/40 p-2 border border-white/5 text-[11px] text-slate-200">
-                      <iconify-icon icon="solar:clock-circle-bold" className="text-violet-400 shrink-0" width="16" height="16"></iconify-icon>
-                      <span><strong>24/7 en Segundos:</strong> Respuestas inmediatas sin colas de espera</span>
-                    </div>
-                  </div>
-
-                  {/* Connection Port Right */}
-                  <div className="hidden lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full bg-[#0c0418] border-2 border-violet-400 shadow-[0_0_12px_#a855f7]">
-                    <div className="h-2.5 w-2.5 rounded-full bg-violet-400"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ================= CENTER COLUMN: Asistente Flow Gestionando la Venta ================= */}
-              <div className="relative rounded-3xl border-2 border-violet-400/50 bg-gradient-to-b from-[#1c0e35] via-[#120724] to-[#0e041c] p-6 shadow-2xl backdrop-blur-xl max-w-md mx-auto w-full">
-                {/* Flow Badge Header */}
-                <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-[#7C3AED] text-white shadow-lg shadow-violet-500/40">
-                      <iconify-icon icon="solar:bolt-bold-duotone" width="22" height="22"></iconify-icon>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-extrabold text-white">Asistente Inteligente Flow</h4>
-                      <p className="text-[11px] text-violet-300 font-semibold">Atendiendo y gestionando la venta</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 border border-emerald-500/30 animate-pulse">
-                    ● En Línea 24/7
-                  </span>
-                </div>
-
-                {/* Left Input Ports (Hidden on mobile) */}
-                <div className="hidden lg:flex absolute -left-3.5 top-1/3 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full bg-[#120a1f] border-2 border-emerald-400 shadow-[0_0_10px_#10b981]">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400"></div>
-                </div>
-                <div className="hidden lg:flex absolute -left-3.5 top-2/3 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full bg-[#120a1f] border-2 border-purple-400 shadow-[0_0_10px_#a855f7]">
-                  <div className="h-2 w-2 rounded-full bg-purple-400"></div>
-                </div>
-
-                {/* Steps of What Flow Does */}
-                <div className="mt-4 space-y-3 text-xs">
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-white/10 flex items-start gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300 font-bold text-[11px]">1</span>
-                    <div>
-                      <p className="font-bold text-white text-[11px]">Responde con el Knowledge de tu negocio</p>
-                      <p className="text-[10px] text-slate-300">Resuelve dudas de envíos, métodos de pago y condiciones con la información de tu empresa.</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-white/10 flex items-start gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-500/20 text-violet-300 font-bold text-[11px]">2</span>
-                    <div>
-                      <p className="font-bold text-white text-[11px]">Envía el enlace de compra</p>
-                      <p className="text-[10px] text-slate-300">Guía al cliente al e-commerce para que elija los productos y arme su orden fácilmente.</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-white/[0.04] p-3 border border-white/10 flex items-start gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-fuchsia-500/20 text-fuchsia-300 font-bold text-[11px]">3</span>
-                    <div>
-                      <p className="font-bold text-white text-[11px]">Acompañamiento y confirmación</p>
-                      <p className="text-[10px] text-slate-300">Espera en el chat para recibir el comprobante, confirmar el pago y dejárselo listo al vendedor.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Glowing Right Output Port */}
-                <div className="hidden lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 h-7 w-7 items-center justify-center rounded-full bg-[#120a1f] border-2 border-fuchsia-400 shadow-[0_0_16px_#e879f9]">
-                  <div className="h-3 w-3 rounded-full bg-fuchsia-400 animate-ping"></div>
-                </div>
-              </div>
-
-              {/* ================= RIGHT COLUMN: Respuesta en Chat & Redirección ================= */}
-              <div className="space-y-4 flex flex-col justify-center">
-                {/* Right Node: Respuesta con Link Directo y Espera en Chat */}
-                <div className="relative rounded-2xl border-2 border-fuchsia-500/40 bg-gradient-to-b from-fuchsia-950/40 via-[#130b24] to-slate-950 p-5 shadow-2xl backdrop-blur-md transition hover:border-fuchsia-400">
-                  {/* Port on Left */}
-                  <div className="hidden lg:flex absolute -left-3.5 top-1/2 -translate-y-1/2 h-6 w-6 items-center justify-center rounded-full bg-[#0c0418] border-2 border-fuchsia-400 shadow-[0_0_12px_#e879f9]">
-                    <div className="h-2.5 w-2.5 rounded-full bg-fuchsia-400"></div>
-                  </div>
-
-                  <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-fuchsia-600 to-purple-600 text-white shadow-md">
-                        <iconify-icon icon="solar:chat-round-check-bold" width="16" height="16"></iconify-icon>
-                      </div>
-                      <div>
-                        <p className="text-xs font-extrabold text-white">Respuesta en WhatsApp</p>
-                        <p className="text-[9px] text-fuchsia-300 font-mono">Responde en 1.2 segundos</p>
-                      </div>
-                    </div>
-                    <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
-                      ✓ Link Enviado
+                    <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
+                      ● En Línea 24/7
                     </span>
                   </div>
 
-                  {/* Conversational Message Bubble */}
-                  <div className="mt-3 rounded-xl bg-black/60 p-3.5 text-xs leading-relaxed text-slate-100 border border-fuchsia-500/20 space-y-2.5">
-                    <p>
-                      “¡Buenas tardes, <strong>Carlos</strong>! Qué gusto saludarte de nuevo. Sí, tenemos disponibles los <strong>tornillos hexagonales de 1/2&quot;</strong> y las <strong>empacaduras</strong> en nuestra tienda online. Sí realizamos envíos hoy mismo en Caracas y aceptamos Pago Móvil, Zelle y transferencias.”
-                    </p>
-                    <div className="rounded-lg bg-violet-600/25 p-2.5 border border-violet-500/40 text-violet-200">
-                      👉 <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos en la tienda y hacer tu pedido en 2 clics</a>
+                  <div className="mt-3.5 space-y-2.5 text-xs">
+                    <div className="rounded-xl bg-white/[0.04] p-2.5 border border-white/10 flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">1</span>
+                      <div>
+                        <p className="font-bold text-white text-[11px]">Responde con el Knowledge de tu negocio</p>
+                        <p className="text-[10px] text-slate-300">Aclara envíos, pagos y condiciones con la información de tu empresa.</p>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-300 bg-white/[0.04] p-2 rounded-lg border border-white/5">
-                      “<strong>Aquí me quedo esperándote en el chat para cuando termines la compra</strong>, recibir tu comprobante, confirmarte el pago y pasarte tu número de guía de una vez.”
-                    </p>
-                  </div>
 
-                  <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-white/5">
-                    <span className="text-emerald-400 font-bold">🟢 Venta guiada al e-commerce</span>
-                    <span className="text-fuchsia-300 font-bold">💬 Acompañamiento en chat</span>
+                    <div className="rounded-xl bg-white/[0.04] p-2.5 border border-white/10 flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-violet-500/20 text-violet-300 font-bold text-[10px]">2</span>
+                      <div>
+                        <p className="font-bold text-white text-[11px]">Envía el enlace de compra</p>
+                        <p className="text-[10px] text-slate-300">Guía al cliente al e-commerce para que elija los productos y arme su orden.</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white/[0.04] p-2.5 border border-white/10 flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-fuchsia-500/20 text-fuchsia-300 font-bold text-[10px]">3</span>
+                      <div>
+                        <p className="font-bold text-white text-[11px]">Acompañamiento y confirmación</p>
+                        <p className="text-[10px] text-slate-300">Espera en el chat para recibir el comprobante y confirmar el pago.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-4 flex flex-col justify-center">
+                  <div className="relative rounded-2xl border-2 border-fuchsia-500/40 bg-gradient-to-b from-fuchsia-950/40 via-[#130b24] to-slate-950 p-4 sm:p-5 shadow-2xl backdrop-blur-md">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-tr from-fuchsia-600 to-purple-600 text-white shadow-md">
+                          <iconify-icon icon="solar:chat-round-check-bold" width="14" height="14"></iconify-icon>
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-white">Respuesta en WhatsApp</p>
+                          <p className="text-[9px] text-fuchsia-300 font-mono">Responde en 1.2 segundos</p>
+                        </div>
+                      </div>
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-bold text-emerald-400">
+                        ✓ Link Enviado
+                      </span>
+                    </div>
+
+                    <div className="mt-2.5 rounded-xl bg-black/60 p-3 text-xs leading-relaxed text-slate-100 border border-fuchsia-500/20 space-y-2">
+                      <p>
+                        “¡Buenas tardes, <strong>Carlos</strong>! Qué gusto saludarte de nuevo. Sí, tenemos disponibles los <strong>tornillos hexagonales de 1/2"</strong> y las <strong>empacaduras</strong> en nuestra tienda online. Sí realizamos envíos hoy en Caracas y aceptamos Pago Móvil, Zelle y transferencias.”
+                      </p>
+                      <div className="rounded-lg bg-violet-600/25 p-2 border border-violet-500/40 text-violet-200">
+                        👉 <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos en la tienda y hacer tu pedido en 2 clics</a>
+                      </div>
+                      <p className="text-[11px] text-slate-300 bg-white/[0.04] p-2 rounded-lg border border-white/5">
+                        “<strong>Aquí me quedo esperándote en el chat para cuando termines la compra</strong>, recibir tu comprobante, confirmarte el pago y pasarte tu número de guía de una vez.”
+                      </p>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-white/5">
+                      <span className="text-emerald-400 font-bold">🟢 Venta guiada al e-commerce</span>
+                      <span className="text-fuchsia-300 font-bold">💬 Chat abierto</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* SVG Connection Wires for Large Screens */}
-            <svg className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block z-0" xmlns="http://www.w3.org/2000/svg">
-              {/* Wire 1: Cliente -> Flow */}
-              <path d="M 290 125 C 370 125, 360 210, 440 210" fill="none" stroke="#10b981" strokeWidth="2.5" className="animate-flow-wire" strokeOpacity="0.85" />
-              {/* Wire 2: Negocio Knowledge -> Flow */}
-              <path d="M 290 320 C 370 320, 360 290, 440 290" fill="none" stroke="#a855f7" strokeWidth="2.5" className="animate-flow-wire" strokeOpacity="0.85" />
-              {/* Wire 3: Flow -> Respuesta Directa */}
-              <path d="M 780 260 C 860 260, 850 240, 930 240" fill="none" stroke="#e879f9" strokeWidth="2.5" className="animate-flow-wire" strokeOpacity="0.95" />
-            </svg>
-
-            {/* Bottom 3 Visual Highlight Cards */}
-            <div className="mt-12 pt-8 border-t border-white/10 grid gap-5 sm:grid-cols-3 text-left">
-              {/* Card 1: Memoria & Trato Humano */}
-              <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/30 to-black/40 p-5 shadow-lg">
-                <div className="flex items-center gap-2.5 text-emerald-400 font-bold text-sm mb-2">
-                  <iconify-icon icon="solar:user-check-bold" width="22" height="22"></iconify-icon>
-                  <span>Conoce a tu Cliente</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                  Sabe el nombre de tu cliente, su contexto y sus preferencias. Si vuelve a escribir semanas después, retoma la conversación con total familiaridad sin sentirse como un interrogatorio.
-                </p>
-              </div>
-
-              {/* Card 2: Knowledge Base & FAQs */}
-              <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-950/30 to-black/40 p-5 shadow-lg">
-                <div className="flex items-center gap-2.5 text-violet-300 font-bold text-sm mb-2">
-                  <iconify-icon icon="solar:database-bold" width="22" height="22"></iconify-icon>
-                  <span>Knowledge Base & FAQs 24/7</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                  Tiene toda la información clave de tu negocio: zonas de delivery, formas de pago, garantías y políticas para responder preguntas importantes en segundos las 24 horas del día.
-                </p>
-              </div>
-
-              {/* Card 3: Gestión de Principio a Fin */}
-              <div className="rounded-2xl border border-fuchsia-500/30 bg-gradient-to-b from-fuchsia-950/30 to-black/40 p-5 shadow-lg">
-                <div className="flex items-center gap-2.5 text-fuchsia-400 font-bold text-sm mb-2">
-                  <iconify-icon icon="solar:bag-check-bold" width="22" height="22"></iconify-icon>
-                  <span>Gestión de Venta de Principio a Fin</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                  Envía el link al catálogo para armar la orden, espera al cliente en el chat para recibir el comprobante y confirmar el pago, dejándolo todo organizado para tu equipo de despacho.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* PRICING PLANS                                                             */}
+      {/* 5. PRICING PLANS (PASOS ANIMADOS + TARIFAS PLANAS $50 / $70)              */}
       {/* ========================================================================= */}
-      <section id="precio" className="bg-[#f8f7fb] py-24 md:py-32">
-        <div className="mx-auto max-w-7xl px-5 md:px-8">
+      <section id="precio" className="bg-[#f8f7fb] py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
+          
           <div className="mx-auto max-w-3xl text-center">
             <span className="text-xs font-extrabold uppercase tracking-widest text-[#7C3AED]">Planes Claros · 0% Comisiones</span>
-            <h2 className="mt-5 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl md:text-5xl">
+            <h2 className="mt-3.5 text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-slate-950">
               La solución definitiva que se paga sola.
             </h2>
-            <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg font-medium">
-              Literalmente tienes la potencia de un Shopify + Agentes de IA en WhatsApp e Instagram por una fracción de lo que cuesta un solo empleado. Y sin quitarnos ni un solo centavo de tus ventas.
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-600 font-medium">
+              Potencia de e-commerce + Agentes de IA en WhatsApp e Instagram por una fracción de lo que cuesta un empleado, y con <strong>0% comisiones sobre tus ventas</strong>.
             </p>
           </div>
 
           {/* 3 Alive Animated Steps */}
-          <div className="mt-16 grid gap-6 md:grid-cols-3 relative">
-            {/* Step 1 */}
-            <div className="animate-step-1 rounded-3xl border-2 border-violet-200 bg-white p-8 transition duration-300 relative overflow-hidden">
+          <div className="mt-10 sm:mt-12 grid gap-4 md:grid-cols-3 relative">
+            <div className="animate-step-1 rounded-3xl border-2 border-violet-200 bg-white p-6 sm:p-7 transition duration-300 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-[#7C3AED] uppercase tracking-wider">
-                  <span className="h-2 w-2 rounded-full bg-[#7C3AED] animate-pulse"></span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#7C3AED] animate-pulse"></span>
                   Paso 01
                 </span>
-                <iconify-icon icon="solar:chat-round-dots-bold-duotone" width="28" height="28" className="text-violet-600"></iconify-icon>
+                <iconify-icon icon="solar:chat-round-dots-bold-duotone" width="24" height="24" className="text-violet-600"></iconify-icon>
               </div>
-              <h3 className="mt-5 text-xl font-extrabold text-slate-950">Diagnóstico Inmediato con IA</h3>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-600 font-medium">
-                Hablas directamente con nuestro agente en WhatsApp o Instagram y evaluamos tus necesidades de catálogo y ventas al instante.
+              <h3 className="mt-4 text-lg font-extrabold text-slate-950">Diagnóstico Inmediato con IA</h3>
+              <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-600 font-medium">
+                Hablas directamente con nuestro agente en WhatsApp o Instagram y evaluamos tus necesidades de catálogo al instante.
               </p>
             </div>
 
-            {/* Step 2 */}
-            <div className="animate-step-2 rounded-3xl border-2 border-violet-200 bg-white p-8 transition duration-300 relative overflow-hidden">
+            <div className="animate-step-2 rounded-3xl border-2 border-violet-200 bg-white p-6 sm:p-7 transition duration-300 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-[#7C3AED] uppercase tracking-wider">
-                  <span className="h-2 w-2 rounded-full bg-[#7C3AED] animate-pulse"></span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#7C3AED] animate-pulse"></span>
                   Paso 02
                 </span>
-                <iconify-icon icon="solar:tuning-square-2-bold-duotone" width="28" height="28" className="text-violet-600"></iconify-icon>
+                <iconify-icon icon="solar:tuning-square-2-bold-duotone" width="24" height="24" className="text-violet-600"></iconify-icon>
               </div>
-              <h3 className="mt-5 text-xl font-extrabold text-slate-950">Montaje Técnico Acompañado</h3>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-600 font-medium">
+              <h3 className="mt-4 text-lg font-extrabold text-slate-950">Montaje Técnico Acompañado</h3>
+              <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-600 font-medium">
                 Conectamos tus canales oficiales, te asistimos en la estructura de productos y dejamos tu catálogo listo en 48 horas.
               </p>
             </div>
 
-            {/* Step 3 */}
-            <div className="animate-step-3 rounded-3xl border-2 border-violet-200 bg-white p-8 transition duration-300 relative overflow-hidden">
+            <div className="animate-step-3 rounded-3xl border-2 border-violet-200 bg-white p-6 sm:p-7 transition duration-300 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 uppercase tracking-wider">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   Paso 03
                 </span>
-                <iconify-icon icon="solar:rocket-bold-duotone" width="28" height="28" className="text-emerald-600"></iconify-icon>
+                <iconify-icon icon="solar:rocket-bold-duotone" width="24" height="24" className="text-emerald-600"></iconify-icon>
               </div>
-              <h3 className="mt-5 text-xl font-extrabold text-slate-950">Ventas en Piloto Automático</h3>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-600 font-medium">
+              <h3 className="mt-4 text-lg font-extrabold text-slate-950">Ventas en Piloto Automático</h3>
+              <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-600 font-medium">
                 Flow atiende y cierra pedidos 24/7 mientras tú recibes las órdenes organizadas y listas para despachar.
               </p>
             </div>
           </div>
 
           {/* Pricing Plans Comparison Cards */}
-          <div className="mt-12 grid gap-8 lg:grid-cols-2">
+          <div className="mt-10 grid gap-6 lg:grid-cols-2">
             {/* Plan 1: $50 / mes */}
-            <div className="relative flex flex-col justify-between rounded-3xl border-2 border-slate-200 bg-white p-8 shadow-xl transition duration-300 hover:border-violet-300 md:p-10">
+            <div className="relative flex flex-col justify-between rounded-3xl border-2 border-slate-200 bg-white p-6 sm:p-8 shadow-xl transition duration-300 hover:border-violet-300">
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="rounded-full bg-violet-100 px-3.5 py-1 text-xs font-extrabold text-[#7C3AED]">Plan Pro Starter</span>
+                  <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-extrabold text-[#7C3AED]">Plan Pro Starter</span>
                   <span className="text-xs font-bold text-emerald-600 uppercase">0% Comisiones</span>
                 </div>
                 
-                <div className="mt-6 flex items-baseline gap-2">
-                  <span className="text-5xl font-extrabold tracking-tight text-slate-950">$50</span>
+                <div className="mt-5 flex items-baseline gap-2">
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-950">$50</span>
                   <span className="text-slate-500 font-bold">/ mes</span>
                 </div>
                 
-                <p className="mt-4 text-sm leading-relaxed text-slate-600 font-medium">
-                  Ideal para negocios que quieren empezar a automatizar su canal principal de ventas con IA y catálogo online.
+                <p className="mt-3 text-xs sm:text-sm leading-relaxed text-slate-600 font-medium">
+                  Ideal para negocios que quieren automatizar su canal principal de ventas con IA y catálogo online.
                 </p>
 
-                <div className="mt-8 space-y-3.5 border-t border-slate-100 pt-6 text-sm text-slate-700 font-medium">
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
+                <div className="mt-6 space-y-3 border-t border-slate-100 pt-5 text-xs sm:text-sm text-slate-700 font-medium">
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
                     <span><strong>5.000 respuestas con IA al mes</strong></span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span><strong>Multicanal Simultáneo:</strong> WhatsApp <u>e</u> Instagram</span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
+                    <span><strong>1 Canal Oficial:</strong> WhatsApp <u>o</u> Instagram</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
                     <span>Catálogo E-commerce base listo para vender</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Agentes de IA con memoria y segmentación de clientes</span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
+                    <span>Agente entrenado con el Knowledge de tu negocio</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
                     <span>CRM básico de pedidos y clientes</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Acompañamiento y montaje técnico</span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
+                    <span>Acompañamiento y montaje técnico en 48h</span>
                   </div>
                 </div>
               </div>
 
-              <a href="#diagnostico" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-950 bg-slate-950 py-4 text-sm font-bold text-white transition hover:bg-[#7C3AED] hover:border-[#7C3AED]">
+              <a href="#diagnostico" className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-950 bg-slate-950 py-3.5 text-xs sm:text-sm font-bold text-white transition hover:bg-[#7C3AED] hover:border-[#7C3AED]">
                 Comenzar con Plan $50
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18"></iconify-icon>
+                <iconify-icon icon="solar:arrow-right-linear" width="16" height="16"></iconify-icon>
               </a>
             </div>
 
             {/* Plan 2: $70 / mes (Featured) */}
-            <div className="card-glow-strong relative flex flex-col justify-between rounded-3xl bg-gradient-to-br from-[#7C3AED] to-[#4C1D95] p-8 text-white shadow-2xl md:p-10 ring-4 ring-violet-400/50">
-              <div className="absolute -top-3.5 right-8 rounded-full bg-emerald-400 px-4 py-1 text-xs font-extrabold text-slate-950 shadow-md uppercase tracking-wider">
+            <div className="card-glow-strong relative flex flex-col justify-between rounded-3xl bg-gradient-to-br from-[#7C3AED] to-[#4C1D95] p-6 sm:p-8 text-white shadow-2xl ring-4 ring-violet-400/50">
+              <div className="absolute -top-3 right-6 rounded-full bg-emerald-400 px-3.5 py-1 text-[11px] font-extrabold text-slate-950 shadow-md uppercase tracking-wider">
                 Recomendado · Más Vendido
               </div>
 
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="rounded-full bg-white/20 px-3.5 py-1 text-xs font-bold text-white backdrop-blur">Plan Ultimate 360°</span>
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white backdrop-blur">Plan Ultimate 360°</span>
                   <span className="text-xs font-bold text-emerald-300 uppercase">0% Comisiones</span>
                 </div>
                 
-                <div className="mt-6 flex items-baseline gap-2">
-                  <span className="text-5xl font-extrabold tracking-tight text-white">$70</span>
+                <div className="mt-5 flex items-baseline gap-2">
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white">$70</span>
                   <span className="text-violet-200 font-bold">/ mes</span>
                 </div>
                 
-                <p className="mt-4 text-sm leading-relaxed text-violet-100 font-medium">
-                  La solución completa y definitiva para dominar todos tus canales de venta y automatizar tu negocio de punta a punta.
+                <p className="mt-3 text-xs sm:text-sm leading-relaxed text-violet-100 font-medium">
+                  La solución completa para automatizar todos tus canales de venta y pedidos de punta a punta.
                 </p>
 
-                <div className="mt-8 space-y-3.5 border-t border-white/15 pt-6 text-sm text-violet-100 font-medium">
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
+                <div className="mt-6 space-y-3 border-t border-white/15 pt-5 text-xs sm:text-sm text-violet-100 font-medium">
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
                     <span><strong>10.000 respuestas con IA al mes</strong></span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
                     <span><strong>Multicanal Simultáneo:</strong> WhatsApp <u>e</u> Instagram</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span><strong>Catálogo E-commerce 100% Personalizado a tu medida</strong></span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
+                    <span><strong>Catálogo E-commerce 100% a tu medida</strong></span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span>Agentes de IA con memoria y segmentación de clientes</span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
+                    <span>Agentes con memoria infinita y segmentación</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
                     <span>CRM Avanzado + Control de inventario en tiempo real</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span>Automatizaciones de seguimiento y recuperación de ventas</span>
+                  <div className="flex items-center gap-2.5">
+                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
+                    <span>Seguimiento y recuperación de ventas en chat</span>
                   </div>
                 </div>
               </div>
 
-              <a href="#diagnostico" className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white py-4 text-sm font-extrabold text-[#7C3AED] shadow-xl transition hover:bg-violet-50">
+              <a href="#diagnostico" className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white py-3.5 text-xs sm:text-sm font-extrabold text-[#7C3AED] shadow-xl transition hover:bg-violet-50">
                 Quiero la Solución Completa $70
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18"></iconify-icon>
+                <iconify-icon icon="solar:arrow-right-linear" width="16" height="16"></iconify-icon>
               </a>
             </div>
           </div>
 
-          {/* Modern Zero Commission Guarantee Card */}
-          <div className="mt-10 overflow-hidden rounded-3xl border border-emerald-500/30 bg-[#0f1915] p-6 sm:p-8 text-white shadow-xl">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-5">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                  <iconify-icon icon="solar:shield-check-bold" width="30" height="30"></iconify-icon>
+          {/* Zero Commission Guarantee Card */}
+          <div className="mt-8 overflow-hidden rounded-2xl border border-emerald-500/30 bg-[#0f1915] p-5 sm:p-7 text-white shadow-xl">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                  <iconify-icon icon="solar:shield-check-bold" width="24" height="24"></iconify-icon>
                 </div>
                 <div>
-                  <h4 className="text-lg font-extrabold text-emerald-300">Garantía Inquebrantable de Cero Comisiones</h4>
-                  <p className="mt-1 text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-                    A diferencia de otras plataformas que te cobran un porcentaje de cada venta, en Flow pagas únicamente tu suscripción fija y el 100% de lo que facturas es tuyo.
+                  <h4 className="text-base font-extrabold text-emerald-300">Garantía de Cero Comisiones</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+                    Pagas únicamente tu suscripción fija ($50 o $70). El 100% de lo que vendes es tuyo.
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-emerald-500 px-4 py-1.5 text-xs font-black text-slate-950 uppercase tracking-wider shrink-0 shadow-lg shadow-emerald-500/20">
+              <span className="rounded-full bg-emerald-500 px-3.5 py-1 text-xs font-black text-slate-950 uppercase tracking-wider shrink-0 shadow-md">
                 100% Tu Margen
               </span>
             </div>
           </div>
+
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* DIRECT & INTERACTIVE AI DIAGNOSTIC VIA WHATSAPP & INSTAGRAM               */}
+      {/* 6. UNIFIED DIAGNÓSTICO CON IA + PREGUNTAS FRECUENTES (PWA OPTIMIZED)      */}
       {/* ========================================================================= */}
-      <section id="diagnostico" className="relative overflow-hidden bg-[#0c0418] py-24 text-white md:py-32">
-        <div className="pointer-events-none absolute -left-32 top-16 h-96 w-96 rounded-full bg-violet-700/20 blur-3xl"></div>
-        <div className="pointer-events-none absolute -right-32 bottom-16 h-96 w-96 rounded-full bg-fuchsia-700/20 blur-3xl"></div>
+      <section id="diagnostico" className="relative overflow-hidden bg-[#0c0418] py-16 sm:py-20 text-white border-t border-white/5">
+        <div className="pointer-events-none absolute -left-20 top-16 h-80 w-80 rounded-full bg-violet-700/20 blur-3xl"></div>
+        <div className="pointer-events-none absolute -right-20 bottom-16 h-80 w-80 rounded-full bg-fuchsia-700/20 blur-3xl"></div>
         
-        <div className="relative mx-auto max-w-7xl px-5 md:px-8">
+        <div className="relative mx-auto max-w-4xl px-4 sm:px-6 md:px-8">
+          
+          {/* Unified Header */}
           <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-violet-300">
-              Diagnóstico Directo con IA
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-violet-300">
+              Inicia tu Diagnóstico o Resuelve tus Dudas
             </span>
-            <h2 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-              Haz tu diagnóstico al instante con nuestro Agente de IA.
+            <h2 className="mt-3.5 text-2xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
+              Habla en vivo con nuestro Agente de IA.
             </h2>
-            <p className="mt-5 text-base leading-relaxed text-slate-300 sm:text-lg">
-              Sin formularios lentos ni esperas. Chatea directamente con nuestro agente inteligente en WhatsApp o Instagram, cuéntale sobre tu negocio y recibe una propuesta y auditoría personalizada en 5 minutos.
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-300 font-medium">
+              Sin formularios lentos. Chatea directamente con nuestro agente en WhatsApp o Instagram y recibe una auditoría de ventas en 5 minutos.
             </p>
           </div>
 
           {/* Direct Interactive Channel Cards */}
-          <div className="mt-14 grid gap-6 sm:grid-cols-2 max-w-4xl mx-auto">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {/* Card 1: WhatsApp Directo */}
             <a 
               href="https://wa.me/584149189169?text=Hola%2C%20quiero%20hacer%20el%20diagn%C3%B3stico%20gratis%20con%20Flow%20para%20mi%20empresa" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="card-glow group relative flex flex-col justify-between rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/40 to-slate-950 p-8 transition duration-300 hover:border-emerald-400 hover:-translate-y-1 hover:shadow-emerald-500/20"
+              className="card-glow group relative flex flex-col justify-between rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/40 to-slate-950 p-5 sm:p-6 transition duration-300 hover:border-emerald-400 hover:-translate-y-1 shadow-lg"
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    <iconify-icon icon="logos:whatsapp-icon" width="32" height="32"></iconify-icon>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <iconify-icon icon="logos:whatsapp-icon" width="22" height="22"></iconify-icon>
                   </div>
-                  <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400 border border-emerald-500/30">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     Agente Activo 24/7
                   </span>
                 </div>
 
-                <h3 className="mt-6 text-2xl font-extrabold text-white">Chatear por WhatsApp</h3>
-                <p className="mt-1 text-sm font-mono text-emerald-400">+58 0414 918 9169</p>
+                <h3 className="mt-3.5 text-lg sm:text-xl font-extrabold text-white">Chatear por WhatsApp</h3>
+                <p className="mt-0.5 text-xs font-mono text-emerald-400">+58 0414 918 9169</p>
                 
-                <p className="mt-4 text-sm leading-relaxed text-slate-300">
-                  Inicia la conversación directo con nuestro agente. Te hará unas preguntas breves y te mostrará cómo Flow automatizará tus pedidos.
+                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                  Inicia la conversación en WhatsApp. Te responderá de inmediato con una propuesta para tu negocio.
                 </p>
               </div>
 
-              <div className="mt-8 flex items-center justify-center gap-2 rounded-full bg-emerald-500 py-3.5 text-sm font-extrabold text-slate-950 transition duration-200 group-hover:bg-emerald-400 shadow-lg">
-                <span>Iniciar Diagnóstico en WhatsApp</span>
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18" style={{ strokeWidth: 2 }}></iconify-icon>
+              <div className="mt-5 flex items-center justify-center gap-2 rounded-full bg-emerald-500 py-3 text-xs font-extrabold text-slate-950 transition duration-200 group-hover:bg-emerald-400 shadow-md">
+                <span>Iniciar en WhatsApp</span>
+                <iconify-icon icon="solar:arrow-right-linear" width="15" height="15"></iconify-icon>
               </div>
             </a>
 
@@ -1322,192 +1024,143 @@ export default function FlowLandingPage() {
               href="https://ig.me/m/martes.app" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="card-glow group relative flex flex-col justify-between rounded-3xl border border-fuchsia-500/30 bg-gradient-to-b from-fuchsia-950/40 to-slate-950 p-8 transition duration-300 hover:border-fuchsia-400 hover:-translate-y-1 hover:shadow-fuchsia-500/20"
+              className="card-glow group relative flex flex-col justify-between rounded-2xl border border-fuchsia-500/30 bg-gradient-to-b from-fuchsia-950/40 to-slate-950 p-5 sm:p-6 transition duration-300 hover:border-fuchsia-400 hover:-translate-y-1 shadow-lg"
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30">
-                    <iconify-icon icon="skill-icons:instagram" width="32" height="32"></iconify-icon>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30">
+                    <iconify-icon icon="skill-icons:instagram" width="22" height="22"></iconify-icon>
                   </div>
-                  <span className="flex items-center gap-1.5 rounded-full bg-fuchsia-500/10 px-3 py-1 text-xs font-bold text-fuchsia-400 border border-fuchsia-500/30">
-                    <span className="h-2 w-2 rounded-full bg-fuchsia-400 animate-ping"></span>
+                  <span className="flex items-center gap-1 rounded-full bg-fuchsia-500/10 px-2.5 py-0.5 text-[10px] font-bold text-fuchsia-400 border border-fuchsia-500/30">
+                    <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400 animate-ping"></span>
                     DM Abierto 24/7
                   </span>
                 </div>
 
-                <h3 className="mt-6 text-2xl font-extrabold text-white">Chatear por Instagram</h3>
-                <p className="mt-1 text-sm font-mono text-fuchsia-400">@martes.app</p>
+                <h3 className="mt-3.5 text-lg sm:text-xl font-extrabold text-white">Chatear por Instagram</h3>
+                <p className="mt-0.5 text-xs font-mono text-fuchsia-400">@martes.app</p>
                 
-                <p className="mt-4 text-sm leading-relaxed text-slate-300">
-                  Escríbenos por mensaje directo (DM) en Instagram y prueba en tiempo real cómo responde nuestro agente con catálogo y catálogo visual.
+                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                  Escríbenos por mensaje directo (DM) en Instagram y prueba en tiempo real cómo responde nuestro agente con catálogo.
                 </p>
               </div>
 
-              <div className="mt-8 flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-violet-600 py-3.5 text-sm font-extrabold text-white transition duration-200 group-hover:from-fuchsia-500 group-hover:to-violet-500 shadow-lg">
-                <span>Abrir DM en Instagram @martes.app</span>
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18" style={{ strokeWidth: 2 }}></iconify-icon>
+              <div className="mt-5 flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-violet-600 py-3 text-xs font-extrabold text-white transition duration-200 group-hover:from-fuchsia-500 group-hover:to-violet-500 shadow-md">
+                <span>Abrir DM @martes.app</span>
+                <iconify-icon icon="solar:arrow-right-linear" width="15" height="15"></iconify-icon>
               </div>
             </a>
           </div>
 
-          {/* Trust Note */}
-          <p className="mt-10 text-center text-xs font-medium text-slate-400">
-            💡 Respuesta garantizada en segundos · Sin compromiso comercial · 100% enfocado en tu negocio
-          </p>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* FAQ                                                                       */}
-      {/* ========================================================================= */}
-      <section className="bg-white py-24 md:py-32">
-        <div className="mx-auto max-w-4xl px-5 md:px-8">
-          <div className="text-center">
-            <span className="text-xs font-bold uppercase tracking-widest text-[#7C3AED]">Preguntas Frecuentes</span>
-            <h2 className="mt-5 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl md:text-5xl">
-              Todo lo que necesitas saber.
-            </h2>
-            <p className="mt-4 text-sm text-slate-600 font-medium">Transparencia total antes de empezar.</p>
+          {/* Edge-to-Edge Collapsible FAQ Bar */}
+          <div className="mt-8">
+            <button 
+              type="button" 
+              onClick={() => setFaqExpanded(!faqExpanded)}
+              className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-violet-400/40 transition duration-300 shadow-lg text-left group cursor-pointer"
+            >
+              <div className="flex items-center gap-3.5">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-300 border border-violet-500/30 group-hover:bg-[#7C3AED] group-hover:text-white transition">
+                  <iconify-icon icon="solar:question-circle-bold" width="20" height="20"></iconify-icon>
+                </span>
+                <div>
+                  <p className="text-xs sm:text-sm font-extrabold text-white">
+                    {faqExpanded ? 'Ocultar Preguntas Frecuentes' : 'Preguntas Frecuentes antes de empezar'}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-medium">Toca para ver respuestas sobre comisiones, números y catálogo</p>
+                </div>
+              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-violet-300 group-hover:bg-white group-hover:text-slate-950 transition">
+                <iconify-icon icon="solar:alt-arrow-down-linear" width="18" height="18" className={`transition duration-300 ${faqExpanded ? 'rotate-180' : ''}`}></iconify-icon>
+              </div>
+            </button>
           </div>
 
-          <div className="mt-14 divide-y divide-slate-200 border-y border-slate-200">
-            {/* Question 1 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿Tengo que cambiar mi número de WhatsApp actual?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                No, para nada. Integramos Flow directamente con tu número actual de WhatsApp Business o personal mediante la API Oficial. Tus clientes te siguen escribiendo al mismo número de siempre.
-              </p>
-            </details>
+          {/* Collapsible FAQ Content */}
+          {faqExpanded && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6 backdrop-blur-lg space-y-4 transition-all duration-500">
+              <div className="border-b border-white/10 pb-3.5">
+                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
+                  ¿Tengo que cambiar mi número de WhatsApp actual?
+                </p>
+                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
+                  No. Conectamos Flow a tu número actual mediante la API Oficial de Meta. Tus clientes te siguen escribiendo al mismo contacto de siempre.
+                </p>
+              </div>
 
-            {/* Question 2 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿Flow se queda con alguna comisión de mis ventas?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                ¡Absolutamente no! Cobramos únicamente tu tarifa plana mensual ($50 o $70). Cero porcentaje por transacción, cero costos ocultos. Todo lo que vendes es 100% tuyo.
-              </p>
-            </details>
+              <div className="border-b border-white/10 pb-3.5">
+                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
+                  ¿Flow se queda con alguna comisión de mis ventas?
+                </p>
+                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
+                  Cero comisiones. Pagas únicamente tu mensualidad fija ($50 o $70). Todos los cobros (Pago Móvil, Zelle, efectivo) van 100% a tus cuentas.
+                </p>
+              </div>
 
-            {/* Question 3 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿Cómo es el montaje del catálogo y la carga de productos?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                Nosotros nos encargamos de todo el montaje técnico de la plataforma y te asistimos en la carga inicial de productos. Tú nos proporcionas las fotos, nombres y precios de tus artículos, y nosotros te brindamos el acompañamiento para que tu catálogo quede limpio, estructurado y con imágenes profesionales.
-              </p>
-            </details>
+              <div className="border-b border-white/10 pb-3.5">
+                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
+                  ¿Cómo es el montaje del catálogo y la carga de productos?
+                </p>
+                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
+                  Nosotros realizamos la configuración técnica y te asistimos con la carga de fotos y precios para que tu catálogo quede listo en 48 horas.
+                </p>
+              </div>
 
-            {/* Question 4 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿La IA puede inventar precios o equivocarse con mi stock?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                No. Flow está blindado para responder estrictamente con tu catálogo oficial, tus fotos reales, tus precios y tus reglas de inventario sincronizadas en CRM. Además, tú puedes exigir confirmación para cualquier pedido sensible.
-              </p>
-            </details>
-
-            {/* Question 5 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿Mis clientes van a sentir que hablan con un robot aburrido?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                Jamás. Entrenamos al agente con la calidez, modismos y tono propio de tu marca. Si en algún momento la conversación requiere atención humana, la IA te notifica y te pasa el chat al instante.
-              </p>
-            </details>
-
-            {/* Question 6 */}
-            <details className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-bold text-slate-950">
-                ¿Puedo entrar a responder personalmente cuando yo quiera?
-                <iconify-icon icon="solar:add-circle-linear" width="22" height="22" className="shrink-0 text-[#7C3AED] transition group-open:rotate-45" style={{ strokeWidth: 2 }}></iconify-icon>
-              </summary>
-              <p className="mt-3 max-w-3xl pr-10 text-sm leading-relaxed text-slate-600 font-medium">
-                Sí, 100%. Tanto tú como tu equipo pueden tomar cualquier chat en un clic. En ese momento Flow se pone en modo pausa y vuelve a activarse cuando tú lo decidas.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* FINAL CTA                                                                 */}
-      {/* ========================================================================= */}
-      <section className="bg-white px-5 pb-24 md:px-8 md:pb-32">
-        <div className="card-glow-strong relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-gradient-to-br from-[#7C3AED] via-violet-700 to-[#4C1D95] px-6 py-16 text-center text-white shadow-2xl md:px-12 md:py-20">
-          <div className="pointer-events-none absolute left-1/2 top-0 h-80 w-80 -translate-x-1/2 rounded-full bg-white/15 blur-3xl"></div>
-          
-          <div className="relative mx-auto max-w-3xl">
-            <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider backdrop-blur">
-              Automatiza tu negocio hoy mismo
-            </span>
-            <h2 className="mt-6 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-              Multiplica tus ventas sin multiplicar tus horas de trabajo.
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-violet-100 sm:text-lg font-medium">
-              Flow atiende, vende y organiza tu negocio 24/7 con IA de vanguardia para que tú te dediques a hacer crecer tu marca.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <a href="https://wa.me/584149189169?text=Hola%2C%20quiero%20hacer%20el%20diagn%C3%B3stico%20gratis%20con%20Flow%20para%20mi%20empresa" target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-8 py-4 text-sm font-extrabold text-[#7C3AED] shadow-xl transition hover:-translate-y-0.5 hover:bg-violet-50 sm:w-auto">
-                Diagnóstico Gratis en WhatsApp
-                <iconify-icon icon="solar:arrow-right-linear" width="18" height="18" style={{ strokeWidth: 2 }}></iconify-icon>
-              </a>
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
+                  ¿Puedo responder personalmente cuando yo quiera?
+                </p>
+                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
+                  Sí, 100%. Tú y tu equipo pueden intervenir en cualquier conversación en un clic. En ese momento la IA se pausa y vuelve cuando tú decidas.
+                </p>
+              </div>
             </div>
-            <p className="mt-4 text-xs font-semibold text-violet-200">5 minutos · Sin tarjeta · 0% Comisiones</p>
-          </div>
+          )}
+
+          <p className="mt-6 text-center text-[11px] font-medium text-slate-400">
+            💡 Respuesta en segundos · Sin compromiso comercial · 100% enfocado en tu empresa
+          </p>
+
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* FOOTER                                                                    */}
+      {/* 7. FOOTER (Enhanced with bold modern MARTES APP typography)               */}
       {/* ========================================================================= */}
-      <footer className="bg-[#07020f] text-white">
-        <div className="mx-auto max-w-7xl px-5 py-14 md:px-8">
-          <div className="flex flex-col gap-8 border-b border-white/10 pb-12 md:flex-row md:items-center md:justify-between">
-            {/* Logo */}
-            <a href="#inicio" className="flex items-center gap-2.5" aria-label="Flow, volver al inicio">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-lg">
-                <iconify-icon icon="solar:bolt-bold-duotone" width="22" height="22"></iconify-icon>
+      <footer className="bg-[#07020f] text-white border-t border-white/5">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:px-8">
+          <div className="flex flex-col gap-6 border-b border-white/10 pb-8 md:flex-row md:items-center md:justify-between">
+            <Link href="#inicio" className="flex items-center gap-2" aria-label="Flow, volver al inicio">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7C3AED] text-white shadow-md">
+                <iconify-icon icon="solar:bolt-bold-duotone" width="20" height="20"></iconify-icon>
               </span>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold tracking-tight">Flow</span>
-                <span className="text-[10px] text-violet-400 font-bold uppercase tracking-wider">by Martes</span>
+              <div className="flex flex-col text-left">
+                <span className="text-lg font-bold tracking-tight">Flow</span>
+                <span className="text-[9px] text-violet-400 font-bold uppercase tracking-wider">by Martes</span>
               </div>
-            </a>
+            </Link>
 
-            {/* Footer Nav */}
-            <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-slate-400 font-semibold">
-              <a href="#como-funciona" className="transition hover:text-white">Cómo funciona</a>
-              <a href="#todo-en-uno" className="transition hover:text-white">Qué incluye</a>
-              <a href="#catalogo-demo" className="transition hover:text-white">Catálogo Demo</a>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs sm:text-sm text-slate-400 font-semibold">
+              <a href="#video" className="transition hover:text-white">Video</a>
+              <a href="#catalogo-demo" className="transition hover:text-white">Demo Don Luigi</a>
               <a href="#control" className="transition hover:text-white">Tu control</a>
               <a href="#precio" className="transition hover:text-white">Precios</a>
-              <a href="#diagnostico" className="transition hover:text-white">Contacto</a>
+              <a href="#diagnostico" className="transition hover:text-white">Diagnóstico & FAQs</a>
             </div>
           </div>
 
-          {/* Copyright Sub-row */}
-          <div className="flex flex-col gap-4 pt-8 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between font-medium">
+          <div className="flex flex-col gap-2 pt-6 text-[11px] sm:text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between font-medium">
             <p>© {currentYear} Flow by Martes. Todos los derechos reservados.</p>
-            <p className="flex items-center gap-2">
-              <span>Ventas más simples. Negocios que escalan sin límites.</span>
-            </p>
+            <p>Ventas más simples. Negocios que escalan sin límites.</p>
           </div>
 
-          {/* Large Modern Branding: MARTES APP */}
-          <div className="mt-14 pt-8 border-t border-white/5 flex flex-col items-center justify-center text-center">
-            <span className="text-[11px] font-extrabold uppercase tracking-[0.35em] text-violet-400/80 mb-2">Desarrollado con orgullo por</span>
-            <h2 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter uppercase bg-gradient-to-b from-white/25 via-white/10 to-transparent bg-clip-text text-transparent select-none font-display">
+          <div className="mt-10 pt-6 border-t border-white/5 flex flex-col items-center justify-center text-center">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.3em] text-violet-400/80 mb-1.5">Desarrollado por</span>
+            <h2 className="font-display text-4xl sm:text-6xl md:text-8xl font-black tracking-tighter uppercase bg-gradient-to-b from-white/25 via-white/10 to-transparent bg-clip-text text-transparent select-none">
               MARTES APP
             </h2>
           </div>
