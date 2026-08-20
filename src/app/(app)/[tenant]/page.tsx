@@ -10,7 +10,20 @@ import {
   type TenantConfig,
 } from '@/components/storefront-client';
 
+import { notFound } from 'next/navigation';
+
 export const dynamic = 'force-dynamic';
+
+const RESERVED_SLUGS = new Set([
+  'favicon.ico',
+  'robots.txt',
+  'sitemap.xml',
+  'apple-touch-icon.png',
+  'apple-touch-icon-precomposed.png',
+  'manifest.json',
+  'admin',
+  'api',
+]);
 
 export async function generateMetadata({
   params,
@@ -18,6 +31,10 @@ export async function generateMetadata({
   params: Promise<{ tenant: string }>;
 }): Promise<Metadata> {
   const { tenant: tenantSlug } = await params;
+  if (RESERVED_SLUGS.has(tenantSlug)) {
+    return { title: 'Not Found' };
+  }
+
   const storeName = tenantSlug
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -83,8 +100,8 @@ export default async function TenantStorefrontPage({
 }) {
   const { tenant: tenantSlug } = await params;
 
-  if (tenantSlug === 'admin') {
-    return null;
+  if (RESERVED_SLUGS.has(tenantSlug)) {
+    notFound();
   }
 
   // Fetch live exchange rate from Binance / Paralelo API
