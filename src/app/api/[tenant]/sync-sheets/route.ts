@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -230,6 +231,14 @@ export async function POST(
       } catch (err: any) {
         errors.push({ line: i + 1, error: err.message || 'Error al procesar fila' });
       }
+    }
+
+    // Instantly invalidate Vercel CDN cache for this merchant's storefront
+    try {
+      revalidatePath(`/${tenantSlug}`);
+      revalidatePath('/');
+    } catch (revalidateErr) {
+      // Non-blocking in dev
     }
 
     return NextResponse.json({

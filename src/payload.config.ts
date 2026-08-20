@@ -37,13 +37,13 @@ const plugins: Plugin[] = [
   seoPlugin({
     collections: ['products', 'tenants'],
     uploadsCollection: 'media',
-    generateTitle: ({ doc }: any) => `${doc?.title || doc?.name || 'StoreLink'} | Tienda Online`,
+    generateTitle: ({ doc }: any) => `${doc?.title || doc?.name || 'Flow'} | Catálogo Online Oficial`,
     generateDescription: ({ doc }: any) =>
       doc?.description ||
       doc?.branding?.welcomeMessage ||
-      'Catálogo interactivo con pedidos y facturas por WhatsApp.',
+      'Catálogo interactivo PWA con pedidos directos por WhatsApp.',
     generateURL: ({ doc }: any) =>
-      `${process.env.NEXT_PUBLIC_SITE_URL || 'https://storelink-saas.vercel.app'}/${doc?.slug || ''}`,
+      `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc?.slug || ''}`,
   }),
 ];
 
