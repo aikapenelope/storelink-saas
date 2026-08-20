@@ -53,7 +53,7 @@ export async function generateMetadata({
         openGraph: {
           title,
           description,
-          url: `https://storelink-saas.vercel.app/${tenantSlug}`,
+          url: `https://${tenantSlug}.martes.app`,
           siteName: doc.name || storeName,
           images: logoUrl ? [{ url: logoUrl }] : [],
           type: 'website',

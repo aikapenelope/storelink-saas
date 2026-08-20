@@ -259,7 +259,7 @@ export default function FlowLandingPage() {
 
                 {/* Quick Action Bar */}
                 <div className="flex items-center gap-2 text-xs font-semibold">
-                  <a href="https://storelink-saas.vercel.app/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded bg-white px-3 py-1 text-black hover:bg-neutral-200 transition shadow-sm text-[11px] font-bold">
+                  <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded bg-white px-3 py-1 text-black hover:bg-neutral-200 transition shadow-sm text-[11px] font-bold">
                     <iconify-icon icon="solar:shop-2-bold" width="13" height="13"></iconify-icon>
                     <span>Ver Tienda PWA</span>
                   </a>
@@ -769,13 +769,13 @@ export default function FlowLandingPage() {
               <div className="flex flex-1 max-w-md items-center justify-center">
                 <div className="flex w-full items-center gap-2 rounded-xl bg-slate-900 px-4 py-1.5 text-xs text-slate-300 font-mono border border-white/10">
                   <iconify-icon icon="solar:lock-bold" className="text-emerald-400" width="14" height="14"></iconify-icon>
-                  <span className="truncate">https://storelink-saas.vercel.app/don-luigi</span>
+                  <span className="truncate">https://donluigi.martes.app</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <a
-                  href="https://storelink-saas.vercel.app/don-luigi"
+                  href="/don-luigi"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-violet-600 shadow-md"
@@ -790,7 +790,7 @@ export default function FlowLandingPage() {
             <div className="relative h-[52rem] w-full overflow-hidden rounded-b-2xl bg-slate-100">
               <iframe
                 id="catalogFrame"
-                src="https://storelink-saas.vercel.app/don-luigi"
+                src="/don-luigi"
                 title="Catálogo E-commerce Demo Flow"
                 className="h-full w-full border-0"
                 loading="lazy"
@@ -1002,7 +1002,7 @@ export default function FlowLandingPage() {
                       “¡Buenas tardes, <strong>Carlos</strong>! Qué gusto saludarte de nuevo. Sí, tenemos disponibles los <strong>tornillos hexagonales de 1/2&quot;</strong> y las <strong>empacaduras</strong> en nuestra tienda online. Sí realizamos envíos hoy mismo en Caracas y aceptamos Pago Móvil, Zelle y transferencias.”
                     </p>
                     <div className="rounded-lg bg-violet-600/25 p-2.5 border border-violet-500/40 text-violet-200">
-                      👉 <a href="https://storelink-saas.vercel.app/don-luigi" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos en la tienda y hacer tu pedido en 2 clics</a>
+                      👉 <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos en la tienda y hacer tu pedido en 2 clics</a>
                     </div>
                     <p className="text-[11px] text-slate-300 bg-white/[0.04] p-2 rounded-lg border border-white/5">
                       “<strong>Aquí me quedo esperándote en el chat para cuando termines la compra</strong>, recibir tu comprobante, confirmarte el pago y pasarte tu número de guía de una vez.”
