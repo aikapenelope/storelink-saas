@@ -105,7 +105,9 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI || process.env.POSTGRES_URL || '',
-      max: 2,
+      max: 1, // Scalable for Vercel Serverless Lambdas sharing Supabase pooler
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
       ssl: {
         rejectUnauthorized: false,
       },
