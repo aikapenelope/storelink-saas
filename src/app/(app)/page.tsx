@@ -535,7 +535,10 @@ export default function FlowLandingPage() {
             <div className="card-glow relative rounded-3xl border border-white/15 bg-white/[0.04] p-7 backdrop-blur-xl transition hover:border-violet-400/60">
               <div className="flex items-center justify-between">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-[#7C3AED] text-white font-bold shadow-lg">1</span>
-                <iconify-icon icon="logos:whatsapp-icon" width="24" height="24"></iconify-icon>
+                <div className="flex items-center gap-2">
+                  <iconify-icon icon="logos:whatsapp-icon" width="24" height="24"></iconify-icon>
+                  <iconify-icon icon="skill-icons:instagram" width="24" height="24"></iconify-icon>
+                </div>
               </div>
               <h3 className="mt-5 text-lg font-bold text-white">El cliente te escribe</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -1155,7 +1158,7 @@ export default function FlowLandingPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span><strong>1 Canal Oficial:</strong> WhatsApp <u>o</u> Instagram</span>
+                    <span><strong>Multicanal Simultáneo:</strong> WhatsApp <u>e</u> Instagram</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
@@ -1163,7 +1166,7 @@ export default function FlowLandingPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Agente de IA entrenado con tus productos y precios</span>
+                    <span>Agentes de IA con memoria y segmentación de clientes</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <iconify-icon icon="solar:check-circle-bold" width="20" height="20" className="text-emerald-500 shrink-0"></iconify-icon>
