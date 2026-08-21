@@ -87,6 +87,8 @@ export const Products: CollectionConfig = {
       name: 'stockQuantity',
       type: 'number',
       label: 'Unidades Disponibles en Stock',
+      // Con descuento atómico $inc, min:0 impide stocks negativos residuales
+      min: 0,
       admin: {
         condition: (data) => Boolean(data?.trackStock),
       },

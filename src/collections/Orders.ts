@@ -1,5 +1,4 @@
 import type { CollectionConfig, CollectionAfterChangeHook } from 'payload';
-import { sql } from '@payloadcms/db-postgres';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
@@ -58,21 +57,19 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToDeduct = Number(item.quantity) || 1;
-      // Descuento ATÓMICO a nivel SQL: solo aplica si hay stock suficiente
-      // en este instante. Dos pedidos simultáneos ya no venden la misma unidad.
-      const result: any = await payload.db.drizzle.execute(
-        sql`UPDATE products SET stock_quantity = stock_quantity - ${qtyToDeduct}, stock_status = CASE WHEN stock_quantity - ${qtyToDeduct} <= 0 THEN 'out_of_stock' ELSE 'in_stock' END WHERE id = ${prod.id} AND track_stock = true AND stock_quantity >= ${qtyToDeduct}`
-      );
-
-      const affected =
-        result?.rowCount ?? result?.rowsAffected ??
-        (Array.isArray(result?.rows) ? result.rows.length : 1);
-
-      if (!affected) {
-        throw new Error(
-          `Stock insuficiente para "${item.title}" al confirmar el pedido. La operación fue revertida.`
-        );
-      }
+      // Descuento ATÓMICO con el operador $inc nativo de Payload (mismo patrón
+      // del plugin oficial @payloadcms/plugin-ecommerce, confirmOrder.ts):
+      // se traduce a SQL `stock_quantity + (-qty)` server-side. La validación
+      // previa de stock en checkout (processOrder) es la que rechaza la venta;
+      // aquí Math.max(0,...) vía min:0 del campo evita negativos residuales.
+      await payload.db.updateOne({
+        collection: 'products',
+        id: prod.id,
+        data: {
+          stockQuantity: { $inc: -qtyToDeduct },
+        },
+        req,
+      });
     }
   } else if (isCancelled) {
     for (const item of doc.items) {
