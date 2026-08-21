@@ -5,6 +5,9 @@ export const Products: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
+    components: {
+      beforeListTable: ['@/components/admin/DiscreetSheetsSync#DiscreetSheetsSync'],
+    },
   },
   access: {
     read: () => true, // Public read so storefront can display items
