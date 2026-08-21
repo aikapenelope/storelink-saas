@@ -42,10 +42,10 @@ export async function StoreUrlBanner() {
     if (!tenantSlug) {
       if (isSuperAdmin) {
         return (
-          <div className="w-full mb-6 p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between gap-4 font-sans text-zinc-100 shadow-xl">
+          <div className="w-full mb-6 p-4 bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4 font-sans text-zinc-100 shadow-xl rounded-none">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                <Store className="w-5 h-5" />
+              <div className="w-9 h-9 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                <Store className="w-4 h-4" />
               </div>
               <div>
                 <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Super Admin · Plataforma Global</div>
@@ -64,22 +64,22 @@ export async function StoreUrlBanner() {
     const storeUrl = `${siteUrl}/${tenantSlug}`;
 
     return (
-      <div className="w-full mb-6 p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-zinc-100 shadow-2xl">
+      <div className="w-full mb-6 p-4 bg-black border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-zinc-100 shadow-2xl rounded-none">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-            <Store className="w-5 h-5" />
+          <div className="w-9 h-9 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+            <Store className="w-4 h-4" />
           </div>
           <div>
             <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-              Tienda Activa: <span className="text-white">{tenantName}</span>
+              Tienda Activa: <span className="text-white font-bold">{tenantName}</span>
             </div>
-            <div className="text-sm font-medium text-zinc-300 flex items-center gap-1.5 mt-0.5">
+            <div className="text-xs sm:text-sm font-medium text-zinc-300 flex items-center gap-1.5 mt-0.5">
               <span className="text-zinc-400">URL Pública:</span>
               <a
                 href={storeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white hover:text-zinc-300 font-semibold underline inline-flex items-center gap-1"
+                className="text-white hover:underline font-mono inline-flex items-center gap-1"
               >
                 flow.martes.app/{tenantSlug}
                 <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
@@ -88,22 +88,22 @@ export async function StoreUrlBanner() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <a
             href="/admin/analytics"
-            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-700 transition inline-flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold border border-zinc-700 transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider"
           >
-            <BarChart3 className="w-4 h-4 text-zinc-400" />
-            <span>Ver Analíticas</span>
+            <BarChart3 className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Dashboard</span>
           </a>
           <a
             href={storeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-lg"
+            className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-bold transition inline-flex items-center gap-1.5 shadow-lg rounded-none uppercase tracking-wider"
           >
             <span>Abrir Tienda</span>
-            <ExternalLink className="w-3.5 h-3.5 text-zinc-950" />
+            <ExternalLink className="w-3.5 h-3.5 text-black" />
           </a>
         </div>
       </div>

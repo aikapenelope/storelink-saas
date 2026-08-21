@@ -41,6 +41,14 @@ export const Products: CollectionConfig = {
       label: 'Descripción del Producto / Ingredientes / Detalles',
     },
     {
+      name: 'imageUrl',
+      type: 'text',
+      label: 'URL de Imagen Externa (Google Sheets / CDN)',
+      admin: {
+        description: 'URL directa de la imagen del producto (ej: Unsplash, Cloudinary o Google Drive)',
+      },
+    },
+    {
       name: 'images',
       type: 'array',
       label: 'Imágenes del Producto',
@@ -49,7 +57,7 @@ export const Products: CollectionConfig = {
           name: 'image',
           type: 'upload',
           relationTo: 'media',
-          required: true,
+          required: false,
         },
       ],
     },

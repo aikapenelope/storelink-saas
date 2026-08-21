@@ -203,7 +203,9 @@ export default async function TenantStorefrontPage({
                     : [],
                 }))
               : [],
-            images: Array.isArray(prod.images)
+            images: prod.imageUrl
+              ? [{ url: prod.imageUrl }]
+              : Array.isArray(prod.images) && prod.images.length > 0
               ? prod.images.map((img: any) => ({
                   url: (typeof img.image === 'object' && img.image?.url)
                     ? img.image.url
@@ -211,7 +213,7 @@ export default async function TenantStorefrontPage({
                     ? img.url
                     : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
                 }))
-              : [],
+              : [{ url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80' }],
           };
         });
 

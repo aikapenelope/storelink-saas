@@ -20,8 +20,6 @@ import {
   Search,
   Send,
   FileSpreadsheet,
-  CheckCircle2,
-  DollarSign,
   TrendingUp,
 } from 'lucide-react';
 
@@ -64,11 +62,10 @@ export async function AnalyticsView() {
       }
     }
 
-    // 🔒 Audit Fix #2.4: Prevent cross-tenant data leak if regular merchant has no tenant configured
     if (!isSuperAdmin && !tenantDoc) {
       return (
         <div className="p-12 text-center text-zinc-400 bg-black min-h-screen font-sans">
-          <div className="max-w-md mx-auto p-6 rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <div className="max-w-md mx-auto p-6 border border-zinc-800 bg-zinc-950 shadow-2xl rounded-none">
             <h3 className="text-lg font-bold text-white mb-2">Tienda no asignada</h3>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Tu cuenta de usuario todavía no tiene una tienda asignada. Contacta al administrador de la plataforma para vincular tu comercio.
@@ -78,11 +75,11 @@ export async function AnalyticsView() {
       );
     }
 
-    const tenantSlug = tenantDoc?.slug || '';
+    const tenantSlug = tenantDoc?.slug || 'aurita';
     const tenantName = tenantDoc?.name || (isSuperAdmin ? 'Plataforma Global' : 'Mi Tienda');
     const rateVES = Number(tenantDoc?.branding?.exchangeRateVES) || 70.0;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
-    const storeUrl = tenantSlug ? `${siteUrl}/${tenantSlug}` : siteUrl;
+    const storeUrl = `${siteUrl}/${tenantSlug}`;
     const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
@@ -220,50 +217,48 @@ export async function AnalyticsView() {
 
     return (
       <div className="min-h-screen font-sans antialiased text-zinc-100 bg-black selection:bg-white selection:text-black">
-        {/* ========================================================================= */}
-        {/* 1. Header (High Contrast Black Navigation) */}
-        {/* ========================================================================= */}
+        {/* 1. Header Navigation */}
         <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/95 backdrop-blur-xl">
-          <div className="mx-auto flex min-h-16 max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 xl:px-8">
+          <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-2.5 sm:px-6 xl:px-8">
             <div className="flex shrink-0 items-center gap-3">
-              <span className="flex flex-col gap-1 w-6">
-                <span className="h-1 w-full bg-white rounded-full"></span>
-                <span className="h-1 w-4 bg-zinc-400 rounded-full ml-1"></span>
-                <span className="h-1 w-2 bg-zinc-600 rounded-full ml-2"></span>
+              <span className="flex flex-col gap-1 w-5">
+                <span className="h-0.5 w-full bg-white"></span>
+                <span className="h-0.5 w-3.5 bg-zinc-400 ml-1"></span>
+                <span className="h-0.5 w-2 bg-zinc-600 ml-2"></span>
               </span>
-              <span className="text-sm font-bold tracking-tight text-white">
-                Flow Commerce <span className="text-zinc-400 font-normal">Pro</span>
+              <span className="text-sm font-bold tracking-tight text-white uppercase font-mono">
+                Flow <span className="text-zinc-400 font-normal">SaaS</span>
               </span>
             </div>
 
-            <nav className="order-3 flex w-full overflow-x-auto border border-zinc-800 bg-zinc-950 p-1 rounded-xl lg:order-none lg:mx-auto lg:w-auto">
+            <nav className="order-3 flex w-full overflow-x-auto border border-zinc-800 bg-zinc-950 p-0.5 lg:order-none lg:mx-auto lg:w-auto rounded-none">
               <a
                 href="/admin/analytics"
-                className="shrink-0 px-4 py-1.5 text-xs font-bold rounded-lg transition bg-white text-black shadow-sm"
+                className="shrink-0 px-3.5 py-1 text-xs font-bold transition bg-white text-black shadow-sm rounded-none uppercase tracking-wider"
               >
                 Dashboard
               </a>
               <a
                 href="/admin/collections/orders"
-                className="shrink-0 px-4 py-1.5 text-xs font-medium rounded-lg transition text-zinc-400 hover:text-white hover:bg-zinc-900"
+                className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Pedidos
               </a>
               <a
                 href="/admin/collections/products"
-                className="shrink-0 px-4 py-1.5 text-xs font-medium rounded-lg transition text-zinc-400 hover:text-white hover:bg-zinc-900"
+                className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Productos
               </a>
               <a
                 href="/admin/collections/customers"
-                className="shrink-0 px-4 py-1.5 text-xs font-medium rounded-lg transition text-zinc-400 hover:text-white hover:bg-zinc-900"
+                className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Clientes CRM
               </a>
               <a
                 href="/admin"
-                className="shrink-0 px-4 py-1.5 text-xs font-medium rounded-lg transition text-zinc-400 hover:text-white hover:bg-zinc-900"
+                className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Colecciones
               </a>
@@ -275,67 +270,62 @@ export async function AnalyticsView() {
                   href={storeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hidden items-center gap-2 border border-zinc-800 bg-zinc-900 hover:border-zinc-700 px-3 py-1.5 text-xs rounded-xl text-zinc-300 hover:text-white md:flex transition shadow-sm"
+                  className="hidden items-center gap-2 border border-zinc-800 bg-zinc-900 hover:border-zinc-600 px-3 py-1 text-xs text-zinc-300 hover:text-white md:flex transition rounded-none font-mono"
                 >
                   <Store className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                  <span className="font-mono text-white font-medium">{tenantSlug}</span>
+                  <span>/{tenantSlug}</span>
                   <ExternalLink className="w-3 h-3 text-zinc-500 shrink-0" />
                 </a>
               ) : null}
 
-              <div className="flex items-center gap-2 border border-zinc-800 bg-zinc-900 p-1.5 rounded-xl pr-3 shadow-sm">
-                <span className="w-7 h-7 rounded-lg bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-2 border border-zinc-800 bg-zinc-900 p-1 pr-3 rounded-none">
+                <span className="w-6 h-6 bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 rounded-none">
                   {userInitials || 'AD'}
                 </span>
                 <span className="hidden text-left xl:block">
                   <span className="block text-xs font-bold text-white leading-tight">{userName}</span>
-                  <span className="block text-[10px] text-zinc-400 font-medium">
-                    {isSuperAdmin ? 'Super Admin' : 'Admin Tienda'}
+                  <span className="block text-[9px] text-zinc-400 font-mono">
+                    {isSuperAdmin ? 'SUPER ADMIN' : 'TIENDA ADMIN'}
                   </span>
                 </span>
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               </div>
             </div>
           </div>
         </header>
 
-        {/* ========================================================================= */}
-        {/* Main Content Dashboard */}
-        {/* ========================================================================= */}
-        <main className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 xl:px-8">
-          {/* ========================================================================= */}
+        {/* Main Content */}
+        <main className="mx-auto max-w-[1600px] space-y-5 px-4 py-5 sm:px-6 xl:px-8">
           {/* 2. Hero Panel */}
-          {/* ========================================================================= */}
-          <section className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-950 via-black to-zinc-950 p-6 shadow-2xl">
-            <div className="relative z-10 flex flex-col justify-between gap-6 xl:flex-row xl:items-end">
+          <section className="border border-zinc-800 bg-zinc-950 p-5 shadow-2xl rounded-none">
+            <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
               <div>
-                <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                  <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                <div className="mb-2 flex items-center gap-2 text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                  <span className="w-2 h-2 bg-white inline-block"></span>
                   <span>Operación en línea · {dateTitle}</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                  Bienvenido/a, {userName}
+                <h1 className="text-2xl font-bold tracking-tight text-white">
+                  {tenantName}
                 </h1>
-                <p className="mt-2 text-xs sm:text-sm text-zinc-400">
-                  Panel de ventas para <strong className="text-white font-semibold">{tenantName}</strong>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Panel de ventas y control de inventario
                   <span className="mx-2 text-zinc-700">•</span>
-                  Tasa BCV <span className="font-mono text-white font-bold">Bs. {rateVES.toFixed(2)} / $</span>
+                  Tasa BCV Oficial: <span className="font-mono text-white font-bold">Bs. {rateVES.toFixed(2)} / $</span>
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <a
                   href="/admin/collections/products/create"
-                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-600 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-sm"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider"
                 >
-                  <Plus className="w-4 h-4 shrink-0" />
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
                   <span>+ Agregar Producto</span>
                 </a>
                 <a
                   href="/admin/collections/orders"
-                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-600 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-sm"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider"
                 >
-                  <ClipboardList className="w-4 h-4 shrink-0" />
+                  <ClipboardList className="w-3.5 h-3.5 shrink-0" />
                   <span>Ver Pedidos</span>
                 </a>
                 {tenantSlug ? (
@@ -343,9 +333,9 @@ export async function AnalyticsView() {
                     href={storeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2.5 bg-white hover:bg-zinc-200 text-black text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-lg"
+                    className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-bold transition inline-flex items-center gap-1.5 shadow-lg rounded-none uppercase tracking-wider"
                   >
-                    <ShoppingBag className="w-4 h-4 shrink-0" />
+                    <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
                     <span>Abrir Tienda</span>
                     <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                   </a>
@@ -354,104 +344,100 @@ export async function AnalyticsView() {
             </div>
           </section>
 
-          {/* ========================================================================= */}
-          {/* 3. 4 Key Metric Cards (SalesOps Dark High Contrast) */}
-          {/* ========================================================================= */}
+          {/* 3. 4 Key Metric Cards */}
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Card 1: Ventas de hoy */}
-            <article className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl transition duration-200 hover:border-zinc-700">
+            {/* Card 1 */}
+            <article className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-zinc-400 font-medium">Ventas de hoy</p>
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-white">${todaySalesUSD.toFixed(2)}</p>
+                  <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Ventas de hoy</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">${todaySalesUSD.toFixed(2)}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <Wallet className="w-5 h-5" />
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                  <Wallet className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
+              <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
                 <span className="font-mono text-xs text-zinc-400">
                   Bs. {todaySalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-xs font-bold text-white bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-md">
-                  {todayOrders.length} {todayOrders.length === 1 ? 'pedido' : 'pedidos'}
+                <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
+                  {todayOrders.length} hoy
                 </span>
               </div>
             </article>
 
-            {/* Card 2: Ventas acumuladas */}
-            <article className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl transition duration-200 hover:border-zinc-700">
+            {/* Card 2 */}
+            <article className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-zinc-400 font-medium">Ventas acumuladas</p>
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-white">${totalSalesUSD.toFixed(2)}</p>
+                  <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Ventas totales</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">${totalSalesUSD.toFixed(2)}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <ShoppingCart className="w-5 h-5" />
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                  <ShoppingCart className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
+              <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
                 <span className="font-mono text-xs text-zinc-400">
                   Bs. {totalSalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-xs font-bold text-zinc-300 bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-md">
-                  {orders.length} total
+                <span className="text-xs font-mono text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
+                  {orders.length} pedidos
                 </span>
               </div>
             </article>
 
-            {/* Card 3: Clientes en CRM */}
-            <article className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl transition duration-200 hover:border-zinc-700">
+            {/* Card 3 */}
+            <article className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-zinc-400 font-medium">Clientes en CRM</p>
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-white">{customers.length}</p>
+                  <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Clientes CRM</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{customers.length}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <Users className="w-5 h-5" />
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                  <Users className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
+              <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
                 <span className="font-mono text-xs text-zinc-400">
                   {vipCount} VIP · {recurrenteCount} recurrentes
                 </span>
-                <span className="text-xs font-bold text-white bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-md">
+                <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
                   Activos
                 </span>
               </div>
             </article>
 
-            {/* Card 4: Por despachar */}
-            <article className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl transition duration-200 hover:border-zinc-700">
+            {/* Card 4 */}
+            <article className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-zinc-400 font-medium">Por despachar</p>
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-white">{pendingOrdersCount}</p>
+                  <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Por despachar</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{pendingOrdersCount}</p>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <Package className="w-5 h-5" />
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                  <Package className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
-                <span className="font-mono text-xs text-zinc-400">{products.length} productos en catálogo</span>
-                <span className="text-xs font-bold text-white bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-md">
+              <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
+                <span className="font-mono text-xs text-zinc-400">{products.length} productos en BD</span>
+                <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
                   {pendingOrdersCount > 0 ? 'En curso' : 'Al día'}
                 </span>
               </div>
             </article>
           </section>
 
-          {/* ========================================================================= */}
           {/* 4. Alerta de Inventario Crítico */}
-          {/* ========================================================================= */}
           {lowStockProducts.length > 0 && (
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <section className="border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-none">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0">
-                  <TriangleAlert className="w-5 h-5" />
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
+                  <TriangleAlert className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">
+                  <p className="text-xs font-bold text-white uppercase tracking-wider font-mono">
                     Alerta de inventario: {lowStockProducts.length} productos con stock crítico
                   </p>
                   <p className="text-xs text-zinc-400">
@@ -464,45 +450,43 @@ export async function AnalyticsView() {
                   <a
                     key={p.id}
                     href={`/admin/collections/products/${p.id}`}
-                    className="px-3 py-1.5 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 rounded-lg text-xs text-zinc-200 flex items-center gap-1.5 transition"
+                    className="px-2.5 py-1 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-xs text-zinc-200 flex items-center gap-1.5 transition rounded-none font-mono"
                   >
                     <span>{p.title}</span>
-                    <b className="font-mono text-white">{p.stockQuantity !== undefined ? `${p.stockQuantity} uds` : 'Agotado'}</b>
+                    <b className="text-white">{p.stockQuantity !== undefined ? `${p.stockQuantity} uds` : 'Agotado'}</b>
                   </a>
                 ))}
               </div>
             </section>
           )}
 
-          {/* ========================================================================= */}
           {/* 5. Gráfico 7 Días & Más Vendidos */}
-          {/* ========================================================================= */}
-          <section className="grid gap-5 xl:grid-cols-[1.4fr_.8fr]">
-            {/* Chart (1.4fr) */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl">
-              <div className="mb-4 flex items-end justify-between gap-4">
+          <section className="grid gap-4 xl:grid-cols-[1.4fr_.8fr]">
+            {/* Chart */}
+            <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
+              <div className="mb-3 flex items-end justify-between gap-4">
                 <div>
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                     Rendimiento · últimos 7 días
                   </p>
-                  <h2 className="text-lg font-bold text-white">Ventas y pedidos</h2>
+                  <h2 className="text-base font-bold text-white">Ventas y pedidos</h2>
                 </div>
                 <a
                   href="/admin/collections/orders"
-                  className="text-xs text-zinc-400 transition hover:text-white font-medium"
+                  className="text-xs text-zinc-400 transition hover:text-white font-mono"
                 >
-                  Ver reporte completo →
+                  Ver reporte →
                 </a>
               </div>
 
-              <div className="flex h-52 items-end gap-2 border-b border-l border-zinc-800 px-2 pb-0 pt-5 sm:gap-4">
+              <div className="flex h-48 items-end gap-2 border-b border-l border-zinc-800 px-2 pb-0 pt-4 sm:gap-4">
                 {last7Days.map((bar, idx) => {
                   const heightPercent = Math.max(Math.round((bar.amount / maxDaySales) * 100), 8);
                   const isToday = idx === 6;
                   return (
                     <div key={bar.dateStr} className="flex h-full flex-1 flex-col items-center justify-end gap-2 group">
                       <div
-                        className="w-full max-w-12 rounded-t transition-all duration-300"
+                        className="w-full max-w-10 transition-all duration-300 rounded-none"
                         style={{
                           height: `${heightPercent}%`,
                           backgroundColor: isToday ? '#ffffff' : bar.amount > 0 ? '#52525b' : '#18181b',
@@ -516,46 +500,46 @@ export async function AnalyticsView() {
                 })}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-5 text-xs text-zinc-400">
-                <span className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-zinc-400 font-mono">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-white"></span>
                   <strong className="text-white font-semibold">Ventas ${totalSalesUSD.toFixed(0)}</strong>
                 </span>
-                <span className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span>
-                  <strong className="text-zinc-300 font-medium">Pedidos {totalOrders}</strong>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-zinc-500"></span>
+                  <strong className="text-zinc-300">Pedidos {totalOrders}</strong>
                 </span>
                 <span className="ml-auto flex items-center gap-1 text-white font-bold">
-                  +18.4% vs. semana anterior <TrendingUp className="w-3.5 h-3.5 inline text-white" />
+                  +18.4% <TrendingUp className="w-3.5 h-3.5 inline text-white" />
                 </span>
               </div>
             </div>
 
-            {/* Más Vendidos (.8fr) */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl">
-              <div className="mb-4 flex items-end justify-between gap-4">
+            {/* Más Vendidos */}
+            <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
+              <div className="mb-3 flex items-end justify-between gap-4">
                 <div>
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                     Catálogo
                   </p>
-                  <h2 className="text-lg font-bold text-white">Más vendidos</h2>
+                  <h2 className="text-base font-bold text-white">Más vendidos</h2>
                 </div>
-                <a href="/admin/collections/products" className="text-xs text-zinc-400 transition hover:text-white font-medium">
+                <a href="/admin/collections/products" className="text-xs text-zinc-400 transition hover:text-white font-mono">
                   Ver catálogo →
                 </a>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {top5Products.length > 0 ? (
                   top5Products.map((p, idx) => {
                     const barPercent = Math.max(Math.round((p.units / maxProductUnits) * 100), 15);
                     return (
                       <div key={p.sku || p.title} className="flex items-center gap-3">
-                        <span className="w-6 font-mono text-zinc-500 text-xs font-bold">0{idx + 1}</span>
+                        <span className="w-5 font-mono text-zinc-500 text-xs font-bold">0{idx + 1}</span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-semibold text-white">{p.title}</p>
-                          <div className="mt-1.5 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-white rounded-full" style={{ width: `${barPercent}%` }}></div>
+                          <div className="mt-1 h-1 bg-zinc-800 rounded-none overflow-hidden">
+                            <div className="h-full bg-white rounded-none" style={{ width: `${barPercent}%` }}></div>
                           </div>
                         </div>
                         <span className="font-mono text-xs text-zinc-300 font-semibold shrink-0">
@@ -565,36 +549,34 @@ export async function AnalyticsView() {
                     );
                   })
                 ) : (
-                  <div className="text-center py-10 text-xs text-zinc-500">
-                    <p>Se calcularán automáticamente con las ventas de tu catálogo.</p>
+                  <div className="text-center py-8 text-xs text-zinc-500 font-mono">
+                    <p>Se calcularán automáticamente con tus ventas.</p>
                   </div>
                 )}
               </div>
             </div>
           </section>
 
-          {/* ========================================================================= */}
-          {/* 6. Pedidos Recientes (Shopify Style) */}
-          {/* ========================================================================= */}
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden shadow-xl">
-            <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 sm:flex-row sm:items-center sm:justify-between">
+          {/* 6. Pedidos Recientes */}
+          <section className="border border-zinc-800 bg-zinc-950 overflow-hidden shadow-xl rounded-none">
+            <div className="flex flex-col gap-3 border-b border-zinc-800 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                   Shopify Style
                 </p>
-                <h2 className="text-lg font-bold text-white">Pedidos recientes</h2>
+                <h2 className="text-base font-bold text-white">Pedidos recientes</h2>
               </div>
               <div className="flex gap-2">
                 <a
                   href="/admin/collections/orders"
-                  className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5"
+                  className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-mono font-bold transition inline-flex items-center gap-1.5 rounded-none"
                 >
                   <Search className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                   <span>Buscar</span>
                 </a>
                 <a
                   href="/admin/collections/orders"
-                  className="px-4 py-1.5 bg-white hover:bg-zinc-200 text-black text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5 shadow-md"
+                  className="px-3.5 py-1 bg-white hover:bg-zinc-200 text-black text-xs font-mono font-bold transition inline-flex items-center gap-1.5 shadow-md rounded-none uppercase"
                 >
                   <span>Ver todos</span>
                   <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
@@ -603,21 +585,21 @@ export async function AnalyticsView() {
             </div>
 
             {orders.length === 0 ? (
-              <div className="p-8 text-center text-xs text-zinc-500">
+              <div className="p-8 text-center text-xs text-zinc-500 font-mono">
                 <p>No hay pedidos registrados todavía en esta tienda.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-xs">
                   <thead>
-                    <tr className="border-b border-zinc-800 bg-black text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                      <th className="px-5 py-3.5">Pedido</th>
-                      <th className="px-5 py-3.5">Cliente</th>
-                      <th className="px-5 py-3.5">Modalidad</th>
-                      <th className="px-5 py-3.5">Total USD</th>
-                      <th className="px-5 py-3.5">Total VES</th>
-                      <th className="px-5 py-3.5">Estado</th>
-                      <th className="px-5 py-3.5">Hora</th>
+                    <tr className="border-b border-zinc-800 bg-black text-[10px] uppercase tracking-[0.14em] text-zinc-400 font-mono">
+                      <th className="px-4 py-3">Pedido</th>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Modalidad</th>
+                      <th className="px-4 py-3">Total USD</th>
+                      <th className="px-4 py-3">Total VES</th>
+                      <th className="px-4 py-3">Estado</th>
+                      <th className="px-4 py-3">Hora</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -631,42 +613,25 @@ export async function AnalyticsView() {
 
                       return (
                         <tr key={order.id} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/50 transition">
-                          <td className="px-5 py-4 font-mono font-bold text-white">
+                          <td className="px-4 py-3 font-mono font-bold text-white">
                             <a href={`/admin/collections/orders/${order.id}`} className="hover:underline">
                               #{orderNum}
                             </a>
                           </td>
-                          <td className="px-5 py-4 font-semibold text-white">{customerName}</td>
-                          <td className="px-5 py-4 text-zinc-400">
-                            {order.deliveryType === 'delivery' ? 'Delivery Express' : 'Pick-up en Tienda'}
+                          <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
+                          <td className="px-4 py-3 text-zinc-400">
+                            {order.deliveryType === 'delivery' ? 'Delivery' : 'Pick-up'}
                           </td>
-                          <td className="px-5 py-4 font-mono font-bold text-white">${totalUSD.toFixed(2)}</td>
-                          <td className="px-5 py-4 font-mono text-zinc-400 text-[11px]">
+                          <td className="px-4 py-3 font-mono font-bold text-white">${totalUSD.toFixed(2)}</td>
+                          <td className="px-4 py-3 font-mono text-zinc-400 text-[11px]">
                             Bs. {totalVESOrder.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-5 py-4">
-                            {status === 'pending' && (
-                              <span className="px-2.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-full font-bold text-[10px]">
-                                Procesando
-                              </span>
-                            )}
-                            {status === 'preparing' && (
-                              <span className="px-2.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-full font-bold text-[10px]">
-                                Enviado
-                              </span>
-                            )}
-                            {status === 'delivered' && (
-                              <span className="px-2.5 py-0.5 bg-white text-black font-extrabold rounded-full text-[10px]">
-                                Pagado
-                              </span>
-                            )}
-                            {status !== 'pending' && status !== 'preparing' && status !== 'delivered' && (
-                              <span className="px-2.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-full font-bold text-[10px]">
-                                {status}
-                              </span>
-                            )}
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-200 font-mono text-[10px] rounded-none">
+                              {status === 'pending' ? 'Procesando' : status === 'delivered' ? 'Pagado' : status}
+                            </span>
                           </td>
-                          <td className="px-5 py-4 text-zinc-400 font-mono text-[11px]">{createdAt}</td>
+                          <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{createdAt}</td>
                         </tr>
                       );
                     })}
@@ -676,20 +641,18 @@ export async function AnalyticsView() {
             )}
           </section>
 
-          {/* ========================================================================= */}
           {/* 7. Bottom Grid: Mini CRM + Google Sheets */}
-          {/* ========================================================================= */}
-          <section className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
+          <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
             {/* Mini CRM */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl">
-              <div className="mb-4 flex items-end justify-between gap-4">
+            <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
+              <div className="mb-3 flex items-end justify-between gap-4">
                 <div>
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                     Mini CRM
                   </p>
-                  <h2 className="text-lg font-bold text-white">Clientes frecuentes</h2>
+                  <h2 className="text-base font-bold text-white">Clientes frecuentes</h2>
                 </div>
-                <a href="/admin/collections/customers" className="text-xs text-zinc-400 transition hover:text-white font-medium">
+                <a href="/admin/collections/customers" className="text-xs text-zinc-400 transition hover:text-white font-mono">
                   Abrir CRM →
                 </a>
               </div>
@@ -703,15 +666,15 @@ export async function AnalyticsView() {
                   const prefilledMsg = encodeURIComponent(`¡Hola ${customerName}! Te escribimos de ${tenantName}. ¿Cómo estás?`);
 
                   return (
-                    <div key={c.id} className="flex items-center gap-3 border-b border-zinc-800/60 py-3 last:border-0">
-                      <span className="w-8 h-8 rounded-lg bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0">
+                    <div key={c.id} className="flex items-center gap-3 border-b border-zinc-800/60 py-2.5 last:border-0">
+                      <span className="w-7 h-7 bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 rounded-none font-mono">
                         {initials}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-white truncate">{customerName}</p>
-                        <p className="mt-0.5 text-[11px] text-zinc-400">
-                          {c.computedOrders} {c.computedOrders === 1 ? 'compra' : 'compras'} ·{' '}
-                          <span className={c.computedTier === 'vip' ? 'text-white font-bold' : 'text-zinc-300 font-medium'}>
+                        <p className="text-[10px] text-zinc-400 font-mono">
+                          {c.computedOrders} pedidos ·{' '}
+                          <span className="text-white font-bold">
                             {c.computedTier === 'vip' ? 'VIP' : c.computedTier === 'recurrente' ? 'Recurrente' : 'Nuevo'}
                           </span>
                         </p>
@@ -721,9 +684,9 @@ export async function AnalyticsView() {
                           href={`https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${prefilledMsg}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white rounded-lg text-xs font-bold transition inline-flex items-center gap-1.5 shrink-0"
+                          className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 shrink-0 rounded-none"
                         >
-                          <Send className="w-3.5 h-3.5 shrink-0" />
+                          <Send className="w-3 h-3 shrink-0" />
                           <span>WhatsApp</span>
                         </a>
                       ) : null}
@@ -734,26 +697,22 @@ export async function AnalyticsView() {
             </div>
 
             {/* Google Sheets Widget */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl">
-              <div className="mb-4 flex items-start justify-between">
+            <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
+              <div className="mb-3 flex items-start justify-between">
                 <div>
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                     Sincronización
                   </p>
-                  <h2 className="text-lg font-bold text-white">Google Sheets en Vivo</h2>
-                  <p className="mt-1 text-xs text-zinc-400 max-w-sm">
-                    Actualiza tu inventario y precios pegando la URL de tu hoja de cálculo.
+                  <h2 className="text-base font-bold text-white">Google Sheets en Vivo</h2>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Actualiza tu catálogo pegando tu enlace de Google Sheets.
                   </p>
                 </div>
-                <FileSpreadsheet className="w-6 h-6 text-white shrink-0" />
+                <FileSpreadsheet className="w-5 h-5 text-white shrink-0" />
               </div>
 
-              <div className="mt-4">
-                {tenantSlug ? (
-                  <GoogleSheetsSyncWidget tenantSlug={tenantSlug} tenantName={tenantName} />
-                ) : (
-                  <p className="text-xs text-zinc-500">Selecciona una tienda para sincronizar.</p>
-                )}
+              <div className="mt-3">
+                <GoogleSheetsSyncWidget tenantSlug={tenantSlug} tenantName={tenantName} />
               </div>
             </div>
           </section>

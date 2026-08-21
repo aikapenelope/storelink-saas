@@ -123,6 +123,7 @@ export async function POST(
     const catIdx = csvHeaders.findIndex((h) => h === 'category' || h === 'categoria' || h === 'rubro');
     const descIdx = csvHeaders.findIndex((h) => h === 'description' || h === 'descripcion');
     const stockIdx = csvHeaders.findIndex((h) => h === 'stock' || h === 'cantidad' || h === 'stock_quantity');
+    const imgIdx = csvHeaders.findIndex((h) => h === 'image' || h === 'images' || h === 'image_url' || h === 'imagen' || h === 'foto' || h === 'url_imagen' || h === 'img');
 
     if (titleIdx === -1 || priceIdx === -1) {
       return NextResponse.json(
@@ -150,6 +151,7 @@ export async function POST(
       const description = descIdx !== -1 ? cols[descIdx] : '';
       const stockQuantity = stockIdx !== -1 ? parseInt(cols[stockIdx], 10) || 0 : undefined;
       const rawCategory = catIdx !== -1 && cols[catIdx] ? cols[catIdx].trim() : '';
+      const imageUrl = imgIdx !== -1 && cols[imgIdx] ? cols[imgIdx].trim() : undefined;
 
       if (!title) continue;
 
@@ -209,6 +211,7 @@ export async function POST(
               price,
               description,
               category: categoryId as any,
+              imageUrl: imageUrl || undefined,
               stockQuantity,
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
@@ -223,6 +226,7 @@ export async function POST(
               sku,
               price,
               description,
+              imageUrl: imageUrl || undefined,
               category: categoryId as any,
               tenant: tenantId as any,
               stockQuantity,

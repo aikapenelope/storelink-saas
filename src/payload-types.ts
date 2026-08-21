@@ -183,6 +183,7 @@ export type Product = {
   featured?: boolean | null;
   variants?: ProductVariant[] | null;
   modifiers?: ProductModifier[] | null;
+  imageUrl?: string | null;
   images?: ProductImage[] | null;
   meta?: {
     title?: string | null;
