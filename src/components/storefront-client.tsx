@@ -569,18 +569,17 @@ export function StorefrontClient({
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const totalCartAmount = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
-  // Active theme dataset (switches products when clicking demo verticals)
+  // Real database tenant resolution
+  const isRealStore = !isDemo;
   const currentVertical = VERTICAL_PRODUCTS[activeTheme] || VERTICAL_PRODUCTS['basic-banner'];
-  
-  // Real database products check: strictly depends on whether real products exist from DB (isDemo is false)
-  const hasRealDbProducts = !isDemo && products.length > 0;
-  const activeProducts = (hasRealDbProducts && activeTheme === tenant.theme) ? products : currentVertical.items;
-  const activeCategories = (hasRealDbProducts && activeTheme === tenant.theme) ? categories : currentVertical.categories;
+
+  const activeProducts = isRealStore ? products : currentVertical.items;
+  const activeCategories = isRealStore ? categories : currentVertical.categories;
 
   const activeTenantConfig: TenantConfig = {
     ...tenant,
-    name: (hasRealDbProducts && activeTheme === tenant.theme) ? tenant.name : currentVertical.name,
-    welcomeMessage: (hasRealDbProducts && activeTheme === tenant.theme) ? tenant.welcomeMessage : currentVertical.welcome,
+    name: isRealStore ? tenant.name : currentVertical.name,
+    welcomeMessage: isRealStore ? tenant.welcomeMessage : currentVertical.welcome,
     exchangeRateVES: tenant.exchangeRateVES || 910.0,
     showVES: tenant.showVES ?? true,
   };
@@ -774,11 +773,13 @@ export function StorefrontClient({
         onClearCart={() => setCart([])}
       />
 
-      {/* PWA Fixed Bottom Store Demo Switcher Bar */}
-      <DemosMartesSwitcher
-        activeTheme={activeTheme}
-        onSelectTheme={setActiveTheme}
-      />
+      {/* PWA Fixed Bottom Store Demo Switcher Bar (only on marketing/demo mode) */}
+      {isDemo && (
+        <DemosMartesSwitcher
+          activeTheme={activeTheme}
+          onSelectTheme={setActiveTheme}
+        />
+      )}
     </div>
   );
 }

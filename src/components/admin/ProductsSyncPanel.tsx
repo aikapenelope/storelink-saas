@@ -39,7 +39,13 @@ export async function ProductsSyncPanel() {
       }
     }
 
-    if (!tenantSlug) return null;
+    if (!tenantSlug) {
+      return (
+        <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-xs text-zinc-400 font-sans shadow-xl">
+          <p>Para sincronizar tu catálogo con Google Sheets en 1 clic, primero crea o vincula una tienda en la colección <strong>Tenants</strong>.</p>
+        </div>
+      );
+    }
 
     return (
       <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-2xl text-zinc-100 font-sans">
