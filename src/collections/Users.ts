@@ -4,13 +4,9 @@ import { getUserRole } from '@/lib/utils';
 export const Users: CollectionConfig = {
   slug: 'users',
   auth: {
+    tokenExpiration: 7 * 24 * 60 * 60, // Sesión segura de 7 días
     maxLoginAttempts: 5, // Bloquea la cuenta automáticamente tras 5 intentos fallidos
     lockTime: 10 * 60 * 1000, // Tiempo de bloqueo de 10 minutos contra ataques de fuerza bruta
-    tokenExpiration: 7 * 24 * 60 * 60, // Sesión segura de 7 días
-    cookies: {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
-    },
   },
   admin: {
     useAsTitle: 'email',

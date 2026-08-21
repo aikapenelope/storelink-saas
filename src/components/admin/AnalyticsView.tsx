@@ -2,6 +2,7 @@ import React from 'react';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
@@ -23,18 +24,15 @@ import {
 } from 'lucide-react';
 
 export async function AnalyticsView() {
-  try {
-    const payload = await getPayload({ config });
-    const headersList = await headers();
-    const { user } = await payload.auth({ headers: headersList });
+  const headersList = await headers();
+  const payload = await getPayload({ config });
+  const { user } = await payload.auth({ headers: headersList });
 
-    if (!user) {
-      return (
-        <div className="p-8 text-center text-zinc-400 bg-black min-h-screen font-sans">
-          <p>Debes iniciar sesión para ver el dashboard.</p>
-        </div>
-      );
-    }
+  if (!user) {
+    redirect('/admin/login?redirect=%2Fadmin%2Fanalytics');
+  }
+
+  try {
 
     const isSuperAdmin = (user as any).role === 'super-admin';
     let tenantId: number | string | null = null;
