@@ -43,6 +43,45 @@ export async function POST(
       );
     }
 
+    // 1. Find tenant
+    const tenantResult = await payload.find({
+      collection: 'tenants',
+      where: { slug: { equals: tenantSlug } },
+      limit: 1,
+    });
+
+    if (tenantResult.docs.length === 0) {
+      return NextResponse.json(
+        { error: `Tenant "${tenantSlug}" no encontrado` },
+        { status: 404 }
+      );
+    }
+
+    const tenantId = tenantResult.docs[0].id;
+
+    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3)
+    const currentUser = authResult.user as any;
+    const isSuperAdmin = currentUser.role === 'super-admin';
+
+    if (!isSuperAdmin) {
+      const userDoc: any = await payload.findByID({
+        collection: 'users',
+        id: currentUser.id,
+        depth: 1,
+      });
+
+      const allowedTenantIds = (userDoc?.tenants || []).map((t: any) =>
+        typeof t.tenant === 'object' && t.tenant !== null ? t.tenant.id : t.tenant
+      );
+
+      if (!allowedTenantIds.includes(tenantId)) {
+        return NextResponse.json(
+          { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const body = await request.json().catch(() => ({}));
     let sheetUrl = body.url || body.sheetsUrl;
 
@@ -69,7 +108,7 @@ export async function POST(
       }
     }
 
-    // 1. Fetch live CSV from Google Sheets
+    // Fetch live CSV from Google Sheets
     const res = await fetch(sheetUrl, { cache: 'no-store' });
     if (!res.ok) {
       return NextResponse.json(
@@ -88,23 +127,7 @@ export async function POST(
       );
     }
 
-    // 2. Find tenant
-    const tenantResult = await payload.find({
-      collection: 'tenants',
-      where: { slug: { equals: tenantSlug } },
-      limit: 1,
-    });
-
-    if (tenantResult.docs.length === 0) {
-      return NextResponse.json(
-        { error: `Tenant "${tenantSlug}" no encontrado` },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = tenantResult.docs[0].id;
-
-    // 3. Parse CSV rows
+    // Parse CSV rows
     const rawLines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (rawLines.length < 2) {
       return NextResponse.json(

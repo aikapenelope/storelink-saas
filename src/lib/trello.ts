@@ -1,7 +1,7 @@
 export interface TrelloOrderPayload {
-  apiKey: string;
-  token: string;
-  listId: string;
+  apiKey?: string;
+  token?: string;
+  listId?: string;
   orderNumber: string;
   customerName: string;
   customerPhone: string;
@@ -41,34 +41,10 @@ export async function createTrelloOrderCard(payload: TrelloOrderPayload): Promis
       pdfUrl,
     } = payload;
 
-    const targetListId = listId || '6a77eee513389b2d14a8b8da';
-
-    // If direct Trello keys are not present in env, relay via authorized pwa-martes endpoint
-    if (!apiKey || !token) {
-      try {
-        const relayRes = await fetch('https://pwa-martes.vercel.app/api/pedido', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nombre: customerName,
-            whatsapp: customerPhone,
-            correo: 'cliente@pedido.com',
-            direccion: customerAddress || 'Retiro en tienda',
-            productos: items.map((i) => ({ name: i.title, qty: i.quantity, sku: i.sku || 'N/A' })),
-            pago: paymentMethod || 'Pago Móvil / Zelle',
-            nota: notes || '',
-            total,
-          }),
-        });
-
-        if (relayRes.ok) {
-          const relayData = await relayRes.json();
-          return { success: true, cardId: relayData.taskId };
-        }
-      } catch (relayErr) {
-        console.warn('PWA Trello relay failed:', relayErr);
-      }
-      return { success: false, error: 'Credenciales de Trello no configuradas' };
+    // 🔒 Audit Fix #2.5: Never relay client personal data to undocumented third-party endpoints
+    // or use hardcoded board IDs. Only create cards if this specific merchant explicitly configured Trello.
+    if (!apiKey || !token || !listId) {
+      return { success: false, error: 'Credenciales de Trello no configuradas para este comercio' };
     }
 
     const itemsSummary = items
@@ -105,10 +81,9 @@ _Generado automáticamente desde StoreLink PWA_
     const params = new URLSearchParams({
       key: apiKey,
       token: token,
-      idList: targetListId,
+      idList: listId,
       name: cardTitle,
       desc: cardDescription,
-      idLabels: '6a77f035716c662b2dcd1c1d,6a77eed8b83fbca7a633fdd4', // Pendiente (red) + PWA (blue)
       pos: 'top',
     });
 

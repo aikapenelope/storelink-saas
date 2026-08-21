@@ -60,21 +60,21 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
   };
 
   return (
-    <div className="bg-slate-900/90 text-white rounded-2xl p-5 border border-slate-800 shadow-xl space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+    <div className="bg-zinc-950 text-zinc-100 rounded-2xl p-5 border border-zinc-800 shadow-2xl space-y-4 font-sans">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white">
             <FileSpreadsheet className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
               Sincronización de Catálogo en 1 Clic
-              <span className="text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded-full">
                 Google Sheets
               </span>
             </h4>
-            <p className="text-xs text-slate-400">
-              Actualiza precios, categorías y stock de <strong>{tenantName}</strong> desde tu hoja de cálculo.
+            <p className="text-xs text-zinc-400">
+              Actualiza precios, categorías y stock de <strong className="text-zinc-200">{tenantName}</strong> desde tu hoja de cálculo.
             </p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
           href="https://docs.google.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition"
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-white transition"
         >
           <span>Abrir Google Sheets</span>
           <ExternalLink className="w-3 h-3" />
@@ -97,12 +97,12 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
           placeholder="Pega aquí la URL pública de tu Google Sheet (ej: https://docs.google.com/spreadsheets/d/...)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 px-4 py-2.5 bg-slate-950/80 border border-slate-700/80 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium"
+          className="flex-1 px-4 py-2.5 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 font-medium"
         />
         <button
           type="submit"
           disabled={loading}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 whitespace-nowrap cursor-pointer"
+          className="px-5 py-2.5 bg-white hover:bg-zinc-200 active:scale-95 disabled:bg-zinc-800 disabled:text-zinc-500 text-zinc-950 text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-lg whitespace-nowrap cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>{loading ? 'Sincronizando...' : 'Sincronizar Ahora'}</span>
@@ -113,12 +113,12 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
         <div
           className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
             result.success
-              ? 'bg-emerald-950/50 border-emerald-700/50 text-emerald-200'
-              : 'bg-rose-950/50 border-rose-700/50 text-rose-200'
+              ? 'bg-zinc-900/90 border-zinc-700 text-zinc-200'
+              : 'bg-rose-950/60 border-rose-800 text-rose-200'
           }`}
         >
           {result.success ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0 mt-0.5" />
           ) : (
             <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
           )}

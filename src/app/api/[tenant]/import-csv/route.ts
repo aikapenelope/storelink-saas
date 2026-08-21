@@ -59,6 +59,29 @@ export async function POST(
 
     const tenantId = tenantResult.docs[0].id;
 
+    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3)
+    const currentUser = authResult.user as any;
+    const isSuperAdmin = currentUser.role === 'super-admin';
+
+    if (!isSuperAdmin) {
+      const userDoc: any = await payload.findByID({
+        collection: 'users',
+        id: currentUser.id,
+        depth: 1,
+      });
+
+      const allowedTenantIds = (userDoc?.tenants || []).map((t: any) =>
+        typeof t.tenant === 'object' && t.tenant !== null ? t.tenant.id : t.tenant
+      );
+
+      if (!allowedTenantIds.includes(tenantId)) {
+        return NextResponse.json(
+          { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
+          { status: 403 }
+        );
+      }
+    }
+
     // 2. Read CSV content (either as multipart form-data or raw text)
     let csvText = '';
     const contentType = request.headers.get('content-type') || '';

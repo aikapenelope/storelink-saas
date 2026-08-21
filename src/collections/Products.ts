@@ -6,7 +6,7 @@ export const Products: CollectionConfig = {
     useAsTitle: 'title',
     defaultColumns: ['title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
     components: {
-      beforeListTable: ['@/components/admin/DiscreetSheetsSync#DiscreetSheetsSync'],
+      beforeListTable: ['@/components/admin/ProductsSyncPanel#ProductsSyncPanel'],
     },
   },
   access: {
