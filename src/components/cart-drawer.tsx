@@ -119,22 +119,30 @@ export function CartDrawer({
   const [phoneNumber, setPhoneNumber] = useState('');
 
   // Dynamic merchant account values from Payload DB
-  const pmBank = paymentMethodsConfig?.pagoMovil?.bank || 'Banesco (0134)';
-  const pmPhone = paymentMethodsConfig?.pagoMovil?.phone || whatsappPhone || '04141234567';
-  const pmIdDoc = paymentMethodsConfig?.pagoMovil?.idDoc || 'J-12345678-0';
+  // Audit fix: sin datos bancarios FALSOS hardcodeados. Si el comercio no ha
+  // configurado un método en su panel, el cliente ve un aviso claro y no una
+  // cuenta inventada donde depositar su dinero.
+  const pmBank = paymentMethodsConfig?.pagoMovil?.bank || '';
+  const pmPhone = paymentMethodsConfig?.pagoMovil?.phone || '';
+  const pmIdDoc = paymentMethodsConfig?.pagoMovil?.idDoc || '';
   const pmHolder = paymentMethodsConfig?.pagoMovil?.accountHolder || storeName;
+  const pagoMovilConfigurado = Boolean(pmBank && pmPhone && pmIdDoc);
 
-  const zelleEmail = paymentMethodsConfig?.zelle?.email || 'pagos@storelink.app';
+  const zelleEmail = paymentMethodsConfig?.zelle?.email || '';
   const zelleHolder = paymentMethodsConfig?.zelle?.accountHolder || storeName;
+  const zelleConfigurado = Boolean(zelleEmail);
 
-  const binancePayId = paymentMethodsConfig?.binance?.payId || '284910381';
-  const binanceNick = paymentMethodsConfig?.binance?.nickname || storeName.replace(/\s+/g, '');
+  const binancePayId = paymentMethodsConfig?.binance?.payId || '';
+  const binanceNick = paymentMethodsConfig?.binance?.nickname || '';
+  const binanceConfigurado = Boolean(binancePayId || binanceNick);
 
-  const zinliEmail = paymentMethodsConfig?.zinli?.email || 'pagos@storelink.app';
+  const zinliEmail = paymentMethodsConfig?.zinli?.email || '';
   const zinliHolder = paymentMethodsConfig?.zinli?.accountHolder || storeName;
+  const zinliConfigurado = Boolean(zinliEmail);
 
-  const banescoAcc = paymentMethodsConfig?.banescoPanama?.accountNumber || '01-2345-6789';
+  const banescoAcc = paymentMethodsConfig?.banescoPanama?.accountNumber || '';
   const banescoHolder = paymentMethodsConfig?.banescoPanama?.accountHolder || storeName;
+  const banescoConfigurado = Boolean(banescoAcc);
 
   const pickupLoc = pickupConfig?.locationAddress || `${storeName} - Sede Principal`;
   const pickupSched = pickupConfig?.schedule || 'Lun-Dom 11:30 AM - 10:00 PM';
@@ -228,10 +236,14 @@ export function CartDrawer({
 
     setIsLoading(true);
 
+    // Audit fix: la dirección de pickup viene de la config del tenant
+    // (prop pickupConfig), nunca hardcodeada de una sola tienda.
+    const pickupText = `[RETIRO EN TIENDA / PICKUP] ${pickupLoc}${pickupSched ? ` (Horario: ${pickupSched})` : ''}`;
+
     const formattedAddress =
       deliveryType === 'delivery'
         ? `[DELIVERY] Dirección/Zona: ${customer.address}, Edif/Casa: ${customer.buildingHouse}, ${customer.municipality}`
-        : `[RETIRO EN TIENDA / PICKUP] Sede Don Luigi - Las Mercedes, Caracas (Horario: 11:30 AM - 10:00 PM)`;
+        : pickupText;
 
     try {
       const response = await processOrder({
@@ -629,6 +641,7 @@ export function CartDrawer({
 
                   {/* Payment Methods Grid */}
                   <div className="grid grid-cols-2 gap-2">
+                    {pagoMovilConfigurado ? (
                     <button
                       type="button"
                       onClick={() => setPaymentMethodKey('pago_movil')}
@@ -641,7 +654,9 @@ export function CartDrawer({
                       <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                       <span className="text-xs">Pago Móvil VES</span>
                     </button>
+                    ) : null}
 
+                    {zelleConfigurado ? (
                     <button
                       type="button"
                       onClick={() => setPaymentMethodKey('zelle')}
@@ -654,7 +669,9 @@ export function CartDrawer({
                       <CreditCard className="w-4 h-4 text-purple-600 flex-shrink-0" />
                       <span className="text-xs">Zelle USD</span>
                     </button>
+                    ) : null}
 
+                    {binanceConfigurado ? (
                     <button
                       type="button"
                       onClick={() => setPaymentMethodKey('binance')}
@@ -667,7 +684,9 @@ export function CartDrawer({
                       <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
                       <span className="text-xs">Binance Pay USDT</span>
                     </button>
+                    ) : null}
 
+                    {zinliConfigurado ? (
                     <button
                       type="button"
                       onClick={() => setPaymentMethodKey('zinli')}
@@ -680,7 +699,9 @@ export function CartDrawer({
                       <CreditCard className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                       <span className="text-xs">Zinli USD</span>
                     </button>
+                    ) : null}
 
+                    {banescoConfigurado ? (
                     <button
                       type="button"
                       onClick={() => setPaymentMethodKey('banesco_panama')}
@@ -693,6 +714,7 @@ export function CartDrawer({
                       <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
                       <span className="text-xs">Banesco Panamá</span>
                     </button>
+                    ) : null}
 
                     <button
                       type="button"

@@ -70,7 +70,8 @@ export async function generateMetadata({
         openGraph: {
           title,
           description,
-          url: `https://${tenantSlug}.martes.app`,
+          // Modelo de URLs por ruta (sin subdominios): flow.martes.app/[slug]
+          url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc.slug || tenantSlug}`,
           siteName: doc.name || storeName,
           images: logoUrl ? [{ url: logoUrl }] : [],
           type: 'website',

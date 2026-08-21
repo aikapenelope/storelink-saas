@@ -29,15 +29,17 @@ Sigue este procedimiento para dar de alta a un cliente en menos de 3 minutos:
 2. **Campos Principales:**
    - **Nombre del Comercio:** Nombre comercial (ej: `Don Luigi & Burgers` o `Ferretería El Tornillo`).
    - **Slug (Subdominio):** El identificador web único (ej: `donluigi` o `eltornillo`).
-     > Este slug definirá su enlace público: `https://donluigi.martes.app`.
+     > Este slug definirá su enlace público: `https://flow.martes.app/donluigi`
+> (el sistema trabaja por ruta `/[slug]`; no se usan subdominios).
    - **Teléfono WhatsApp:** Número con código internacional (ej: `584141234567`) donde el comercio recibirá los pedidos.
    - **Tema Visual:** Selecciona la plantilla visual acorde a su nicho:
+     - `basic-banner` (Plan Básico — banner y catálogo rápido)
      - `food-delivery` (Restaurantes, comida rápida, hamburgueserías)
-     - `hardware-store` (Ferreterías, repuestos, herramientas)
-     - `motorcycle-shop` (Motos, repuestos automotrices)
      - `fashion-boutique` (Ropa, calzado, accesorios)
-     - `modern-minimal` (E-commerce genérico multipropósito)
-   - **Tasa de Cambio Manual (Opcional):** Si el cliente quiere una tasa fija en Bolívares (ej: `75.00`), ingrésala aquí. Si la dejas vacía, el sistema tomará la tasa en vivo de **Binance P2P**.
+     - `moto-parts` (Motos, repuestos automotrices)
+     - `hardware-store` (Ferreterías, repuestos, herramientas)
+   - **Tasa de Cambio Manual (Opcional):** Si el cliente quiere una tasa fija en Bolívares, ingrésala aquí (Bs por cada 1 USD). Si la dejas vacía o en 0, el sistema toma la tasa en vivo de **Binance P2P**; si Binance no responde, usa la tasa de respaldo configurada (`FALLBACK_EXCHANGE_RATE_VES`, por defecto 890).
+   > Esta tasa impacta TODO el sistema de esa tienda: catálogo, checkout, WhatsApp, correo, PDFs y dashboard. Cada pedido guarda además su propia tasa aplicada (snapshot) para conciliación exacta.
 
 #### Paso 3: Configurar Métodos de Pago
 Despliega la sección **Configuración de Métodos de Pago**:
@@ -46,11 +48,25 @@ Despliega la sección **Configuración de Métodos de Pago**:
 - **Binance Pay:** Pay ID o correo asociado.
 - **Zinli / Banesco Panamá / Efectivo:** Activa los que apliquen.
 
-#### Paso 4: (Opcional) Configuración BYOK de Notificaciones
-- **Resend (Email):** Pega la API Key del cliente si desea que los correos salgan desde su propio dominio.
-- **Trello:** Ingresa su API Key, Token y ID de Lista para que sus pedidos caigan en su tablero Kanban.
+#### Paso 4: Configurar el Workspace de Trello del Comercio
 
-#### Paso 5: Crear el Usuario para el Comerciante
+El sistema usa **una sola credencial maestra de Trello** (ya configurada en las variables de entorno de Vercel: `TRELLO_API_KEY` y `TRELLO_TOKEN`). Todos los pedidos salen por esa cuenta; lo que cambia por comercio es el **destino**:
+
+1. En la cuenta maestra de Trello, crea el **Workspace** del comercio nuevo y dentro su tablero de Pedidos con al menos una lista "Pendiente".
+2. Copia el **ID de la lista** destino (24 caracteres alfanuméricos; se obtiene abriendo el tablero → los IDs están en la URL/API de la lista).
+3. En el tenant del comercio, completa el grupo **"Espacio de Trabajo Trello (Kanban)"**:
+   - **Activar recepción de pedidos:** ✅
+   - **Nombre del Workspace:** ej. `Aura Moda`
+   - **Nombre del Tablero:** ej. `Pedidos Aura Moda`
+   - **Enlace Web al Tablero:** URL directa para abrirlo desde el dashboard.
+   - **ID de la Lista de Pendientes:** el ID copiado en el paso 2.
+
+> ⚠️ Sin `listId` configurado, el pedido NO se despacha a Trello (no cae en tableros de otros comercios). El resto del flujo (WhatsApp, PDF, correo, CRM) funciona normal.
+
+#### Paso 5: (Opcional) Resend propio del comercio (BYOK Email)
+- **Resend (Email):** Pega la API Key del cliente solo si desea que los correos salgan desde su propio dominio y cuota. Si se deja vacío, usa la clave global del sistema.
+
+#### Paso 6: Crear el Usuario para el Comerciante
 1. Ve a la colección **Usuarios (Users)** ➔ **Crear Nuevo**.
 2. Ingresa su **Email** y asígnale una **Contraseña**.
 3. En **Rol**, selecciona `Comerciante (Admin de Tienda)`.
@@ -87,7 +103,7 @@ Despliega la sección **Configuración de Métodos de Pago**:
 ## 4. 🧪 Prueba End-to-End (E2E) Completa desde la UI
 
 ### Fase 1: La Experiencia del Comprador (Front-End)
-1. Abre en tu navegador la URL de la tienda: `https://[slug].martes.app` (ej: `https://flow.martes.app/demo`).
+1. Abre en tu navegador la URL de la tienda: `https://flow.martes.app/[slug]` (ej: `https://flow.martes.app/donluigi`).
 2. **Navega y Agrega Productos:**
    - Selecciona un producto (ej: Hamburguesa Bacon).
    - Haz clic en **"Agregar al Carrito"** y ajusta la cantidad a 2.

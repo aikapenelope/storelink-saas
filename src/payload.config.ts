@@ -9,6 +9,7 @@ import { s3Storage } from '@payloadcms/storage-s3';
 import { resendAdapter } from '@payloadcms/email-resend';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
+import { getUserRole } from './lib/utils';
 import sharp from 'sharp';
 
 import { Users } from './collections/Users';
@@ -33,6 +34,24 @@ const plugins: Plugin[] = [
     },
     userHasAccessToAllTenants: (user) =>
       Boolean(user?.role === 'super-admin'),
+    // Audit fix C3: el array `tenants` que este plugin añade a users se guarda
+    // en el JWT (saveToJWT: true, comportamiento por defecto del plugin), y
+    // todas las rutas del dashboard autorizan con él. Sin esta opción oficial,
+    // cualquier tenant-admin podía auto-asignarse otros tenants vía PATCH
+    // /api/users/{id} (escalada horizontal). Opciones documentadas en:
+    // https://payloadcms.com/docs/plugins/multi-tenant#tenants-array-field
+    tenantsArrayField: {
+      includeDefaultField: true,
+      arrayFieldAccess: {
+        read: ({ req: { user } }) => Boolean(user),
+        create: ({ req: { user } }) => getUserRole(user as never) === 'super-admin',
+        update: ({ req: { user } }) => getUserRole(user as never) === 'super-admin',
+      },
+      tenantFieldAccess: {
+        create: ({ req: { user } }) => getUserRole(user as never) === 'super-admin',
+        update: ({ req: { user } }) => getUserRole(user as never) === 'super-admin',
+      },
+    },
   }),
   seoPlugin({
     collections: ['products', 'tenants'],

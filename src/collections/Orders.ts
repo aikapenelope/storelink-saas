@@ -1,4 +1,5 @@
 import type { CollectionConfig, CollectionAfterChangeHook } from 'payload';
+import { sql } from '@payloadcms/db-postgres';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
@@ -10,8 +11,14 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   doc,
   previousDoc,
   operation,
-  req: { payload },
+  req,
 }) => {
+  // Audit fix A1: el hook participa en la transacción del request vía `req`
+  // (patrón oficial: https://payloadcms.com/docs/database/transactions).
+  // Si cualquier paso falla, Payload revierte pedido Y descuento de stock
+  // como una sola unidad (all-or-nothing).
+  const { payload, transactionID } = req;
+
   if (!doc?.items || !Array.isArray(doc.items) || doc.items.length === 0) {
     return doc;
   }
@@ -27,75 +34,62 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // 2. Pedido cancelado -> Reponer inventario
   const isCancelled = previousStatus && previousStatus !== 'cancelled' && currentStatus === 'cancelled';
 
+  const findProduct = async (item: { sku?: string | null; title?: string | null }) => {
+    if (!item.title && !item.sku) return null;
+    const whereQuery: any = {
+      and: [
+        ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+        item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
+      ],
+    };
+    const productRes = await payload.find({
+      collection: 'products',
+      where: whereQuery,
+      limit: 1,
+      overrideAccess: true,
+      ...(transactionID ? { req: { transactionID } as any } : {}),
+    });
+    return productRes.docs[0] ?? null;
+  };
+
   if (isNewlyCreatedActive || isReactivated) {
     for (const item of doc.items) {
-      if (!item.title && !item.sku) continue;
+      const prod = await findProduct(item);
+      if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
-      const whereQuery: any = {
-        and: [
-          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
-          item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
-        ],
-      };
+      const qtyToDeduct = Number(item.quantity) || 1;
+      // Descuento ATÓMICO a nivel SQL: solo aplica si hay stock suficiente
+      // en este instante. Dos pedidos simultáneos ya no venden la misma unidad.
+      const result: any = await payload.db.drizzle.execute(
+        sql`UPDATE products SET stock_quantity = stock_quantity - ${qtyToDeduct}, stock_status = CASE WHEN stock_quantity - ${qtyToDeduct} <= 0 THEN 'out_of_stock' ELSE 'in_stock' END WHERE id = ${prod.id} AND track_stock = true AND stock_quantity >= ${qtyToDeduct}`
+      );
 
-      const productRes = await payload.find({
-        collection: 'products',
-        where: whereQuery,
-        limit: 1,
-        overrideAccess: true,
-      });
+      const affected =
+        result?.rowCount ?? result?.rowsAffected ??
+        (Array.isArray(result?.rows) ? result.rows.length : 1);
 
-      if (productRes.docs.length > 0) {
-        const prod = productRes.docs[0];
-        if (prod.trackStock && typeof prod.stockQuantity === 'number') {
-          const qtyToDeduct = Number(item.quantity) || 1;
-          const newStock = Math.max(0, prod.stockQuantity - qtyToDeduct);
-          await payload.update({
-            collection: 'products',
-            id: prod.id,
-            overrideAccess: true,
-            data: {
-              stockQuantity: newStock,
-              stockStatus: newStock <= 0 ? 'out_of_stock' : 'in_stock',
-            },
-          });
-        }
+      if (!affected) {
+        throw new Error(
+          `Stock insuficiente para "${item.title}" al confirmar el pedido. La operación fue revertida.`
+        );
       }
     }
   } else if (isCancelled) {
     for (const item of doc.items) {
-      if (!item.title && !item.sku) continue;
+      const prod = await findProduct(item);
+      if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
-      const whereQuery: any = {
-        and: [
-          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
-          item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
-        ],
-      };
-
-      const productRes = await payload.find({
+      const qtyToRestore = Number(item.quantity) || 1;
+      await payload.update({
         collection: 'products',
-        where: whereQuery,
-        limit: 1,
+        id: prod.id,
         overrideAccess: true,
+        data: {
+          stockQuantity: prod.stockQuantity + qtyToRestore,
+          stockStatus: 'in_stock',
+        },
+        ...(transactionID ? { req: { transactionID } as any } : {}),
       });
-
-      if (productRes.docs.length > 0) {
-        const prod = productRes.docs[0];
-        if (prod.trackStock && typeof prod.stockQuantity === 'number') {
-          const qtyToRestore = Number(item.quantity) || 1;
-          const newStock = prod.stockQuantity + qtyToRestore;
-          await payload.update({
-            collection: 'products',
-            id: prod.id,
-            overrideAccess: true,
-            data: {
-              stockQuantity: newStock,
-              stockStatus: 'in_stock',
-            },
-          });
-        }
-      }
     }
   }
 
@@ -124,6 +118,18 @@ export const Orders: CollectionConfig = {
       label: 'Número de Pedido',
       required: true,
       index: true,
+      // Audit fix C4-complemento: sin unique, una colisión de números hacía
+      // que /api/orders/[orderNumber] devolviera el pedido de OTRO cliente.
+      unique: true,
+    },
+    {
+      name: 'exchangeRateVES',
+      type: 'number',
+      label: 'Tasa VES Aplicada al Pedido (snapshot)',
+      admin: {
+        description: 'Tasa Bs/USD con la que se calculó este pedido. Se congela aquí para conciliación, aunque la tasa del tenant cambie después.',
+        readOnly: true,
+      },
     },
     {
       name: 'status',
