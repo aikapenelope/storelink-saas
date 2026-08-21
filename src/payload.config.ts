@@ -85,7 +85,7 @@ export default buildConfig({
   admin: {
     user: Users.slug,
     components: {
-      beforeDashboard: ['@/components/admin/MerchantDashboard#MerchantDashboard'],
+      beforeDashboard: ['@/components/admin/StoreUrlBanner#StoreUrlBanner'],
       views: {
         analytics: {
           Component: '@/components/admin/AnalyticsView#AnalyticsView',
