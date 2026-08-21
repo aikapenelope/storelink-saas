@@ -84,6 +84,14 @@ if (
 export default buildConfig({
   admin: {
     user: Users.slug,
+    components: {
+      views: {
+        analytics: {
+          Component: '@/components/admin/AnalyticsView#AnalyticsView',
+          path: '/analytics',
+        },
+      },
+    },
     importMap: {
       baseDir: path.resolve(dirname),
     },
