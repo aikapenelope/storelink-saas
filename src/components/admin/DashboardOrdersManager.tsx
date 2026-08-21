@@ -454,6 +454,18 @@ export function DashboardOrdersManager({
                           </button>
                         )}
 
+                        <a
+                          href={`/api/orders/${order.orderNumber || order.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={`Nota-Entrega-${order.orderNumber || order.id}.pdf`}
+                          className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white text-[10px] transition rounded-none inline-flex items-center gap-1"
+                          title="Descargar Nota de Entrega en PDF"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline font-mono">PDF</span>
+                        </a>
+
                         <button
                           type="button"
                           onClick={() => setSelectedOrder(order)}
@@ -557,11 +569,12 @@ export function DashboardOrdersManager({
                   href={`/api/orders/${selectedOrder.orderNumber || selectedOrder.id}/pdf`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  download={`Nota-Entrega-${selectedOrder.orderNumber || selectedOrder.id}.pdf`}
                   className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1.5 rounded-none"
-                  title="Ver o imprimir nota de entrega oficial en PDF"
+                  title="Descargar o imprimir nota de entrega oficial en PDF"
                 >
                   <Download className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>Nota de Entrega (PDF)</span>
+                  <span>Descargar PDF</span>
                 </a>
 
                 <a

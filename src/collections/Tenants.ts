@@ -1,16 +1,18 @@
 import type { CollectionConfig } from 'payload';
+import { getUserRole } from '@/lib/utils';
 
 export const Tenants: CollectionConfig = {
   slug: 'tenants',
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'slug', 'theme', 'whatsappPhone', 'createdAt'],
+    hidden: ({ user }) => getUserRole(user) !== 'super-admin',
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => Boolean(user),
-    update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => Boolean(user),
+    create: ({ req: { user } }) => getUserRole(user) === 'super-admin',
+    update: ({ req: { user } }) => getUserRole(user) === 'super-admin',
+    delete: ({ req: { user } }) => getUserRole(user) === 'super-admin',
   },
   fields: [
     {
