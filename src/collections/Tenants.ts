@@ -24,9 +24,9 @@ export const Tenants: CollectionConfig = {
       type: 'text',
       required: true,
       unique: true,
-      label: 'Identificador / Subdominio (ej: don-luigi)',
+      label: 'Identificador / Ruta de la Tienda (ej: aura-modaaa)',
       admin: {
-        description: 'Se usará para la URL: tudominio.com/[slug] o [slug].tudominio.com',
+        description: 'La URL pública de la tienda se creará de inmediato en: https://flow.martes.app/[slug]',
       },
     },
     {
