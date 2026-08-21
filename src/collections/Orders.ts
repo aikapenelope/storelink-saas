@@ -6,7 +6,7 @@ export const Orders: CollectionConfig = {
     useAsTitle: 'orderNumber',
     defaultColumns: ['orderNumber', 'customer', 'totalAmount', 'status', 'createdAt'],
     components: {
-      beforeListTable: ['@/components/admin/OrdersSyncPanel#OrdersSyncPanel'],
+      beforeList: ['@/components/admin/OrdersSyncPanel#OrdersSyncPanel'],
     },
   },
   access: {

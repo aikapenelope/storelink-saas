@@ -4,9 +4,9 @@ export const Products: CollectionConfig = {
   slug: 'products',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
+    defaultColumns: ['imageUrl', 'title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
     components: {
-      beforeListTable: ['@/components/admin/ProductsSyncPanel#ProductsSyncPanel'],
+      beforeList: ['@/components/admin/ProductsSyncPanel#ProductsSyncPanel'],
     },
   },
   access: {
@@ -16,6 +16,17 @@ export const Products: CollectionConfig = {
     delete: ({ req: { user } }) => Boolean(user),
   },
   fields: [
+    {
+      name: 'imageUrl',
+      type: 'text',
+      label: 'Foto',
+      admin: {
+        description: 'URL directa de la imagen del producto (ej: Unsplash, Cloudinary o Google Drive)',
+        components: {
+          Cell: '@/components/admin/ProductImageCell#ProductImageCell',
+        },
+      },
+    },
     {
       name: 'title',
       type: 'text',
@@ -39,14 +50,6 @@ export const Products: CollectionConfig = {
       name: 'description',
       type: 'textarea',
       label: 'Descripción del Producto / Ingredientes / Detalles',
-    },
-    {
-      name: 'imageUrl',
-      type: 'text',
-      label: 'URL de Imagen Externa (Google Sheets / CDN)',
-      admin: {
-        description: 'URL directa de la imagen del producto (ej: Unsplash, Cloudinary o Google Drive)',
-      },
     },
     {
       name: 'images',
