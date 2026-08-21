@@ -552,13 +552,26 @@ export function DashboardOrdersManager({
                 </button>
               </div>
 
-              <a
-                href={`/admin/collections/orders/${selectedOrder.id}`}
-                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 rounded-none"
-              >
-                <span>Abrir en Payload</span>
-                <ExternalLink className="w-3 h-3 text-zinc-400" />
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/orders/${selectedOrder.orderNumber || selectedOrder.id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1.5 rounded-none"
+                  title="Ver o imprimir nota de entrega oficial en PDF"
+                >
+                  <Download className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Nota de Entrega (PDF)</span>
+                </a>
+
+                <a
+                  href={`/admin/collections/orders/${selectedOrder.id}`}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 rounded-none"
+                >
+                  <span>Abrir en Payload</span>
+                  <ExternalLink className="w-3 h-3 text-zinc-400" />
+                </a>
+              </div>
             </div>
           </div>
         </div>

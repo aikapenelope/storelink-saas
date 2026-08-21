@@ -49,8 +49,10 @@ export type Tenant = {
     emailSubject?: string | null;
   };
   trelloConfig?: {
-    apiKey?: string | null;
-    token?: string | null;
+    enabled?: boolean | null;
+    workspaceName?: string | null;
+    boardName?: string | null;
+    boardUrl?: string | null;
     listId?: string | null;
   };
   branding?: {

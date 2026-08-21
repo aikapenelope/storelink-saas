@@ -104,26 +104,49 @@ export const Tenants: CollectionConfig = {
     {
       name: 'trelloConfig',
       type: 'group',
-      label: 'Integración con Trello',
+      label: 'Espacio de Trabajo Trello (Kanban)',
       access: {
         read: ({ req: { user } }) => Boolean(user),
         update: ({ req: { user } }) => Boolean(user),
       },
       fields: [
         {
-          name: 'apiKey',
-          type: 'text',
-          label: 'Trello API Key',
+          name: 'enabled',
+          type: 'checkbox',
+          label: 'Activar recepción de pedidos en Trello para esta tienda',
+          defaultValue: true,
         },
         {
-          name: 'token',
+          name: 'workspaceName',
           type: 'text',
-          label: 'Trello Member Token',
+          label: 'Nombre del Workspace de Trello',
+          admin: {
+            description: 'Ej: Aura Moda (Espacio de trabajo dedicado para esta tienda)',
+          },
+        },
+        {
+          name: 'boardName',
+          type: 'text',
+          label: 'Nombre del Tablero de Pedidos',
+          admin: {
+            description: 'Ej: Pedidos Aura Moda',
+          },
+        },
+        {
+          name: 'boardUrl',
+          type: 'text',
+          label: 'Enlace Web al Tablero de Trello',
+          admin: {
+            description: 'URL directa para abrir el tablero desde el Dashboard o celular',
+          },
         },
         {
           name: 'listId',
           type: 'text',
-          label: 'ID de la Lista de Trello (Donde caen los pedidos)',
+          label: 'ID de la Lista de Pendientes (Donde caen los pedidos)',
+          admin: {
+            description: 'ID de 24 caracteres alfanuméricos de la columna "Pendiente" del tablero en Trello',
+          },
         },
       ],
     },

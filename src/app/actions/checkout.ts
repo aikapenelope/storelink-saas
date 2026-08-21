@@ -236,27 +236,31 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
     // ------------------------------------------------------------------
     let trelloCardUrl: string | undefined = undefined;
     try {
-      const trelloApiKey = tenantDoc?.trelloConfig?.apiKey || process.env.TRELLO_API_KEY || '';
-      const trelloToken = tenantDoc?.trelloConfig?.token || process.env.TRELLO_TOKEN || '';
+      const isTrelloEnabled = tenantDoc?.trelloConfig?.enabled !== false;
+      const trelloApiKey = process.env.TRELLO_API_KEY || '';
+      const trelloToken = process.env.TRELLO_TOKEN || '';
       const trelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID || '6a77eee513389b2d14a8b8da';
 
-      const trelloRes = await createTrelloOrderCard({
-        apiKey: trelloApiKey,
-        token: trelloToken,
-        listId: trelloListId,
-        orderNumber,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        paymentMethod: customer.paymentMethod,
-        notes: customer.notes,
-        total,
-        totalVES,
-        exchangeRateVES: effectiveExchangeRate,
-        currency: currency || 'USD',
-        items: verifiedItems,
-      });
-      trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+      if (isTrelloEnabled && trelloApiKey && trelloToken && trelloListId) {
+        const trelloRes = await createTrelloOrderCard({
+          apiKey: trelloApiKey,
+          token: trelloToken,
+          listId: trelloListId,
+          orderNumber,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerAddress: customer.address,
+          paymentMethod: customer.paymentMethod,
+          notes: customer.notes,
+          total,
+          totalVES,
+          exchangeRateVES: effectiveExchangeRate,
+          currency: currency || 'USD',
+          items: verifiedItems,
+          pdfUrl: `/api/orders/${orderNumber}/pdf`,
+        });
+        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
+      }
     } catch (trelloErr) {
       console.warn('Trello dispatch warning:', trelloErr);
     }
