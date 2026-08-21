@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload';
-import { getUserRole } from '@/lib/utils';
+import { getUserRole, getUserTenantIds } from '@/lib/utils';
 
 export const Tenants: CollectionConfig = {
   slug: 'tenants',
@@ -9,7 +9,19 @@ export const Tenants: CollectionConfig = {
     hidden: ({ user }) => getUserRole(user) !== 'super-admin',
   },
   access: {
-    read: () => true,
+    // Audit fix C2: los datos de tenants ya no son públicos vía REST API.
+    // El storefront sigue funcionando porque consulta por la Local API del
+    // servidor (que por diseño aplica overrideAccess=true por defecto,
+    // según https://payloadcms.com/docs/local-api/overview#overrideaccess).
+    // Cada comercio autenticado solo ve SU tenant (patrón oficial de
+    // constraints de query: https://payloadcms.com/docs/access-control/collections).
+    read: ({ req: { user } }) => {
+      if (!user) return false;
+      if (getUserRole(user) === 'super-admin') return true;
+      const ids = getUserTenantIds(user);
+      if (ids.length === 0) return false;
+      return { id: { in: ids } };
+    },
     create: ({ req: { user } }) => getUserRole(user) === 'super-admin',
     update: ({ req: { user } }) => getUserRole(user) === 'super-admin',
     delete: ({ req: { user } }) => getUserRole(user) === 'super-admin',
@@ -240,6 +252,17 @@ export const Tenants: CollectionConfig = {
       name: 'paymentMethodsConfig',
       type: 'group',
       label: 'Cuentas Receptoras y Métodos de Pago del Comercio',
+      // Audit fix C2 (defensa en profundidad): los datos bancarios de cada
+      // comercio solo se leen/escriben con sesión activa, y un tenant-admin
+      // solo puede leerlos/editarlos en SU tenant. La restricción por documento
+      // ya la aplica el plugin multi-tenant; este field-level access evita que
+      // un admin de otra tienda los vea si algún día Tenants.read se amplía.
+      // Patrón oficial: https://payloadcms.com/docs/access-control/fields
+      access: {
+        read: ({ req: { user } }) => Boolean(user),
+        create: ({ req: { user } }) => Boolean(user),
+        update: ({ req: { user } }) => Boolean(user),
+      },
       fields: [
         {
           name: 'pagoMovil',

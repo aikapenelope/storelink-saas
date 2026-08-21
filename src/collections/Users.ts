@@ -28,6 +28,10 @@ export const Users: CollectionConfig = {
       defaultValue: 'tenant-admin',
       access: {
         update: ({ req: { user } }) => getUserRole(user) === 'super-admin',
+        // Audit fix C3: un tenant-admin no puede crearse con rol super-admin.
+        // Patrón oficial field-level create:
+        // https://payloadcms.com/docs/access-control/fields#create
+        create: ({ req: { user } }) => getUserRole(user) === 'super-admin',
       },
       options: [
         { label: 'Super Admin (Dueño de la Plataforma)', value: 'super-admin' },

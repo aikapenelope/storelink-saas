@@ -1,6 +1,7 @@
 import React from 'react';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
+import { getLiveExchangeRate } from '@/lib/exchange-rate';
 import { headers } from 'next/headers';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import {
@@ -168,8 +169,15 @@ export async function MerchantDashboard() {
 
     const tenantSlug = tenantDoc.slug || 'tienda';
     const tenantName = tenantDoc.name || 'Mi Comercio';
-    const rateVES = Number(tenantDoc.branding?.exchangeRateVES) || 70.0;
-    const storeUrl = `https://${tenantSlug}.martes.app`;
+    // Audit fix: fallback alineado con checkout/PDF (antes usaba 70.0)
+    const FALLBACK_RATE = Number(process.env.FALLBACK_EXCHANGE_RATE_VES) > 0
+      ? Number(process.env.FALLBACK_EXCHANGE_RATE_VES)
+      : 890.0;
+    const liveRateRes = await getLiveExchangeRate('binance').catch(() => 0);
+    const rateVES = Number(tenantDoc.branding?.exchangeRateVES) > 0
+      ? Number(tenantDoc.branding?.exchangeRateVES)
+      : (liveRateRes || FALLBACK_RATE);
+    const storeUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${tenantSlug}`;
 
     // Concurrently fetch orders, customers, products and low stock items
     const [ordersRes, customersRes, productsRes, lowStockRes] = await Promise.all([
@@ -332,7 +340,7 @@ export async function MerchantDashboard() {
                   rel="noopener noreferrer"
                   className="font-mono text-emerald-400 hover:text-emerald-300 underline font-bold flex items-center gap-1"
                 >
-                  <span>{tenantSlug}.martes.app</span>
+                  <span>flow.martes.app/{tenantSlug}</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </p>

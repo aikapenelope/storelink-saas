@@ -227,6 +227,8 @@ export type Order = {
   id: number;
   tenant?: number | Tenant | null;
   orderNumber: string;
+  /** Snapshot de la tasa VES aplicada al pedido (audit fix: conciliación) */
+  exchangeRateVES?: number | null;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   deliveryType?: 'delivery' | 'pickup' | null;
   deliveryDetails?: OrderDeliveryDetails | null;

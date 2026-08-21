@@ -3,11 +3,33 @@
 import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { getLiveExchangeRate } from '@/lib/exchange-rate';
+import { orderPdfToken } from '@/lib/order-token';
 import { Resend } from 'resend';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
 import type { Tenant, Product, Customer } from '@/payload-types';
+
+/**
+ * Audit fix A5: escapa todo dato ingresado por el cliente antes de
+ * interpolarlo en el HTML del correo (previene HTML/phishing injection) y en
+ * el mensaje de WhatsApp (previene suplantación de líneas como "TOTAL").
+ */
+function escapeHtml(value: string | undefined | null): string {
+  if (!value) return '';
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Neutraliza saltos de línea y caracteres de control para el texto plano de WhatsApp */
+function sanitizePlainText(value: string | undefined | null): string {
+  if (!value) return '';
+  return value.replace(/[\r\n\t]+/g, ' ').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+}
 
 export interface CheckoutCustomerData {
   name: string;
@@ -59,6 +81,9 @@ export interface CheckoutResponse {
   whatsappUrl?: string;
   pdfBase64?: string;
   emailSent?: boolean;
+  /** Token opaco para descargar la nota PDF sin sesión: /api/orders/{orderNumber}/pdf?token=... */
+  pdfToken?: string;
+  pdfUrl?: string;
   error?: string;
 }
 
@@ -142,26 +167,50 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
     // ------------------------------------------------------------------
-    // 3. Resolve Exchange Rate (Tenant Custom > Binance Live > Fallback)
+    // 3. Resolve Exchange Rate — UNA sola resolución para TODO el pedido
+    // (PDF, WhatsApp, email y documento Orders). Jerarquía oficial:
+    //    tenant manual > Binance live > fallback env/890
+    // Audit fix: antes había tres fuentes distintas (890 checkout / 898 PDF /
+    // 70 dashboard) y se confiaba en la tasa que enviara el cliente.
     // ------------------------------------------------------------------
-    let effectiveExchangeRate = 890.0;
+    const FALLBACK_RATE = Number(process.env.FALLBACK_EXCHANGE_RATE_VES) > 0
+      ? Number(process.env.FALLBACK_EXCHANGE_RATE_VES)
+      : 890.0;
+    let effectiveExchangeRate = FALLBACK_RATE;
     if (tenantDoc?.branding?.exchangeRateVES && tenantDoc.branding.exchangeRateVES > 0) {
-      effectiveExchangeRate = tenantDoc.branding.exchangeRateVES;
+      effectiveExchangeRate = Number(tenantDoc.branding.exchangeRateVES);
     } else {
       try {
-        effectiveExchangeRate = await getLiveExchangeRate('binance');
+        const live = await getLiveExchangeRate('binance');
+        if (live && live > 0) effectiveExchangeRate = live;
       } catch {
-        effectiveExchangeRate = request.exchangeRateVES || 890.0;
+        effectiveExchangeRate = FALLBACK_RATE; // mantiene el fallback estipulado
       }
     }
 
     const totalVES = total * effectiveExchangeRate;
     const now = new Date();
-    const orderNumber = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
-      .toString()
-      .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(
-      1000 + Math.random() * 9000
-    )}`;
+    let orderNumber = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
+        .toString()
+        .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(
+        100000 + Math.random() * 900000
+      )}`;
+      const clash = await payload.find({
+        collection: 'orders',
+        where: { orderNumber: { equals: candidate } },
+        limit: 1,
+        overrideAccess: true,
+      });
+      if (clash.docs.length === 0) {
+        orderNumber = candidate;
+        break;
+      }
+    }
+    if (!orderNumber) {
+      return { success: false, error: 'No se pudo generar un número de pedido único. Intenta de nuevo.' };
+    }
 
     const dateFormatted = now.toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -204,21 +253,31 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const cleanPhone = targetPhone.replace(/\D/g, '');
 
     const itemsSummary = verifiedItems
-      .map((item) => `• ${item.quantity}x ${item.title} ($${(item.quantity * item.price).toFixed(2)})`)
+      .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
       .join('\n');
 
     const paymentLabel = customer.paymentDetails?.methodKey
       ? customer.paymentDetails.methodKey.replace('_', ' ').toUpperCase()
       : customer.paymentMethod || 'PAGO ELECTRÓNICO';
 
+    // Audit fix A5: todos los datos del cliente van sanitizados — un cliente
+    // no puede inyectar líneas falsas ("TOTAL A PAGAR: $0") en el mensaje.
+    const safeName = sanitizePlainText(customer.name);
+    const safePhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const safeNotes = sanitizePlainText(customer.notes);
+    const safeAddress = sanitizePlainText(customer.address);
+    const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);
+    const safeMunicipality = sanitizePlainText(customer.deliveryDetails?.municipality);
+    const safeReference = sanitizePlainText(customer.paymentDetails?.referenceNumber);
+
     const whatsappMessage = `👋 *¡Nuevo Pedido #${orderNumber}!*
 🏪 *Comercio:* ${tenantDoc?.name || storeName}
 
-👤 *Cliente:* ${customer.name}
-📱 *Teléfono:* ${customer.phone}
-${customer.email ? `📧 *Correo:* ${customer.email}\n` : ''}🛵 *Modalidad:* ${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}
-${customer.address ? `📍 *Dirección:* ${customer.address}\n` : ''}${customer.deliveryDetails?.buildingHouse ? `🏢 *Edif/Casa:* ${customer.deliveryDetails.buildingHouse}\n` : ''}${customer.deliveryDetails?.municipality ? `🗺️ *Municipio:* ${customer.deliveryDetails.municipality}\n` : ''}💳 *Método de Pago:* ${paymentLabel}
-${customer.paymentDetails?.referenceNumber ? `🔢 *N° Referencia:* ${customer.paymentDetails.referenceNumber}\n` : ''}${customer.notes ? `📝 *Nota:* ${customer.notes}\n` : ''}
+👤 *Cliente:* ${safeName}
+📱 *Teléfono:* ${safePhone}
+${customer.email ? `📧 *Correo:* ${sanitizePlainText(customer.email)}\n` : ''}🛵 *Modalidad:* ${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}
+${safeAddress ? `📍 *Dirección:* ${safeAddress}\n` : ''}${safeBuilding ? `🏢 *Edif/Casa:* ${safeBuilding}\n` : ''}${safeMunicipality ? `🗺️ *Municipio:* ${safeMunicipality}\n` : ''}💳 *Método de Pago:* ${paymentLabel}
+${safeReference ? `🔢 *N° Referencia:* ${safeReference}\n` : ''}${safeNotes ? `📝 *Nota:* ${safeNotes}\n` : ''}
 🛒 *Productos:*
 ${itemsSummary}
 
@@ -227,19 +286,27 @@ ${itemsSummary}
 ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)\n` : ''}
 📄 _He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._`;
 
+    // Token opaco para que ESTE cliente descargue SU nota sin sesión
+    const pdfToken = orderPdfToken(orderNumber);
+    const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
+
     const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
       whatsappMessage
     )}`;
 
     // ------------------------------------------------------------------
-    // 6. Dispatch Trello Card (Tenant BYOK with global fallback)
+    // 6. Dispatch Trello Card — credencial MASTER global (Vercel) +
+    // listId por tenant. Modelo de operación: una sola cuenta maestra de
+    // Trello en las env vars de Vercel; cada comercio configura SOLO su
+    // workspace/tablero/lista destino (trelloConfig.listId). Si el tenant
+    // no tiene listId propio, NO se despacha (sin fallback a tableros ajenos).
     // ------------------------------------------------------------------
     let trelloCardUrl: string | undefined = undefined;
     try {
       const isTrelloEnabled = tenantDoc?.trelloConfig?.enabled !== false;
       const trelloApiKey = process.env.TRELLO_API_KEY || '';
       const trelloToken = process.env.TRELLO_TOKEN || '';
-      const trelloListId = tenantDoc?.trelloConfig?.listId || process.env.TRELLO_LIST_ID || '6a77eee513389b2d14a8b8da';
+      const trelloListId = tenantDoc?.trelloConfig?.listId || '';
 
       if (isTrelloEnabled && trelloApiKey && trelloToken && trelloListId) {
         const trelloRes = await createTrelloOrderCard({
@@ -257,7 +324,7 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
           exchangeRateVES: effectiveExchangeRate,
           currency: currency || 'USD',
           items: verifiedItems,
-          pdfUrl: `/api/orders/${orderNumber}/pdf`,
+          pdfUrl: pdfUrlWithToken,
         });
         trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
       }
@@ -326,16 +393,16 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
           <body>
             <div class="container">
               <div class="header">
-                <h1 class="store-name">${tenantDoc?.name || storeName}</h1>
+                <h1 class="store-name">${escapeHtml(tenantDoc?.name || storeName)}</h1>
                 <span class="badge">Pedido Registrado</span>
               </div>
               <div class="body-content">
-                <p class="greeting">¡Hola <strong>${customer.name}</strong>! Hemos registrado tu pedido con éxito.</p>
+                <p class="greeting">¡Hola <strong>${escapeHtml(customer.name)}</strong>! Hemos registrado tu pedido con éxito.</p>
                 <div class="order-box">
                   <div class="order-row"><span style="color: #64748b;">N° Pedido:</span><strong>#${orderNumber}</strong></div>
                   <div class="order-row"><span style="color: #64748b;">Modalidad:</span><strong>${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}</strong></div>
-                  <div class="order-row"><span style="color: #64748b;">Método de Pago:</span><strong>${paymentLabel}</strong></div>
-                  ${customer.notes ? `<div class="order-row"><span style="color: #64748b;">Nota:</span><em>${customer.notes}</em></div>` : ''}
+                  <div class="order-row"><span style="color: #64748b;">Método de Pago:</span><strong>${escapeHtml(paymentLabel)}</strong></div>
+                  ${safeNotes ? `<div class="order-row"><span style="color: #64748b;">Nota:</span><em>${escapeHtml(safeNotes)}</em></div>` : ''}
                 </div>
                 <table class="table">
                   <thead>
@@ -475,6 +542,8 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
             })),
             totalAmount: total,
             currency: currency || 'USD',
+            // Snapshot de la tasa aplicada — conciliación exacta por pedido
+            exchangeRateVES: effectiveExchangeRate,
             trelloCardUrl,
           },
         });
@@ -499,6 +568,9 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
       whatsappUrl,
       pdfBase64,
       emailSent,
+      // Audit fix C4: token opaco para que el cliente descargue su nota
+      pdfToken,
+      pdfUrl: pdfUrlWithToken,
     };
   } catch (err: any) {
     console.error('Unhandled processOrder error:', err);

@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
+import { verifyOrderPdfToken } from '@/lib/order-token';
 import type { Order, Tenant } from '@/payload-types';
 
+/**
+ * Audit fix C4: este endpoint antes era público y aceptaba IDs secuenciales o
+ * orderNumbers adivinables (YYMMDD + 4 dígitos), exponiendo nombre, teléfono,
+ * dirección y montos de CUALQUIER pedido por enumeración. Ahora exige sesión
+ * de admin (patrón oficial payload.auth en route handlers:
+ * https://payloadcms.com/docs/local-api/overview#auth) o un token opaco por
+ * orden, que es lo que recibe el cliente en su checkout para descargar SU nota.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,18 +21,27 @@ export async function GET(
     const { id } = await params;
     const payload = await getPayload({ config });
 
+    // 1. Autenticación opcional: sesión válida de la colección users
+    const { user } = await payload.auth({ headers: request.headers });
+    const isAuthenticated = Boolean(user);
+
+    // 2. Token opaco por pedido (misma vía que usa el cliente en checkout)
+    const providedToken = request.nextUrl.searchParams.get('token') || '';
+
     // Look up by ID or by orderNumber
     let orderDoc: Order | null = null;
 
-    try {
+    if (/^\d+$/.test(id)) {
+      // Los IDs numéricos solo son accesibles con sesión activa
+      if (!isAuthenticated) {
+        return new NextResponse('No autorizado', { status: 401 });
+      }
       const resById = await payload.findByID({
         collection: 'orders',
         id,
         overrideAccess: true,
       });
       if (resById) orderDoc = resById as Order;
-    } catch {
-      // If not numeric or UUID, search by orderNumber
     }
 
     if (!orderDoc) {
@@ -44,9 +62,16 @@ export async function GET(
       return new NextResponse('Pedido no encontrado', { status: 404 });
     }
 
+    // 3. Autorización: sesión activa O token correcto para ESTE pedido
+    if (!isAuthenticated && !verifyOrderPdfToken(orderDoc.orderNumber || String(orderDoc.id), providedToken)) {
+      return new NextResponse('No autorizado', { status: 401 });
+    }
+
     // Resolve Store Name & Currency
     let storeName = 'Tienda StoreLink';
-    let exchangeRateVES = 898.0;
+    let exchangeRateVES = Number(process.env.FALLBACK_EXCHANGE_RATE_VES) > 0
+      ? Number(process.env.FALLBACK_EXCHANGE_RATE_VES)
+      : 898.0;
 
     const tenantId = typeof orderDoc.tenant === 'object' ? orderDoc.tenant?.id : orderDoc.tenant;
     if (tenantId) {
@@ -103,7 +128,8 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="Nota-Entrega-${orderDoc.orderNumber || orderDoc.id}.pdf"`,
-        'Cache-Control': 'public, max-age=3600',
+        // Solo cacheable con token válido; nunca en CDN compartido
+        'Cache-Control': 'private, max-age=3600',
       },
     });
   } catch (error: any) {
