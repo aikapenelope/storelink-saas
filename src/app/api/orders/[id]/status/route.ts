@@ -1,0 +1,63 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getPayload } from 'payload';
+import config from '@/payload.config';
+import { revalidatePath } from 'next/cache';
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const payload = await getPayload({ config });
+    const { user } = await payload.auth({ headers: request.headers });
+
+    if (!user) {
+      return NextResponse.json({ error: 'No autorizado. Debes iniciar sesión.' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { status, paymentStatus } = body;
+
+    // Fetch existing order
+    const order = await payload.findByID({
+      collection: 'orders',
+      id,
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+    }
+
+    const updateData: any = {};
+    if (status) {
+      updateData.status = status;
+    }
+    if (paymentStatus) {
+      updateData.paymentDetails = {
+        ...(order.paymentDetails || {}),
+        paymentStatus,
+      };
+    }
+
+    const updated = await payload.update({
+      collection: 'orders',
+      id,
+      data: updateData,
+    });
+
+    try {
+      revalidatePath('/admin/analytics');
+      revalidatePath('/admin/collections/orders');
+    } catch {}
+
+    return NextResponse.json({
+      success: true,
+      order: updated,
+      message: 'Estado del pedido actualizado correctamente',
+    });
+  } catch (error: any) {
+    console.error('Error updating order status:', error);
+    return NextResponse.json({ error: error.message || 'Error al actualizar el pedido' }, { status: 500 });
+  }
+}

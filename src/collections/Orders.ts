@@ -5,9 +5,6 @@ export const Orders: CollectionConfig = {
   admin: {
     useAsTitle: 'orderNumber',
     defaultColumns: ['orderNumber', 'customer', 'totalAmount', 'status', 'createdAt'],
-    components: {
-      beforeList: ['@/components/admin/OrdersSyncPanel#OrdersSyncPanel'],
-    },
   },
   access: {
     read: ({ req: { user } }) => Boolean(user),

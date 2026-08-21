@@ -155,14 +155,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     // 3. Resolve Exchange Rate (Tenant Custom > Binance Live > Fallback)
     // ------------------------------------------------------------------
-    let effectiveExchangeRate = 70.0;
+    let effectiveExchangeRate = 890.0;
     if (tenantDoc?.branding?.exchangeRateVES && tenantDoc.branding.exchangeRateVES > 0) {
       effectiveExchangeRate = tenantDoc.branding.exchangeRateVES;
     } else {
       try {
         effectiveExchangeRate = await getLiveExchangeRate('binance');
       } catch {
-        effectiveExchangeRate = request.exchangeRateVES || 70.0;
+        effectiveExchangeRate = request.exchangeRateVES || 890.0;
       }
     }
 

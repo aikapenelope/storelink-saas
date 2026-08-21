@@ -3,24 +3,23 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
+import { ExchangeRateControl } from './ExchangeRateControl';
+import { DashboardOrdersManager } from './DashboardOrdersManager';
+import { getAllLiveExchangeRates } from '@/lib/exchange-rate';
 import {
   Wallet,
   ShoppingCart,
   Users,
   Package,
   TriangleAlert,
-  ArrowUpRight,
   Store,
   ExternalLink,
   Plus,
   ClipboardList,
   ShoppingBag,
-  Bell,
-  ChevronDown,
-  Search,
-  Send,
-  FileSpreadsheet,
   TrendingUp,
+  FileSpreadsheet,
+  Send,
 } from 'lucide-react';
 
 export async function AnalyticsView() {
@@ -32,7 +31,7 @@ export async function AnalyticsView() {
     if (!user) {
       return (
         <div className="p-8 text-center text-zinc-400 bg-black min-h-screen font-sans">
-          <p>Debes iniciar sesión para ver las analíticas.</p>
+          <p>Debes iniciar sesión para ver el dashboard.</p>
         </div>
       );
     }
@@ -77,10 +76,16 @@ export async function AnalyticsView() {
 
     const tenantSlug = tenantDoc?.slug || 'aurita';
     const tenantName = tenantDoc?.name || (isSuperAdmin ? 'Plataforma Global' : 'Mi Tienda');
-    const rateVES = Number(tenantDoc?.branding?.exchangeRateVES) || 70.0;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
     const storeUrl = `${siteUrl}/${tenantSlug}`;
     const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
+
+    // Fetch live market exchange rates
+    const liveRates = await getAllLiveExchangeRates();
+    const customRate = tenantDoc?.branding?.exchangeRateVES
+      ? Number(tenantDoc.branding.exchangeRateVES)
+      : null;
+    const rateVES = customRate && customRate > 0 ? customRate : liveRates.binance;
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
@@ -101,7 +106,7 @@ export async function AnalyticsView() {
       payload.find({
         collection: 'products',
         ...(tenantFilter ? { where: tenantFilter } : {}),
-        limit: 50,
+        limit: 100,
       }),
       payload.find({
         collection: 'products',
@@ -217,7 +222,7 @@ export async function AnalyticsView() {
 
     return (
       <div className="min-h-screen font-sans antialiased text-zinc-100 bg-black selection:bg-white selection:text-black">
-        {/* 1. Header Navigation */}
+        {/* 1. Header Navigation with "Flow by martes.app" */}
         <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/95 backdrop-blur-xl">
           <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-2.5 sm:px-6 xl:px-8">
             <div className="flex shrink-0 items-center gap-3">
@@ -226,9 +231,14 @@ export async function AnalyticsView() {
                 <span className="h-0.5 w-3.5 bg-zinc-400 ml-1"></span>
                 <span className="h-0.5 w-2 bg-zinc-600 ml-2"></span>
               </span>
-              <span className="text-sm font-bold tracking-tight text-white uppercase font-mono">
-                Flow <span className="text-zinc-400 font-normal">SaaS</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-base font-extrabold tracking-tight text-white uppercase font-mono">
+                  Flow
+                </span>
+                <span className="text-[11px] font-mono text-zinc-400 border-l border-zinc-800 pl-2">
+                  by <strong className="text-zinc-200 font-semibold">martes.app</strong>
+                </span>
+              </div>
             </div>
 
             <nav className="order-3 flex w-full overflow-x-auto border border-zinc-800 bg-zinc-950 p-0.5 lg:order-none lg:mx-auto lg:w-auto rounded-none">
@@ -307,33 +317,42 @@ export async function AnalyticsView() {
                   {tenantName}
                 </h1>
                 <p className="mt-1 text-xs text-zinc-400">
-                  Panel de ventas y control de inventario
+                  Panel de ventas, gestión de pedidos y control de inventario
                   <span className="mx-2 text-zinc-700">•</span>
-                  Tasa BCV Oficial: <span className="font-mono text-white font-bold">Bs. {rateVES.toFixed(2)} / $</span>
+                  Tasa Activa: <span className="font-mono text-white font-bold">Bs. {rateVES.toFixed(2)} / $</span>
+                  {customRate ? (
+                    <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
+                      (Personalizada)
+                    </span>
+                  ) : (
+                    <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
+                      (Binance P2P en vivo)
+                    </span>
+                  )}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <a
                   href="/admin/collections/products/create"
-                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider font-mono"
                 >
                   <Plus className="w-3.5 h-3.5 shrink-0" />
                   <span>+ Agregar Producto</span>
                 </a>
                 <a
                   href="/admin/collections/orders"
-                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider font-mono"
                 >
                   <ClipboardList className="w-3.5 h-3.5 shrink-0" />
-                  <span>Ver Pedidos</span>
+                  <span>Ver en Payload</span>
                 </a>
                 {tenantSlug ? (
                   <a
                     href={storeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-bold transition inline-flex items-center gap-1.5 shadow-lg rounded-none uppercase tracking-wider"
+                    className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-bold transition inline-flex items-center gap-1.5 shadow-lg rounded-none uppercase tracking-wider font-mono"
                   >
                     <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
                     <span>Abrir Tienda</span>
@@ -429,7 +448,17 @@ export async function AnalyticsView() {
             </article>
           </section>
 
-          {/* 4. Alerta de Inventario Crítico */}
+          {/* 4. Exchange Rate Control Panel */}
+          <section>
+            <ExchangeRateControl
+              tenantSlug={tenantSlug}
+              tenantName={tenantName}
+              initialCustomRate={customRate}
+              liveRates={liveRates}
+            />
+          </section>
+
+          {/* 5. Alerta de Inventario Crítico */}
           {lowStockProducts.length > 0 && (
             <section className="border border-zinc-800 bg-zinc-950 p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-none">
               <div className="flex items-center gap-3">
@@ -460,7 +489,17 @@ export async function AnalyticsView() {
             </section>
           )}
 
-          {/* 5. Gráfico 7 Días & Más Vendidos */}
+          {/* 6. Pedidos en Vivo con Confirmación y Filtros */}
+          <section>
+            <DashboardOrdersManager
+              initialOrders={orders}
+              tenantSlug={tenantSlug}
+              tenantName={tenantName}
+              rateVES={rateVES}
+            />
+          </section>
+
+          {/* 7. Gráfico 7 Días & Más Vendidos */}
           <section className="grid gap-4 xl:grid-cols-[1.4fr_.8fr]">
             {/* Chart */}
             <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
@@ -557,91 +596,7 @@ export async function AnalyticsView() {
             </div>
           </section>
 
-          {/* 6. Pedidos Recientes */}
-          <section className="border border-zinc-800 bg-zinc-950 overflow-hidden shadow-xl rounded-none">
-            <div className="flex flex-col gap-3 border-b border-zinc-800 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
-                  Shopify Style
-                </p>
-                <h2 className="text-base font-bold text-white">Pedidos recientes</h2>
-              </div>
-              <div className="flex gap-2">
-                <a
-                  href="/admin/collections/orders"
-                  className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-mono font-bold transition inline-flex items-center gap-1.5 rounded-none"
-                >
-                  <Search className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                  <span>Buscar</span>
-                </a>
-                <a
-                  href="/admin/collections/orders"
-                  className="px-3.5 py-1 bg-white hover:bg-zinc-200 text-black text-xs font-mono font-bold transition inline-flex items-center gap-1.5 shadow-md rounded-none uppercase"
-                >
-                  <span>Ver todos</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                </a>
-              </div>
-            </div>
-
-            {orders.length === 0 ? (
-              <div className="p-8 text-center text-xs text-zinc-500 font-mono">
-                <p>No hay pedidos registrados todavía en esta tienda.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-800 bg-black text-[10px] uppercase tracking-[0.14em] text-zinc-400 font-mono">
-                      <th className="px-4 py-3">Pedido</th>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Modalidad</th>
-                      <th className="px-4 py-3">Total USD</th>
-                      <th className="px-4 py-3">Total VES</th>
-                      <th className="px-4 py-3">Estado</th>
-                      <th className="px-4 py-3">Hora</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.slice(0, 6).map((order) => {
-                      const totalUSD = Number(order.totalAmount || order.total) || 0;
-                      const totalVESOrder = totalUSD * rateVES;
-                      const orderNum = order.orderNumber || order.id?.toString().slice(-4) || '1001';
-                      const customerName = order.customerName || order.customer?.name || 'Cliente';
-                      const status = order.status || 'pending';
-                      const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : 'Reciente';
-
-                      return (
-                        <tr key={order.id} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/50 transition">
-                          <td className="px-4 py-3 font-mono font-bold text-white">
-                            <a href={`/admin/collections/orders/${order.id}`} className="hover:underline">
-                              #{orderNum}
-                            </a>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
-                          <td className="px-4 py-3 text-zinc-400">
-                            {order.deliveryType === 'delivery' ? 'Delivery' : 'Pick-up'}
-                          </td>
-                          <td className="px-4 py-3 font-mono font-bold text-white">${totalUSD.toFixed(2)}</td>
-                          <td className="px-4 py-3 font-mono text-zinc-400 text-[11px]">
-                            Bs. {totalVESOrder.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-200 font-mono text-[10px] rounded-none">
-                              {status === 'pending' ? 'Procesando' : status === 'delivered' ? 'Pagado' : status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-zinc-400 font-mono text-[11px]">{createdAt}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* 7. Bottom Grid: Mini CRM + Google Sheets */}
+          {/* 8. Bottom Grid: Mini CRM + Google Sheets */}
           <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
             {/* Mini CRM */}
             <div className="border border-zinc-800 bg-zinc-950 p-4 shadow-xl rounded-none">
@@ -701,7 +656,7 @@ export async function AnalyticsView() {
               <div className="mb-3 flex items-start justify-between">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-400">
-                    Sincronización
+                    Sincronización de Catálogo
                   </p>
                   <h2 className="text-base font-bold text-white">Google Sheets en Vivo</h2>
                   <p className="mt-0.5 text-xs text-zinc-400">
