@@ -1,10 +1,115 @@
-import type { CollectionConfig } from 'payload';
+import type { CollectionConfig, CollectionAfterChangeHook } from 'payload';
+
+/**
+ * Hook oficial de gestión de inventario en Payload CMS 3.x
+ * Se ejecuta automáticamente ante cualquier canal de creación o actualización de pedidos:
+ * - Creación de pedido / Activación: resta la cantidad solicitada del stock de los productos.
+ * - Cancelación de pedido: repone automáticamente el stock a los productos correspondientes.
+ */
+const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
+  doc,
+  previousDoc,
+  operation,
+  req: { payload },
+}) => {
+  if (!doc?.items || !Array.isArray(doc.items) || doc.items.length === 0) {
+    return doc;
+  }
+
+  const tenantId = typeof doc.tenant === 'object' ? doc.tenant?.id : doc.tenant;
+  const currentStatus = doc.status || 'pending';
+  const previousStatus = previousDoc?.status || null;
+
+  // 1. Pedido nuevo activo o reactivado desde cancelado -> Restar inventario
+  const isNewlyCreatedActive = operation === 'create' && currentStatus !== 'cancelled';
+  const isReactivated = previousStatus === 'cancelled' && currentStatus !== 'cancelled';
+
+  // 2. Pedido cancelado -> Reponer inventario
+  const isCancelled = previousStatus && previousStatus !== 'cancelled' && currentStatus === 'cancelled';
+
+  if (isNewlyCreatedActive || isReactivated) {
+    for (const item of doc.items) {
+      if (!item.title && !item.sku) continue;
+
+      const whereQuery: any = {
+        and: [
+          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+          item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
+        ],
+      };
+
+      const productRes = await payload.find({
+        collection: 'products',
+        where: whereQuery,
+        limit: 1,
+        overrideAccess: true,
+      });
+
+      if (productRes.docs.length > 0) {
+        const prod = productRes.docs[0];
+        if (prod.trackStock && typeof prod.stockQuantity === 'number') {
+          const qtyToDeduct = Number(item.quantity) || 1;
+          const newStock = Math.max(0, prod.stockQuantity - qtyToDeduct);
+          await payload.update({
+            collection: 'products',
+            id: prod.id,
+            overrideAccess: true,
+            data: {
+              stockQuantity: newStock,
+              stockStatus: newStock <= 0 ? 'out_of_stock' : 'in_stock',
+            },
+          });
+        }
+      }
+    }
+  } else if (isCancelled) {
+    for (const item of doc.items) {
+      if (!item.title && !item.sku) continue;
+
+      const whereQuery: any = {
+        and: [
+          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+          item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
+        ],
+      };
+
+      const productRes = await payload.find({
+        collection: 'products',
+        where: whereQuery,
+        limit: 1,
+        overrideAccess: true,
+      });
+
+      if (productRes.docs.length > 0) {
+        const prod = productRes.docs[0];
+        if (prod.trackStock && typeof prod.stockQuantity === 'number') {
+          const qtyToRestore = Number(item.quantity) || 1;
+          const newStock = prod.stockQuantity + qtyToRestore;
+          await payload.update({
+            collection: 'products',
+            id: prod.id,
+            overrideAccess: true,
+            data: {
+              stockQuantity: newStock,
+              stockStatus: 'in_stock',
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return doc;
+};
 
 export const Orders: CollectionConfig = {
   slug: 'orders',
   admin: {
     useAsTitle: 'orderNumber',
     defaultColumns: ['orderNumber', 'customer', 'totalAmount', 'status', 'createdAt'],
+  },
+  hooks: {
+    afterChange: [manageOrderInventoryHook],
   },
   access: {
     read: ({ req: { user } }) => Boolean(user),

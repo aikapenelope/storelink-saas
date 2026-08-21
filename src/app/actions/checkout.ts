@@ -116,7 +116,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           finalPrice = Number(dbProd.price) || finalPrice;
           finalTitle = dbProd.title || finalTitle;
 
-          // Decrement stock if trackStock is active
+          // Validate stock availability before creating order
           if (dbProd.trackStock && typeof dbProd.stockQuantity === 'number') {
             const currentStock = dbProd.stockQuantity;
             const requestedQty = Number(item.quantity) || 1;
@@ -127,17 +127,6 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
                 error: `Disculpe, solo quedan ${currentStock} unidades disponibles de "${finalTitle}".`,
               };
             }
-
-            const newStock = Math.max(0, currentStock - requestedQty);
-            await payload.update({
-              collection: 'products',
-              id: dbProd.id,
-              overrideAccess: true,
-              data: {
-                stockQuantity: newStock,
-                stockStatus: newStock <= 0 ? 'out_of_stock' : 'in_stock',
-              },
-            });
           }
         }
       }

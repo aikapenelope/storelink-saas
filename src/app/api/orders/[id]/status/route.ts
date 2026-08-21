@@ -29,6 +29,28 @@ export async function PATCH(
       return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
     }
 
+    // Verify multi-tenant authorization
+    const isSuperAdmin = (user as any).role === 'super-admin';
+    const userTenants = (user as any).tenants || [];
+    const orderTenantId = typeof (order as any).tenant === 'object'
+      ? (order as any).tenant?.id
+      : (order as any).tenant;
+
+    const hasAccess =
+      isSuperAdmin ||
+      !orderTenantId ||
+      userTenants.some((t: any) => {
+        const tid = typeof t.tenant === 'object' ? t.tenant?.id : t.tenant;
+        return tid === orderTenantId;
+      });
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'No tienes permiso para modificar pedidos de otra tienda.' },
+        { status: 403 }
+      );
+    }
+
     const updateData: any = {};
     if (status) {
       updateData.status = status;
