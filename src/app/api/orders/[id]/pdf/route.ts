@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
-import { generateDeliveryNotePDF } from '@/lib/pdf';
-import { verifyOrderPdfToken } from '@/lib/order-token';
-import { resolveExchangeRateVES } from '@/lib/exchange-rate';
-import type { Order, Tenant } from '@/payload-types';
+import { getDeliveryNoteUrl } from '@/lib/delivery-note';
 
 /**
- * Endpoint de la Nota de Entrega en PDF.
- * Autorización (patrón oficial de access control):
- * - Con token opaco válido (lo recibe el cliente en su checkout): acceso
- *   público SOLO para ese pedido (token determinístico por orderNumber).
- * - Sin token: requiere sesión activa y el lookup se hace SIN overrideAccess,
- *   por lo que aplican los constraints de la colección + el plugin
- *   multi-tenant (un tenant-admin solo ve pedidos de SUS tenants; los IDs
- *   numéricos enumerables ya no son accesibles para otros comercios).
+ * Descarga de la Nota de Entrega para USUARIOS AUTENTICADOS (admin).
+ * Con la migración a R2 (URLs firmadas), el cliente descarga directo desde
+ * la URL firmada que recibe en el checkout/email; esta ruta queda SOLO para
+ * sesiones: hace lookup con el access control de Payload (un tenant-admin
+ * solo ve pedidos de SUS tenants) y redirige (302) a la URL firmada de R2.
  */
 export async function GET(
   request: NextRequest,
@@ -24,121 +18,31 @@ export async function GET(
     const { id } = await params;
     const payload = await getPayload({ config });
 
-    // 1. Autenticación opcional: sesión válida de la colección users
     const { user } = await payload.auth({ headers: request.headers });
-    const isAuthenticated = Boolean(user);
-
-    // 2. Token opaco por pedido (misma vía que usa el cliente en checkout)
-    const providedToken = request.nextUrl.searchParams.get('token') || '';
-    const tokenValid = providedToken ? verifyOrderPdfToken(id, providedToken) : false;
-
-    if (!isAuthenticated && !tokenValid) {
+    if (!user) {
       return new NextResponse('No autorizado', { status: 401 });
     }
 
-    // 3. Lookup: token válido → override (el token ya autoriza ESTE pedido);
-    //    sesión autenticada → acceso controlado pasando el `user` real para
-    //    que apliquen los constraints multi-tenant (sin override).
-    let orderDoc: Order | null = null;
-    const canOverride = tokenValid;
-
-    if (/^\d+$/.test(id)) {
-      orderDoc = (await payload
-        .findByID({
-          collection: 'orders',
-          id,
-          ...(canOverride ? { overrideAccess: true } : { user }),
-        })
-        .catch(() => null)) as Order | null;
-    }
-
-    if (!orderDoc) {
-      const resByNum = await payload.find({
-        collection: 'orders',
-        where: { orderNumber: { equals: id } },
-        limit: 1,
-        ...(canOverride ? { overrideAccess: true } : { user }),
-      });
-      if (resByNum.docs.length > 0) {
-        orderDoc = resByNum.docs[0] as Order;
-      }
-    }
+    const orderRes = await payload.find({
+      collection: 'orders',
+      where: { orderNumber: { equals: id } },
+      limit: 1,
+    });
+    const orderDoc = orderRes.docs[0];
 
     if (!orderDoc) {
       return new NextResponse('Pedido no encontrado', { status: 404 });
     }
 
-    // 4. Resolve Store Name & Exchange Rate (jerarquía del producto):
-    //    snapshot del pedido > manual > Binance en vivo > paralelo > sin VES
-    let storeName = 'Tienda StoreLink';
-    let exchangeRateVES = Number(orderDoc.exchangeRateVES) || 0;
-
-    const tenantId = typeof orderDoc.tenant === 'object' ? orderDoc.tenant?.id : orderDoc.tenant;
-    if (tenantId) {
-      try {
-        const tenantDoc = (await payload.findByID({
-          collection: 'tenants',
-          id: tenantId as any,
-          overrideAccess: true,
-        })) as Tenant;
-        if (tenantDoc?.name) storeName = tenantDoc.name;
-        if (!exchangeRateVES) {
-          exchangeRateVES = (await resolveExchangeRateVES(tenantDoc)).rate ?? 0;
-        }
-      } catch {}
+    const orderNumber = orderDoc.orderNumber || String(orderDoc.id);
+    const url = await getDeliveryNoteUrl(orderNumber);
+    if (!url) {
+      return new NextResponse('Nota de entrega no disponible', { status: 404 });
     }
-    const showVES = exchangeRateVES > 0;
 
-    const total = Number(orderDoc.totalAmount) || 0;
-    const totalVES = showVES ? total * exchangeRateVES : 0;
-
-    const dateStr = orderDoc.createdAt
-      ? new Date(orderDoc.createdAt).toLocaleDateString('es-VE', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        })
-      : new Date().toLocaleDateString('es-VE');
-
-    const pdfBytes = generateDeliveryNotePDF({
-      storeName,
-      orderNumber: orderDoc.orderNumber || String(orderDoc.id),
-      date: dateStr,
-      customerName: orderDoc.customer?.name || 'Cliente',
-      customerPhone: orderDoc.customer?.phone || '',
-      customerAddress: orderDoc.customer?.address || undefined,
-      paymentMethod: orderDoc.customer?.paymentMethod || undefined,
-      notes: orderDoc.customer?.notes || undefined,
-      currency: orderDoc.currency || 'USD',
-      total,
-      totalVES,
-      exchangeRateVES,
-      showVES,
-      items: Array.isArray(orderDoc.items)
-        ? orderDoc.items.map((i) => ({
-            sku: i.sku || 'N/A',
-            title: i.title,
-            quantity: Number(i.quantity) || 1,
-            price: Number(i.price) || 0,
-          }))
-        : [],
-    });
-
-    const pdfBuffer = Buffer.from(pdfBytes);
-
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="Nota-Entrega-${orderDoc.orderNumber || orderDoc.id}.pdf"`,
-        // Solo cacheable con token válido; nunca en CDN compartido
-        'Cache-Control': 'private, max-age=3600',
-      },
-    });
+    return NextResponse.redirect(url, 302);
   } catch (error) {
-    console.error('Error generating PDF delivery note:', error);
-    return new NextResponse('Error generando PDF: error interno del servidor', {
-      status: 500,
-    });
+    console.error('Error getting delivery note URL:', error);
+    return new NextResponse('Error interno del servidor', { status: 500 });
   }
 }
