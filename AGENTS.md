@@ -25,6 +25,7 @@ La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga 
 - NO modificar `.env*` (ver `.env.example`); credenciales Trello/Resend/R2 son globales en Vercel
 - NO ejecutar SQL crudo que salte hooks/validaciones de Payload; inventario usa `$inc` atómico oficial
 - Aislamiento multi-tenant: filtrar por tenant salvo `super-admin`; el array `tenants` de users solo lo toca super-admin
+- **Identidad git = la del dueño** (`AngelDelN <57774536+aikapenelope@users.noreply.github.com>`). Verificar con `git config user.email` antes de commitear; nunca correos de host (`@...MacBook-Pro...local`): Vercel marca como usuario externo y bloquea previews/deploys.
 
 ## Convenciones
 - Alias de import: `@/*` → `./src/*`
