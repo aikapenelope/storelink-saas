@@ -9,6 +9,7 @@ import { s3Storage } from '@payloadcms/storage-s3';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
 import { resendTenantAdapter } from './lib/email/resend-tenant-adapter';
+import { migrations } from './migrations';
 import { getUserRole } from './lib/utils';
 import sharp from 'sharp';
 
@@ -163,6 +164,11 @@ export default buildConfig({
     },
     push: false, // Production: use explicit migrations instead of auto-push
     migrationDir: path.resolve(dirname, 'migrations'),
+    // Migraciones automáticas en producción (patrón oficial Payload): el CLI
+    // `payload migrate` no puede cargar la config en serverless (richtext-
+    // lexical es ESM con top-level await → ERR_REQUIRE_ASYNC_MODULE), así que
+    // las pendientes se aplican en el init de Payload en producción.
+    prodMigrations: migrations,
   }),
   plugins,
 });
