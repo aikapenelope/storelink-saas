@@ -2,7 +2,7 @@
 
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
-import { orderPdfToken } from '@/lib/order-token';
+import { uploadDeliveryNotePdf, getDeliveryNoteUrl } from '@/lib/delivery-note';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
@@ -61,8 +61,7 @@ export interface CheckoutResponse {
   whatsappUrl?: string;
   pdfBase64?: string;
   emailSent?: boolean;
-  /** Token opaco para descargar la nota PDF sin sesión: /api/orders/{orderNumber}/pdf?token=... */
-  pdfToken?: string;
+  /** URL firmada (R2) de la Nota de Entrega, válida 30 días */
   pdfUrl?: string;
   error?: string;
 }
@@ -247,9 +246,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     // ------------------------------------------------------------------
-    // 4. Generate Official Delivery Note PDF (in-memory)
+    // 4. Generate Official Delivery Note PDF (in-memory) + subir a R2.
+    // El PDF se genera UNA vez por pedido y queda en R2; las descargas usan
+    // URLs firmadas (presigned) — sin endpoint de Next ni regeneración.
     // ------------------------------------------------------------------
     let pdfBase64: string | undefined = undefined;
+    let pdfUrl: string | undefined = undefined;
     try {
       const pdfBytes = generateDeliveryNotePDF({
         storeName: tenantDoc?.name || storeName || 'Flow Store',
@@ -268,6 +270,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         items: verifiedItems,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+
+      const uploaded = await uploadDeliveryNotePdf(orderNumber, pdfBytes);
+      if (uploaded) {
+        pdfUrl = (await getDeliveryNoteUrl(orderNumber)) ?? undefined;
+      }
     } catch (pdfErr) {
       console.warn('PDF generation warning:', pdfErr);
     }
@@ -311,11 +318,7 @@ ${itemsSummary}
 💰 *TOTAL A PAGAR:*
 💵 *$${total.toFixed(2)} USD*
 ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
-📄 _He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._`;
-
-    // Token opaco para que ESTE cliente descargue SU nota sin sesión (48h)
-    const pdfToken = orderPdfToken(orderNumber);
-    const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
+📄 ${pdfUrl ? `*Nota de Entrega PDF:* ${pdfUrl}` : '_He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._'}`;
 
     const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
       whatsappMessage
@@ -469,11 +472,10 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
       orderNumber,
       whatsappUrl,
       pdfBase64,
+      // URL firmada (R2) de la Nota de Entrega, válida 30 días
+      pdfUrl,
       // El email ahora se envía de forma asíncrona vía Jobs Queue
       emailSent: false,
-      // Audit fix C4: token opaco para que el cliente descargue su nota
-      pdfToken,
-      pdfUrl: pdfUrlWithToken,
     };
   } catch (err: any) {
     console.error('Unhandled processOrder error:', err);

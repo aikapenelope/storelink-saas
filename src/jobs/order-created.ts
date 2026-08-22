@@ -1,7 +1,6 @@
 import type { TaskConfig, WorkflowConfig } from 'payload';
 import { createTrelloOrderCard } from '@/lib/trello';
-import { generateDeliveryNotePDF } from '@/lib/pdf';
-import { orderPdfToken } from '@/lib/order-token';
+import { getDeliveryNoteUrl } from '@/lib/delivery-note';
 import { buildOrderConfirmationEmailHtml } from '@/lib/order-email';
 import type { Order, Tenant } from '@/payload-types';
 
@@ -67,7 +66,8 @@ const trelloDispatchOrder: TaskConfig = {
     }
 
     const orderNumber = order.orderNumber || String(order.id);
-    const pdfToken = orderPdfToken(orderNumber);
+    // URL firmada (R2) de la nota, válida 30 días desde el despacho
+    const pdfUrl = await getDeliveryNoteUrl(orderNumber);
     const customer = order.customer;
     const items = Array.isArray(order.items)
       ? order.items.map((i) => ({
@@ -96,7 +96,7 @@ const trelloDispatchOrder: TaskConfig = {
       exchangeRateVES,
       currency: order.currency || 'USD',
       items,
-      pdfUrl: `/api/orders/${orderNumber}/pdf?token=${pdfToken}`,
+      pdfUrl: pdfUrl ?? undefined,
     });
 
     await payload.update({
@@ -195,48 +195,20 @@ const sendOrderConfirmationEmail: TaskConfig = {
       showVES,
     });
 
-    // PDF de la Nota de Entrega (mismo generador del endpoint público)
-    let pdfBase64: string | undefined = undefined;
-    try {
-      const dateStr = order.createdAt
-        ? new Date(order.createdAt).toLocaleDateString('es-VE', {
-            day: '2-digit',
-            month: 'long',
-            year: 'numeric',
-          })
-        : new Date().toLocaleDateString('es-VE');
-
-      const pdfBytes = generateDeliveryNotePDF({
-        storeName,
-        orderNumber,
-        date: dateStr,
-        customerName: order.customer?.name || 'Cliente',
-        customerPhone: order.customer?.phone || '',
-        customerAddress: order.customer?.address || undefined,
-        paymentMethod: order.customer?.paymentMethod || undefined,
-        notes: order.customer?.notes || undefined,
-        currency: order.currency || 'USD',
-        total,
-        totalVES,
-        exchangeRateVES,
-        showVES,
-        items,
-      });
-      pdfBase64 = Buffer.from(pdfBytes).toString('base64');
-    } catch (pdfErr) {
-      console.warn('PDF generation warning (job):', pdfErr);
-    }
+    // La Nota de Entrega ya está en R2 (subida en el checkout); el email la
+    // adjunta DESDE la URL (Resend la descarga) — sin regenerar el PDF.
+    const emailPdfUrl = await getDeliveryNoteUrl(orderNumber);
 
     await payload.sendEmail({
       from: { name: storeName, address: fromEmail },
       to: customerEmail,
       subject: emailSubject,
       html: emailHtml,
-      attachments: pdfBase64
+      attachments: emailPdfUrl
         ? [
             {
               filename: `Nota-Entrega-${orderNumber}.pdf`,
-              content: pdfBase64,
+              path: emailPdfUrl,
             },
           ]
         : undefined,
