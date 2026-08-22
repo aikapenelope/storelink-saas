@@ -104,7 +104,7 @@ export async function getSalesSeries(
            COUNT(*)::int AS count,
            COALESCE(SUM(total_amount), 0)::float8 AS total
     FROM orders
-    WHERE created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - (${days} || ' days')::interval ${t}
+    WHERE created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => ${days}) ${t}
     GROUP BY (created_at AT TIME ZONE ${TZ})::date
     ORDER BY d ASC
   `);
