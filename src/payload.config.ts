@@ -19,6 +19,7 @@ import { Categories } from './collections/Categories';
 import { Orders } from './collections/Orders';
 import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
+import { syncTenantCatalogTask, DAILY_SHEETS_SYNC_CRON } from './jobs/syncTenantCatalog';
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -148,5 +149,11 @@ export default buildConfig({
     push: false, // Production: use explicit migrations instead of auto-push
     migrationDir: path.resolve(dirname, 'migrations'),
   }),
+  // Jobs Queue oficial de Payload (docs/jobs-queue): sync diario de Sheets
+  // a las 12:00 UTC + ejecución vía endpoint /api/payload-jobs/run que
+  // invoca Vercel Cron (en serverless autoRun no es confiable).
+  jobs: {
+    tasks: [syncTenantCatalogTask],
+  },
   plugins,
 });

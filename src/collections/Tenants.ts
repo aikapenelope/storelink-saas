@@ -116,6 +116,75 @@ export const Tenants: CollectionConfig = {
       ],
     },
     {
+      // Audit fix + feature: sincronización programada del catálogo.
+      // El cron corre TODOS los días a las 12:00 UTC para todos los
+      // tenants con sheetsSyncEnabled=true (Jobs Queue oficial de Payload).
+      type: 'collapsible',
+      label: 'Sincronización Automática de Catálogo (Google Sheets)',
+      admin: {
+        description: 'Sincroniza tu catálogo automáticamente todos los días a las 12:00 UTC (8:00 am Venezuela). Pega la URL de tu hoja y actívalo.',
+        initCollapsed: true,
+      },
+      fields: [
+        {
+          name: 'sheetsSyncEnabled',
+          type: 'checkbox',
+          label: 'Activar Sincronización Diaria Automática',
+          defaultValue: false,
+          index: true,
+        },
+        {
+          name: 'sheetsSyncUrl',
+          type: 'text',
+          label: 'URL de Google Sheets',
+          admin: {
+            description: 'Debe estar compartida como "Cualquiera con el enlace puede ver". Ej: https://docs.google.com/spreadsheets/d/...',
+            condition: (data) => Boolean(data?.sheetsSyncEnabled),
+          },
+        },
+        {
+          name: 'syncLastStatus',
+          type: 'select',
+          label: 'Estado de la Última Sincronización',
+          options: [
+            { label: 'Exitosa', value: 'ok' },
+            { label: 'Con errores parciales', value: 'partial_error' },
+          ],
+          access: {
+            update: () => false, // Solo la escribe el job automático
+          },
+          admin: {
+            readOnly: true,
+            position: 'sidebar',
+            condition: (data) => Boolean(data?.sheetsSyncEnabled),
+          },
+        },
+        {
+          name: 'syncLastRunAt',
+          type: 'date',
+          label: 'Última Ejecución',
+          admin: {
+            readOnly: true,
+            position: 'sidebar',
+            condition: (data) => Boolean(data?.sheetsSyncEnabled),
+          },
+        },
+        {
+          name: 'syncLastResult',
+          type: 'json',
+          label: 'Detalle de la Última Ejecución',
+          access: {
+            update: () => false,
+          },
+          admin: {
+            readOnly: true,
+            condition: (data) => Boolean(data?.sheetsSyncEnabled),
+            description: 'Creados, actualizados y errores de la última corrida.',
+          },
+        },
+      ],
+    },
+    {
       name: 'trelloConfig',
       type: 'group',
       label: 'Espacio de Trabajo Trello (Kanban)',
