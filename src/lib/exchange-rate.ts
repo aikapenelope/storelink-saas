@@ -107,18 +107,6 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
   return result;
 }
 
-/** Lanza si la API no respondió (sin montos fijos de respaldo). */
-export async function getLiveExchangeRate(
-  provider: 'binance' | 'paralelo' | 'bcv' = 'binance'
-): Promise<number> {
-  const rates = await getAllLiveExchangeRates();
-  const value = provider === 'bcv' ? rates.bcv : provider === 'paralelo' ? rates.paralelo : rates.binance;
-  if (value == null || value <= 0) {
-    throw new Error(`Exchange rate "${provider}" unavailable`);
-  }
-  return value;
-}
-
 export type VesRateResult = {
   rate: number | null;
   source: 'manual' | 'binance' | 'paralelo' | 'none';

@@ -40,6 +40,8 @@ interface CartDrawerProps {
   showVES?: boolean;
   storeName: string;
   whatsappPhone: string;
+  /** Modo preview visual (página demo /demo): el carrito se ve pero NO envía pedidos */
+  preview?: boolean;
   tenantSlug: string;
   pickupConfig?: {
     enabled?: boolean | null;
@@ -107,6 +109,7 @@ export function CartDrawer({
   showVES = false,
   storeName,
   whatsappPhone,
+  preview = false,
   tenantSlug,
   pickupConfig,
   paymentMethodsConfig,
@@ -192,6 +195,12 @@ export function CartDrawer({
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Modo preview visual (página demo): no se envían pedidos
+    if (preview) {
+      return;
+    }
+
     if (!customer.name.trim()) {
       alert('Por favor ingresa tu nombre completo.');
       return;
@@ -249,7 +258,6 @@ export function CartDrawer({
       const response = await processOrder({
         tenantSlug,
         storeName,
-        whatsappPhone,
         currency,
         exchangeRateVES,
         showVES,
@@ -1386,11 +1394,15 @@ export function CartDrawer({
             <button
               type="submit"
               form="checkout-form"
-              disabled={isLoading}
+              disabled={isLoading || preview}
               className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 active:scale-95 text-sm"
             >
               <Send className="w-4 h-4" />
-              {isLoading ? 'Procesando Pedido...' : 'Confirmar y Enviar a WhatsApp'}
+              {preview
+                ? 'Vista previa — pedidos desactivados'
+                : isLoading
+                ? 'Procesando Pedido...'
+                : 'Confirmar y Enviar a WhatsApp'}
             </button>
           </div>
         )}

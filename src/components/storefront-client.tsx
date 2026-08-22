@@ -770,6 +770,7 @@ export function StorefrontClient({
         tenantSlug={tenant.slug}
         storeName={activeTenantConfig.name}
         whatsappPhone={tenant.whatsappPhone}
+        preview={isDemo}
         pickupConfig={tenant.pickupConfig}
         paymentMethodsConfig={tenant.paymentMethodsConfig}
         deliveryConfig={tenant.deliveryConfig}

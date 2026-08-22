@@ -47,7 +47,6 @@ export interface CheckoutItemData {
 export interface CheckoutRequest {
   tenantSlug: string;
   storeName: string;
-  whatsappPhone: string;
   currency: string;
   exchangeRateVES?: number;
   showVES?: boolean;
@@ -69,7 +68,7 @@ export interface CheckoutResponse {
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
-    const { tenantSlug, storeName, whatsappPhone, currency, showVES, customer, items } = request;
+    const { tenantSlug, storeName, currency, showVES, customer, items } = request;
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };
@@ -95,8 +94,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const tenantId = tenantDoc?.id;
 
     // Tienda inexistente → no existe (404 en el storefront; aquí se rechaza)
-    if (!tenantId) {
+    if (!tenantId || !tenantDoc) {
       return { success: false, error: 'Tienda no encontrada' };
+    }
+
+    // Regla de negocio: toda tienda real siempre tiene WhatsApp configurado.
+    // Sin whatsappPhone la tienda no recibe pedidos (p.ej. la tienda demo real).
+    if (!tenantDoc.whatsappPhone) {
+      return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
     }
 
     // ------------------------------------------------------------------
@@ -105,25 +110,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // oficial @payloadcms/plugin-ecommerce (packages/plugin-ecommerce/
     // src/utilities/defaultProductsValidation.ts): precio requerido desde
     // la BD, stock suficiente, y rechazo de productos no verificados.
-    //
-    // Modo DEMO (página demo de landing, tenant demo p.ej. "donluigi" SIN
-    // productos cargados): el checkout sigue completo (WhatsApp + PDF +
-    // Trello + email) con los datos del cliente — sabemos que no es real y
-    // queda aislado: solo afecta a su propio tenant, nunca a los demás.
     // ------------------------------------------------------------------
     const verifiedItems: CheckoutItemData[] = [];
-
-    let tenantHasProducts = false;
-    if (tenantId) {
-      const countRes = await payload.count({
-        collection: 'products',
-        where: { tenant: { equals: tenantId } },
-        overrideAccess: true,
-      });
-      tenantHasProducts = countRes.totalDocs > 0;
-    }
-    const DEMO_TENANT_SLUG = process.env.DEMO_TENANT_SLUG || 'donluigi';
-    const isDemoTenant = tenantDoc?.slug === DEMO_TENANT_SLUG && !tenantHasProducts;
 
     for (const item of items) {
       // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
@@ -136,21 +124,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         return { success: false, error: 'Producto no disponible' };
       }
 
-      // En modo demo los SKUs del catálogo de muestra no existen en la BD:
-      // se aceptan los datos del cliente (precio/título) sin verificación.
-      if (isDemoTenant) {
-        verifiedItems.push({
-          sku: item.sku,
-          title: item.title || 'Producto',
-          quantity: qty,
-          price: Math.max(0, Number(item.price) || 0),
-        });
-        continue;
-      }
-
-      // Tienda real: todo item debe resolver a un producto REAL del tenant
-      // (el SKU y el precio los decide el servidor, nunca el cliente). El
-      // lookup acepta SKU base o SKU de variante (catálogo con variantes).
+      // Todo item debe resolver a un producto REAL del tenant (el SKU y el
+      // precio los decide el servidor, nunca el cliente). El lookup acepta
+      // SKU base o SKU de variante (catálogo con variantes).
       const dbProductRes = await payload.find({
         collection: 'products',
         where: {
@@ -298,7 +274,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     // 5. Build Structured WhatsApp Message
     // ------------------------------------------------------------------
-    const targetPhone = tenantDoc?.whatsappPhone || whatsappPhone || '584141234567';
+    // El WhatsApp es siempre el del tenant (ya validado arriba); sin
+    // fallbacks hardcodeados.
+    const targetPhone = tenantDoc.whatsappPhone;
     const cleanPhone = targetPhone.replace(/\D/g, '');
 
     const itemsSummary = verifiedItems

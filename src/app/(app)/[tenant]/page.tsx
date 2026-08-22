@@ -23,6 +23,8 @@ const RESERVED_SLUGS = new Set([
   'manifest.json',
   'admin',
   'api',
+  // Ruta estática de la página demo visual (nunca un tenant real)
+  'demo',
 ]);
 
 export async function generateMetadata({
@@ -105,14 +107,10 @@ export default async function TenantStorefrontPage({
     notFound();
   }
 
-  const DEMO_TENANT_SLUG = process.env.DEMO_TENANT_SLUG || 'donluigi';
-
   let tenantConfig: TenantConfig;
   let products: ProductItem[] = [];
   let categories: string[] = ['Todos'];
-  // Solo la tienda demo designada (p.ej. donluigi) sin productos muestra el
-  // catálogo de muestra (VERTICAL_PRODUCTS). El resto sin productos → cascarón.
-  let isDemo = false;
+  // Tenant real sin productos → cascarón vacío (products = [])
 
   try {
     const payload = await getPayload({ config });
@@ -144,7 +142,7 @@ export default async function TenantStorefrontPage({
       name: doc.name || tenantSlug,
       slug: doc.slug || tenantSlug,
       theme: doc.theme || 'basic-banner',
-      whatsappPhone: doc.whatsappPhone || '34600123456',
+      whatsappPhone: doc.whatsappPhone || '',
       welcomeMessage: branding?.welcomeMessage || undefined,
       primaryColor: branding?.primaryColor || undefined,
       exchangeRateVES: exchangeRateVES ?? undefined,
@@ -221,10 +219,8 @@ export default async function TenantStorefrontPage({
         if (p.category?.name) catSet.add(p.category.name);
       });
       categories = Array.from(catSet);
-    } else if (tenantSlug === DEMO_TENANT_SLUG) {
-      // Página demo: tenant designado sin productos → catálogo de muestra
-      isDemo = true;
     }
+    // Tenant real sin productos: cascarón vacío (no catálogo demo)
   } catch (err) {
     console.error('Error fetching tenant products from Payload:', err);
     notFound();
@@ -235,7 +231,6 @@ export default async function TenantStorefrontPage({
       tenant={tenantConfig!}
       products={products}
       categories={categories}
-      isDemo={isDemo}
     />
   );
 }
