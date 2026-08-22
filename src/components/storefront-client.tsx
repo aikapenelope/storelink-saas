@@ -46,6 +46,8 @@ export interface ProductItem {
   images?: Array<{ url: string }>;
   variants?: ProductVariant[];
   modifiers?: ProductModifierGroup[];
+  /** Nombres de las opciones de modificadores seleccionadas (las valida el servidor) */
+  selectedModifiers?: string[];
 }
 
 export interface TenantConfig {
@@ -551,6 +553,8 @@ export function StorefrontClient({
       sku: finalSku,
       title: finalTitle,
       price: currentModalPrice,
+      // El servidor valida y resuelve el delta de cada opción (precios oficiales)
+      selectedModifiers: Object.values(selectedModifiers).map((m) => m.name),
     };
 
     handleAddToCart(customizedItem, 1);

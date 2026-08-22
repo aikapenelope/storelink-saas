@@ -164,6 +164,11 @@ export const Orders: CollectionConfig = {
           required: true,
         },
         {
+          name: 'email',
+          type: 'email',
+          label: 'Correo Electrónico (para el envío de la confirmación)',
+        },
+        {
           name: 'address',
           type: 'textarea',
           label: 'Dirección de Entrega',

@@ -14,6 +14,8 @@ export interface ProductItem {
   category?: { id: string; name: string };
   stockStatus: 'in_stock' | 'out_of_stock';
   featured?: boolean;
+  /** Nombres de las opciones de modificadores seleccionadas (las valida el servidor) */
+  selectedModifiers?: string[];
 }
 
 interface ProductCardProps {

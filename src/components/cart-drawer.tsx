@@ -286,6 +286,7 @@ export function CartDrawer({
           title: i.title,
           quantity: i.quantity,
           price: i.price,
+          modifiers: i.selectedModifiers,
         })),
       });
 

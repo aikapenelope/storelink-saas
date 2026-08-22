@@ -5,6 +5,7 @@ import { orderPdfToken } from '@/lib/order-token';
 import { buildOrderConfirmationEmailHtml } from '@/lib/order-email';
 import { FALLBACK_EXCHANGE_RATE_VES } from '@/lib/exchange-rate';
 import { Resend } from 'resend';
+import type { Order, Tenant } from '@/payload-types';
 
 /**
  * Jobs Queue oficial de Payload 3 (https://payloadcms.com/docs/jobs-queue/overview):
@@ -33,10 +34,17 @@ const trelloDispatchOrder: TaskConfig = {
       id: orderId,
       overrideAccess: true,
       req,
-    })) as any;
+    })) as Order | null;
 
     if (!order) {
       throw new Error(`Order ${orderId} not found`);
+    }
+
+    // Idempotencia: si la tarjeta ya se creó (p.ej. retry tras fallo de
+    // update), no se duplica en Trello.
+    if (order.trelloCardUrl) {
+      const cardId = order.trelloCardUrl.split('/c/')[1] ?? undefined;
+      return { output: { skipped: true, cardId } };
     }
 
     const tenantId = typeof order.tenant === 'object' ? order.tenant?.id : order.tenant;
@@ -46,7 +54,7 @@ const trelloDispatchOrder: TaskConfig = {
           id: tenantId as any,
           overrideAccess: true,
           req,
-        }).catch(() => null)) as any)
+        }).catch(() => null)) as Tenant | null)
       : null;
 
     // Modelo de operación: credencial MASTER global (Vercel) + listId por
@@ -62,9 +70,9 @@ const trelloDispatchOrder: TaskConfig = {
 
     const orderNumber = order.orderNumber || String(order.id);
     const pdfToken = orderPdfToken(orderNumber);
-    const customer = order.customer || {};
+    const customer = order.customer;
     const items = Array.isArray(order.items)
-      ? order.items.map((i: any) => ({
+      ? order.items.map((i) => ({
           sku: i.sku || 'S/N',
           title: i.title,
           quantity: Number(i.quantity) || 1,
@@ -79,11 +87,11 @@ const trelloDispatchOrder: TaskConfig = {
       token,
       listId,
       orderNumber,
-      customerName: customer.name || 'Cliente',
-      customerPhone: customer.phone || '',
-      customerAddress: customer.address || undefined,
-      paymentMethod: customer.paymentMethod,
-      notes: customer.notes,
+      customerName: customer?.name || 'Cliente',
+      customerPhone: customer?.phone || '',
+      customerAddress: customer?.address || undefined,
+      paymentMethod: customer?.paymentMethod ?? undefined,
+      notes: customer?.notes ?? undefined,
       total,
       totalVES: total * exchangeRateVES,
       exchangeRateVES,
@@ -102,7 +110,7 @@ const trelloDispatchOrder: TaskConfig = {
       },
     });
 
-    return { output: { skipped: false, cardId: trelloRes?.cardId } };
+    return { output: { skipped: false, cardId: trelloRes?.cardId ?? undefined } };
   },
 };
 
@@ -124,7 +132,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
       id: orderId,
       overrideAccess: true,
       req,
-    })) as any;
+    })) as Order | null;
 
     if (!order) {
       throw new Error(`Order ${orderId} not found`);
@@ -137,7 +145,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
           id: tenantId as any,
           overrideAccess: true,
           req,
-        }).catch(() => null)) as any)
+        }).catch(() => null)) as Tenant | null)
       : null;
 
     const resendKey = tenantDoc?.emailConfig?.resendApiKey || process.env.RESEND_API_KEY || '';
@@ -176,7 +184,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
       orderNumber,
       deliveryType: order.deliveryType || 'delivery',
       paymentLabel: order.paymentDetails?.methodKey || order.customer?.paymentMethod || 'PAGO ELECTRÓNICO',
-      notes: order.customer?.notes,
+      notes: order.customer?.notes ?? undefined,
       items,
       total,
       totalVES,
@@ -242,8 +250,10 @@ const orderCreatedWorkflow: WorkflowConfig<'order-created'> = {
   inputSchema: [{ name: 'orderId', type: 'number', required: true }],
   handler: async ({ job, tasks }) => {
     const orderId = job.input.orderId as number;
-    await tasks.trelloDispatchOrder('dispatch-trello', { input: { orderId } });
+    // Email primero, Trello después: si Trello falla de forma persistente,
+    // el email ya se envió (tareas independientes, como antes con try/catch).
     await tasks.sendOrderConfirmationEmail('send-email', { input: { orderId } });
+    await tasks.trelloDispatchOrder('dispatch-trello', { input: { orderId } });
   },
 };
 

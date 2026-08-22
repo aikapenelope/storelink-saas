@@ -40,6 +40,8 @@ export interface CheckoutItemData {
   title: string;
   quantity: number;
   price: number;
+  /** Nombres de las opciones de modificadores seleccionadas (resueltas en el servidor) */
+  modifiers?: string[];
 }
 
 export interface CheckoutRequest {
@@ -109,7 +111,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       }
 
       // Todo item debe resolver a un producto REAL del tenant (el SKU y el
-      // precio los decide el servidor, nunca el cliente)
+      // precio los decide el servidor, nunca el cliente). El lookup acepta
+      // SKU base o SKU de variante (el catálogo permite variantes).
       if (!tenantId || !item.sku) {
         return { success: false, error: 'Producto no disponible' };
       }
@@ -119,7 +122,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         where: {
           and: [
             { tenant: { equals: tenantId } },
-            { sku: { equals: item.sku } },
+            {
+              or: [
+                { sku: { equals: item.sku } },
+                { 'variants.sku': { equals: item.sku } },
+              ],
+            },
           ],
         },
         limit: 1,
@@ -132,20 +140,53 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
       const dbProd = dbProductRes.docs[0] as Product;
 
+      // Precio y stock desde el servidor: si el SKU es de una variante, se
+      // usan el precio y stock de la variante; si no, los del producto base.
+      let basePrice = Number(dbProd.price) || 0;
+      let stockAvailable: number | null =
+        dbProd.trackStock && typeof dbProd.stockQuantity === 'number' ? dbProd.stockQuantity : null;
+      const matchedVariant = Array.isArray(dbProd.variants)
+        ? dbProd.variants.find((v) => v.sku === item.sku)
+        : undefined;
+      if (matchedVariant) {
+        if (typeof matchedVariant.price === 'number') basePrice = matchedVariant.price;
+        if (typeof matchedVariant.stockQuantity === 'number') stockAvailable = matchedVariant.stockQuantity;
+      }
+
+      // Modificadores: el servidor resuelve los deltas por nombre de opción
+      // (nunca se confía en el precio que envía el cliente).
+      let modifiersDelta = 0;
+      if (item.modifiers && item.modifiers.length > 0) {
+        const optionList = Array.isArray(dbProd.modifiers)
+          ? dbProd.modifiers.flatMap((g) => (Array.isArray(g.options) ? g.options : []))
+          : [];
+        for (const optionName of item.modifiers) {
+          const option = optionList.find((o) => o.name === optionName);
+          if (!option) {
+            return { success: false, error: `Opción no disponible: ${optionName}` };
+          }
+          modifiersDelta += Number(option.priceDelta) || 0;
+        }
+      }
+
+      const finalPrice = basePrice + modifiersDelta;
+
       // Validación de stock previa a la venta (el descuento atómico $inc lo
       // aplica el hook de inventario dentro de la transacción del pedido)
-      if (dbProd.trackStock && typeof dbProd.stockQuantity === 'number' && dbProd.stockQuantity < qty) {
+      if (stockAvailable !== null && stockAvailable < qty) {
         return {
           success: false,
-          error: `Disculpe, solo quedan ${dbProd.stockQuantity} unidades disponibles de "${dbProd.title}".`,
+          error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
         };
       }
 
       verifiedItems.push({
         sku: item.sku,
-        title: dbProd.title,
+        // El título con personalizaciones lo genera el cliente (solo display;
+        // se escapa al renderizar en email/PDF/WhatsApp)
+        title: item.title || dbProd.title,
         quantity: qty,
-        price: Number(dbProd.price) || 0,
+        price: finalPrice,
       });
     }
 
@@ -377,7 +418,8 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
             input: { orderId: orderDoc.id as number },
           });
         } catch (queueErr) {
-          console.warn('Jobs queue warning:', queueErr);
+          // Visible en logs: un fallo aquí pierde Trello+email del pedido
+          console.error('Jobs queue error:', queueErr);
         }
       } catch (orderErr) {
         console.error('Order creation error:', orderErr);

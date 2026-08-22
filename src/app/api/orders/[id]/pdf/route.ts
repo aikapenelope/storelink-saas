@@ -37,13 +37,18 @@ export async function GET(
     }
 
     // 3. Lookup: token válido → override (el token ya autoriza ESTE pedido);
-    //    sesión autenticada → acceso controlado (constraints multi-tenant).
+    //    sesión autenticada → acceso controlado pasando el `user` real para
+    //    que apliquen los constraints multi-tenant (sin override).
     let orderDoc: Order | null = null;
     const canOverride = tokenValid;
 
     if (/^\d+$/.test(id)) {
       orderDoc = (await payload
-        .findByID({ collection: 'orders', id, ...(canOverride ? { overrideAccess: true } : {}) })
+        .findByID({
+          collection: 'orders',
+          id,
+          ...(canOverride ? { overrideAccess: true } : { user }),
+        })
         .catch(() => null)) as Order | null;
     }
 
@@ -52,7 +57,7 @@ export async function GET(
         collection: 'orders',
         where: { orderNumber: { equals: id } },
         limit: 1,
-        ...(canOverride ? { overrideAccess: true } : {}),
+        ...(canOverride ? { overrideAccess: true } : { user }),
       });
       if (resByNum.docs.length > 0) {
         orderDoc = resByNum.docs[0] as Order;

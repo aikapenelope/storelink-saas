@@ -20,8 +20,9 @@ export async function PATCH(
     const { status, paymentStatus } = body;
 
     // Whitelist de estados (evita valores arbitrarios que rompen los selects
-    // del dashboard y el flujo de reposición de inventario del hook)
-    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'in_delivery', 'delivered', 'cancelled'];
+    // del dashboard y el flujo de reposición de inventario del hook).
+    // 'ready' se conserva por compatibilidad con pedidos legacy.
+    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'in_delivery', 'delivered', 'cancelled'];
     const ALLOWED_PAYMENT_STATUSES = ['pending_verification', 'verified', 'rejected'];
 
     if (status && !ALLOWED_STATUSES.includes(status)) {
@@ -31,10 +32,12 @@ export async function PATCH(
       return NextResponse.json({ error: `Estado de pago inválido: ${paymentStatus}` }, { status: 400 });
     }
 
-    // Fetch existing order
+    // Fetch existing order — con el `user` real para que apliquen los
+    // constraints multi-tenant (antes, req anónimo → 404 para tenant-admins)
     const order = await payload.findByID({
       collection: 'orders',
       id,
+      user,
     });
 
     if (!order) {
