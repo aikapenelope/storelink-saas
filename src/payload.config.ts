@@ -131,11 +131,18 @@ export default buildConfig({
   }),
   // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
   // workflow `order-created` (Trello + email) y lo procesa al instante con
-  // payload.jobs.runByID() dentro de after(). Un runner externo
-  // (GitHub Actions → /api/jobs/run, con CRON_SECRET) reintenta fallos.
+  // payload.jobs.runByID() dentro de after(). Un runner externo (GitHub
+  // Actions → GET /api/payload-jobs/run, con x-cron-secret) reintenta fallos;
+  // access.run valida ese secreto sobre el endpoint REST oficial.
   jobs: {
     tasks: orderJobs.tasks,
     workflows: orderJobs.workflows,
+    access: {
+      run: ({ req }) => {
+        const provided = req.headers.get('x-cron-secret');
+        return !!provided && provided === process.env.CRON_SECRET;
+      },
+    },
   },
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
