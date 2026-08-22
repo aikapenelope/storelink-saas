@@ -1,0 +1,19 @@
+name: jobs-runner
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Procesar cola de jobs (reintentos y fallos)
+        run: |
+          curl -fsS -m 120 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "https://flow.martes.app/api/jobs/run"
