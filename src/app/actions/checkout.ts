@@ -99,6 +99,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       return { success: false, error: 'Tienda no encontrada' };
     }
 
+    // Regla de negocio: el checkout es por WhatsApp — sin whatsappPhone la
+    // tienda no tiene canal de contacto y no recibe pedidos.
+    if (!tenantDoc.whatsappPhone) {
+      return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
+    }
+
     // ------------------------------------------------------------------
     // 2. Server-Side Price & Stock Verification (Fraud Prevention)
     // Patrón oficial adaptado de `defaultProductsValidation` del plugin
@@ -267,19 +273,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // ------------------------------------------------------------------
-    // 5. Build Structured WhatsApp Message (opcional: si la tienda no tiene
-    // whatsappPhone configurado, el pedido se procesa igual sin enlace).
+    // 5. Build Structured WhatsApp Message
     // ------------------------------------------------------------------
+    // El WhatsApp es siempre el del tenant (validado arriba); sin fallbacks.
     const targetPhone = tenantDoc.whatsappPhone;
-    const cleanPhone = targetPhone ? targetPhone.replace(/\D/g, '') : '';
-
-    // Token opaco para que ESTE cliente descargue SU nota sin sesión
-    // (válido 48h; se genera siempre, con o sin WhatsApp)
-    const pdfToken = orderPdfToken(orderNumber);
-    const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
-
-    let whatsappUrl: string | null = null;
-    if (cleanPhone) {
+    const cleanPhone = targetPhone.replace(/\D/g, '');
 
     const itemsSummary = verifiedItems
       .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
@@ -315,14 +313,13 @@ ${itemsSummary}
 ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
 📄 _He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._`;
 
-    // Token opaco para que ESTE cliente descargue SU nota sin sesión
+    // Token opaco para que ESTE cliente descargue SU nota sin sesión (48h)
     const pdfToken = orderPdfToken(orderNumber);
     const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
 
-    whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
+    const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
       whatsappMessage
     )}`;
-    }
 
     // ------------------------------------------------------------------
     // 6. Dispatch Trello + Email — ASÍNCRONO vía Jobs Queue oficial de
@@ -470,7 +467,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     return {
       success: true,
       orderNumber,
-      whatsappUrl: whatsappUrl ?? undefined,
+      whatsappUrl,
       pdfBase64,
       // El email ahora se envía de forma asíncrona vía Jobs Queue
       emailSent: false,

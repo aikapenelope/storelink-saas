@@ -180,7 +180,7 @@ export function CartDrawer({
   const [isLoading, setIsLoading] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<{
     orderNumber: string;
-    whatsappUrl?: string;
+    whatsappUrl: string;
     pdfBase64?: string;
   } | null>(null);
 
@@ -298,17 +298,15 @@ export function CartDrawer({
         })),
       });
 
-      if (response.success && response.orderNumber) {
+      if (response.success && response.whatsappUrl && response.orderNumber) {
         setCompletedOrder({
           orderNumber: response.orderNumber,
           whatsappUrl: response.whatsappUrl,
           pdfBase64: response.pdfBase64,
         });
 
-        // Open WhatsApp directly in new window / app (si la tienda tiene número)
-        if (response.whatsappUrl) {
-          window.open(response.whatsappUrl, '_blank');
-        }
+        // Open WhatsApp directly in new window / app
+        window.open(response.whatsappUrl, '_blank');
         onClearCart();
       } else {
         alert(response.error || 'Hubo un error al procesar el pedido.');
@@ -378,17 +376,15 @@ export function CartDrawer({
               </div>
 
               <div className="w-full space-y-3">
-                {completedOrder.whatsappUrl && (
-                  <a
-                    href={completedOrder.whatsappUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 text-sm active:scale-95"
-                  >
-                    <Send className="w-4.5 h-4.5" />
-                    Enviar Comprobante y Ubicación por WhatsApp
-                  </a>
-                )}
+                <a
+                  href={completedOrder.whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 text-sm active:scale-95"
+                >
+                  <Send className="w-4.5 h-4.5" />
+                  Enviar Comprobante y Ubicación por WhatsApp
+                </a>
 
                 {completedOrder.pdfBase64 && (
                   <button
