@@ -130,8 +130,9 @@ export default buildConfig({
     apiKey: process.env.RESEND_API_KEY || '', // Empty string: Payload skips email if no key is set
   }),
   // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
-  // workflow `order-created` (Trello + email) y Vercel Cron ejecuta
-  // /api/payload-jobs/run. Requiere migración nueva: `pnpm migrate:create`.
+  // workflow `order-created` (Trello + email) y lo procesa al instante con
+  // payload.jobs.runByID() dentro de after(). Un runner externo
+  // (GitHub Actions → /api/jobs/run, con CRON_SECRET) reintenta fallos.
   jobs: {
     tasks: orderJobs.tasks,
     workflows: orderJobs.workflows,

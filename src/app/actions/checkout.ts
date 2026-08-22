@@ -6,6 +6,7 @@ import { orderPdfToken } from '@/lib/order-token';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import type { Tenant, Product, Customer } from '@/payload-types';
 import { sanitizePlainText } from '@/lib/order-email';
 
@@ -322,11 +323,14 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     )}`;
 
     // ------------------------------------------------------------------
-    // 6. Dispatch Trello + Email — AHORA ASÍNCRONO vía Jobs Queue oficial
-    // de Payload (https://payloadcms.com/docs/jobs-queue/overview):
-    // el workflow `order-created` (src/jobs/order-created.ts) crea la tarjeta
-    // de Trello y envía el correo con el PDF, con reintentos y sin bloquear
-    // el checkout. El cron de Vercel ejecuta /api/payload-jobs/run.
+    // 6. Dispatch Trello + Email — ASÍNCRONO vía Jobs Queue oficial de
+    // Payload (https://payloadcms.com/docs/jobs-queue/overview): el workflow
+    // `order-created` (src/jobs/order-created.ts) crea la tarjeta de Trello y
+    // envía el correo con el PDF, con reintentos y sin bloquear el checkout.
+    // El job se procesa AL INSTANTE (runByID dentro de after()) justo después
+    // de responder al cliente; un runner externo (GitHub Actions →
+    // /api/jobs/run, con CRON_SECRET) sirve de red de seguridad para
+    // reintentos y fallos. Sin crons de Vercel (Hobby no los permite).
     // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
@@ -423,12 +427,24 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
           },
         });
 
-        // Despacho asíncrono oficial (Jobs Queue): Trello + email con PDF.
-        // El workflow `order-created` actualiza trelloCardUrl cuando termine.
+        // Despacho asíncrono (Jobs Queue): Trello + email con PDF. El job se
+        // encola (durabilidad + reintentos) y se procesa AL INSTANTE vía
+        // runByID dentro de after(): corre justo después de responder al
+        // cliente, sin esperar a ningún cron. Si falla, queda en la cola y el
+        // runner externo (/api/jobs/run) lo reintenta.
         try {
-          await payload.jobs.queue({
+          const job = await payload.jobs.queue({
             workflow: 'order-created',
             input: { orderId: orderDoc.id as number },
+          });
+
+          after(async () => {
+            try {
+              const jobsPayload = await getPayload({ config });
+              await jobsPayload.jobs.runByID({ id: job.id });
+            } catch (runErr) {
+              console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
+            }
           });
         } catch (queueErr) {
           // Visible en logs: un fallo aquí pierde Trello+email del pedido
