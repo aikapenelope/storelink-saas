@@ -3,6 +3,7 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { verifyOrderPdfToken } from '@/lib/order-token';
+import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import type { Order, Tenant } from '@/payload-types';
 
 /**
@@ -67,8 +68,8 @@ export async function GET(
       return new NextResponse('Pedido no encontrado', { status: 404 });
     }
 
-    // 4. Resolve Store Name & Exchange Rate (tasa VES manual-only):
-    //    snapshot del pedido > tasa manual del tenant > sin VES (no mostrar Bs)
+    // 4. Resolve Store Name & Exchange Rate (jerarquía del producto):
+    //    snapshot del pedido > manual > Binance en vivo > paralelo > sin VES
     let storeName = 'Tienda StoreLink';
     let exchangeRateVES = Number(orderDoc.exchangeRateVES) || 0;
 
@@ -81,8 +82,8 @@ export async function GET(
           overrideAccess: true,
         })) as Tenant;
         if (tenantDoc?.name) storeName = tenantDoc.name;
-        if (!exchangeRateVES && Number(tenantDoc?.branding?.exchangeRateVES) > 0) {
-          exchangeRateVES = Number(tenantDoc?.branding?.exchangeRateVES);
+        if (!exchangeRateVES) {
+          exchangeRateVES = (await resolveExchangeRateVES(tenantDoc)).rate ?? 0;
         }
       } catch {}
     }

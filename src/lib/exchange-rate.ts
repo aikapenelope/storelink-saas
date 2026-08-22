@@ -1,12 +1,17 @@
 /**
- * Real-Time Exchange Rate Service (BCV, Binance P2P, Paralelo)
- * Direct official Binance P2P Order Book integration with DolarApi fallback.
+ * Servicio de tasas de cambio en tiempo real (BCV, Binance P2P, Paralelo).
+ * Las APIs solo reportan valores cuando responden (null si fallan); no hay
+ * montos fijos de respaldo. La resolución del VES sigue la jerarquía:
+ *   1. Tasa MANUAL del tenant (la que se configura desde Analíticas)
+ *   2. Binance P2P (en vivo)
+ *   3. Dólar paralelo (dolarapi) — fallback si Binance falla
+ *   4. Ninguna → null → la app NO muestra Bs
  */
 
 export interface ExchangeRateInfo {
-  bcv: number;
-  binance: number;
-  paralelo: number;
+  bcv: number | null;
+  binance: number | null;
+  paralelo: number | null;
   lastUpdated: string;
 }
 
@@ -20,9 +25,9 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
     return cachedRates.data;
   }
 
-  let bcvRate = 780.0;
-  let paraleloRate = 900.0;
-  let binanceRate = 900.0;
+  let bcvRate: number | null = null;
+  let paraleloRate: number | null = null;
+  let binanceRate: number | null = null;
 
   // 1. Fetch BCV Official Rate
   try {
@@ -86,11 +91,9 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
           );
         }
       }
-    } else {
-      binanceRate = paraleloRate;
     }
-  } catch {
-    binanceRate = paraleloRate;
+  } catch (err) {
+    console.warn('Error fetching Binance rate:', err);
   }
 
   const result: ExchangeRateInfo = {
@@ -104,20 +107,40 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
   return result;
 }
 
-export async function getLiveExchangeRate(provider: 'binance' | 'paralelo' | 'bcv' = 'binance'): Promise<number> {
+/** Lanza si la API no respondió (sin montos fijos de respaldo). */
+export async function getLiveExchangeRate(
+  provider: 'binance' | 'paralelo' | 'bcv' = 'binance'
+): Promise<number> {
   const rates = await getAllLiveExchangeRates();
-  if (provider === 'bcv') return rates.bcv;
-  if (provider === 'paralelo') return rates.paralelo;
-  return rates.binance;
+  const value = provider === 'bcv' ? rates.bcv : provider === 'paralelo' ? rates.paralelo : rates.binance;
+  if (value == null || value <= 0) {
+    throw new Error(`Exchange rate "${provider}" unavailable`);
+  }
+  return value;
 }
 
-/** Resolución de la tasa VES (bolívares): SOLO la tasa manual del tenant.
- *  La moneda del sistema es USD (precios desde Google Sheets); el VES es una
- *  conversión opcional de display. Sin tasa manual → null → la app NO muestra
- *  Bs (no hay fallback a APIs ni montos fijos). */
+export type VesRateResult = {
+  rate: number | null;
+  source: 'manual' | 'binance' | 'paralelo' | 'none';
+};
+
+/** Resolución del VES (jerarquía del producto):
+ *  manual del tenant (configurada desde Analíticas) > Binance P2P en vivo >
+ *  dólar paralelo (dolarapi) > ninguna (no se muestra Bs). */
 export async function resolveExchangeRateVES(
   tenantDoc?: { branding?: { exchangeRateVES?: number | null } } | null
-): Promise<number | null> {
-  const custom = Number(tenantDoc?.branding?.exchangeRateVES);
-  return Number.isFinite(custom) && custom > 0 ? custom : null;
+): Promise<VesRateResult> {
+  const manual = Number(tenantDoc?.branding?.exchangeRateVES);
+  if (Number.isFinite(manual) && manual > 0) {
+    return { rate: manual, source: 'manual' };
+  }
+
+  const rates = await getAllLiveExchangeRates();
+  if (rates.binance != null && rates.binance > 0) {
+    return { rate: rates.binance, source: 'binance' };
+  }
+  if (rates.paralelo != null && rates.paralelo > 0) {
+    return { rate: rates.paralelo, source: 'paralelo' };
+  }
+  return { rate: null, source: 'none' };
 }

@@ -8,9 +8,9 @@ interface ExchangeRateControlProps {
   tenantName: string;
   initialCustomRate: number | null;
   liveRates: {
-    bcv: number;
-    binance: number;
-    paralelo: number;
+    bcv: number | null;
+    binance: number | null;
+    paralelo: number | null;
   };
 }
 
@@ -88,7 +88,7 @@ export function ExchangeRateControl({
         <div className="text-right shrink-0">
           <span className="text-[10px] text-zinc-500 font-mono block">Tasa Activa en Tienda</span>
           <span className="text-base sm:text-lg font-mono font-extrabold text-white">
-            Bs. {effectiveRate.toFixed(2)} <span className="text-xs text-zinc-400 font-normal">/ $</span>
+            Bs. {effectiveRate ? effectiveRate.toFixed(2) : '—'} <span className="text-xs text-zinc-400 font-normal">/ $</span>
           </span>
         </div>
       </div>
@@ -102,13 +102,13 @@ export function ExchangeRateControl({
               <ShieldCheck className="w-3 h-3 text-zinc-300" /> Tasa Oficial BCV
             </span>
             <span className="font-mono text-sm font-bold text-white block mt-0.5">
-              Bs. {liveRates.bcv.toFixed(2)} / $
+              Bs. {liveRates.bcv ? liveRates.bcv.toFixed(2) : '—'} / $
             </span>
           </div>
           <button
             type="button"
-            onClick={() => handleSaveRate(liveRates.bcv)}
-            disabled={saving}
+            onClick={() => handleSaveRate(liveRates.bcv ?? 0)}
+            disabled={saving || liveRates.bcv == null}
             className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white text-[10px] font-mono transition rounded-none shrink-0 cursor-pointer"
           >
             Usar BCV
@@ -122,13 +122,13 @@ export function ExchangeRateControl({
               <Zap className="w-3 h-3 text-white" /> Binance P2P en Vivo
             </span>
             <span className="font-mono text-sm font-bold text-white block mt-0.5">
-              Bs. {liveRates.binance.toFixed(2)} / $
+              Bs. {liveRates.binance ? liveRates.binance.toFixed(2) : '—'} / $
             </span>
           </div>
           <button
             type="button"
-            onClick={() => handleSaveRate(liveRates.binance)}
-            disabled={saving}
+            onClick={() => handleSaveRate(liveRates.binance ?? 0)}
+            disabled={saving || liveRates.binance == null}
             className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white text-[10px] font-mono transition rounded-none shrink-0 cursor-pointer"
           >
             Usar Binance
@@ -147,7 +147,7 @@ export function ExchangeRateControl({
               min="1"
               value={customRate}
               onChange={(e) => setCustomRate(e.target.value)}
-              placeholder={`Ej: ${liveRates.binance.toFixed(2)}`}
+              placeholder={`Ej: ${liveRates.binance ? liveRates.binance.toFixed(2) : '900'}`}
               className="w-full bg-black border border-zinc-700 text-white font-mono text-xs pl-9 pr-3 py-2 focus:outline-none focus:border-white rounded-none"
             />
           </div>

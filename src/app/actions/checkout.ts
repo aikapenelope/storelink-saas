@@ -94,6 +94,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const tenantDoc = tenantResult?.docs?.[0] as Tenant | undefined;
     const tenantId = tenantDoc?.id;
 
+    // Tienda inexistente → no existe (404 en el storefront; aquí se rechaza)
+    if (!tenantId) {
+      return { success: false, error: 'Tienda no encontrada' };
+    }
+
     // ------------------------------------------------------------------
     // 2. Server-Side Price & Stock Verification (Fraud Prevention)
     // Patrón oficial adaptado de `defaultProductsValidation` del plugin
@@ -101,11 +106,10 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // src/utilities/defaultProductsValidation.ts): precio requerido desde
     // la BD, stock suficiente, y rechazo de productos no verificados.
     //
-    // Modo DEMO (landing / pruebas de clientes potenciales, p.ej. la tienda
-    // "donluigi"): si el tenant no existe o no tiene productos en la BD, el
-    // checkout sigue completo (WhatsApp + PDF + Trello + email) con los datos
-    // del cliente — sabemos que no es real y queda aislado: solo afecta a su
-    // propio tenant, nunca a los demás.
+    // Modo DEMO (página demo de landing, tenant demo p.ej. "donluigi" SIN
+    // productos cargados): el checkout sigue completo (WhatsApp + PDF +
+    // Trello + email) con los datos del cliente — sabemos que no es real y
+    // queda aislado: solo afecta a su propio tenant, nunca a los demás.
     // ------------------------------------------------------------------
     const verifiedItems: CheckoutItemData[] = [];
 
@@ -118,7 +122,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       });
       tenantHasProducts = countRes.totalDocs > 0;
     }
-    const isDemoTenant = !tenantId || !tenantHasProducts;
+    const DEMO_TENANT_SLUG = process.env.DEMO_TENANT_SLUG || 'donluigi';
+    const isDemoTenant = tenantDoc?.slug === DEMO_TENANT_SLUG && !tenantHasProducts;
 
     for (const item of items) {
       // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
@@ -225,11 +230,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // ------------------------------------------------------------------
-    // 3. Resolve Exchange Rate — tasa VES SOLO manual del tenant.
-    // La moneda del sistema es USD (precios desde Google Sheets). Sin tasa
-    // manual no se muestra Bs (ni en WhatsApp, PDF, email ni en el pedido).
+    // 3. Resolve Exchange Rate — jerarquía del producto:
+    //    manual del tenant (desde Analíticas) > Binance P2P en vivo >
+    //    dólar paralelo (dolarapi) > ninguna (no se muestra Bs).
     // ------------------------------------------------------------------
-    const vesRate = await resolveExchangeRateVES(tenantDoc);
+    const { rate: vesRate } = await resolveExchangeRateVES(tenantDoc);
     const showVESEffective = showVES === false ? false : vesRate !== null;
     const totalVES = vesRate ? total * vesRate : 0;
 

@@ -37,7 +37,7 @@ export function ThemeMotoParts({
   const [selectedBikeBrand, setSelectedBikeBrand] = useState('TODAS');
 
   const exchangeRate = tenant.exchangeRateVES || 0;
-  const showVES = (tenant.showVES ?? false) && exchangeRate > 0;
+  const showVES = (tenant.showVES ?? true) && exchangeRate > 0;
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {

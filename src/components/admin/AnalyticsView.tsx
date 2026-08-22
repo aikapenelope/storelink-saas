@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
-import { getAllLiveExchangeRates } from '@/lib/exchange-rate';
+import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-rate';
 import {
   Wallet,
   ShoppingCart,
@@ -83,9 +83,9 @@ export async function AnalyticsView() {
     const customRate = tenantDoc?.branding?.exchangeRateVES
       ? Number(tenantDoc.branding.exchangeRateVES)
       : null;
-    // Tasa VES manual-only: la moneda del sistema es USD (precios desde
-    // Google Sheets); sin tasa manual no se muestran montos en Bs.
-    const rateVES = customRate && customRate > 0 ? customRate : null;
+    // Tasa activa (jerarquía del producto): manual > Binance en vivo >
+    // dólar paralelo > ninguna (sin Bs)
+    const { rate: rateVES, source: rateSource } = await resolveExchangeRateVES(tenantDoc);
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
@@ -320,11 +320,19 @@ export async function AnalyticsView() {
                   Panel de ventas, gestión de pedidos y control de inventario
                   <span className="mx-2 text-zinc-700">•</span>
                   Tasa Activa: <span className="font-mono text-white font-bold">
-                    {rateVES ? `Bs. ${rateVES.toFixed(2)} / $` : '— (sin tasa manual)'}
+                    {rateVES ? `Bs. ${rateVES.toFixed(2)} / $` : '— (sin tasa)'}
                   </span>
-                  {rateVES && customRate ? (
+                  {rateSource === 'manual' ? (
                     <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
                       (Personalizada)
+                    </span>
+                  ) : rateSource === 'binance' ? (
+                    <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
+                      (Binance P2P en vivo)
+                    </span>
+                  ) : rateSource === 'paralelo' ? (
+                    <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
+                      (Dólar paralelo)
                     </span>
                   ) : null}
                 </p>
