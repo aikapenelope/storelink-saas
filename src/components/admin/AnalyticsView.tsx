@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
-import { getAllLiveExchangeRates } from '@/lib/exchange-rate';
+import { getAllLiveExchangeRates, FALLBACK_EXCHANGE_RATE_VES } from '@/lib/exchange-rate';
 import {
   Wallet,
   ShoppingCart,
@@ -83,7 +83,12 @@ export async function AnalyticsView() {
     const customRate = tenantDoc?.branding?.exchangeRateVES
       ? Number(tenantDoc.branding.exchangeRateVES)
       : null;
-    const rateVES = customRate && customRate > 0 ? customRate : liveRates.binance;
+    // Jerarquía unificada: manual > live > fallback env/890 (antes, si Binance
+    // fallaba, rateVES quedaba NaN y rompía totales y el dato "Tasa Activa")
+    const rateVES =
+      customRate && customRate > 0
+        ? customRate
+        : (liveRates.binance || FALLBACK_EXCHANGE_RATE_VES);
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
