@@ -46,6 +46,8 @@ export interface ProductItem {
   images?: Array<{ url: string }>;
   variants?: ProductVariant[];
   modifiers?: ProductModifierGroup[];
+  /** Nombres de las opciones de modificadores seleccionadas (las valida el servidor) */
+  selectedModifiers?: string[];
 }
 
 export interface TenantConfig {
@@ -551,6 +553,8 @@ export function StorefrontClient({
       sku: finalSku,
       title: finalTitle,
       price: currentModalPrice,
+      // El servidor valida y resuelve el delta de cada opción (precios oficiales)
+      selectedModifiers: Object.values(selectedModifiers).map((m) => m.name),
     };
 
     handleAddToCart(customizedItem, 1);
@@ -580,7 +584,7 @@ export function StorefrontClient({
     ...tenant,
     name: isRealStore ? tenant.name : currentVertical.name,
     welcomeMessage: isRealStore ? tenant.welcomeMessage : currentVertical.welcome,
-    exchangeRateVES: tenant.exchangeRateVES || 910.0,
+    exchangeRateVES: tenant.exchangeRateVES,
     showVES: tenant.showVES ?? true,
   };
 
@@ -766,6 +770,7 @@ export function StorefrontClient({
         tenantSlug={tenant.slug}
         storeName={activeTenantConfig.name}
         whatsappPhone={tenant.whatsappPhone}
+        preview={isDemo}
         pickupConfig={tenant.pickupConfig}
         paymentMethodsConfig={tenant.paymentMethodsConfig}
         deliveryConfig={tenant.deliveryConfig}

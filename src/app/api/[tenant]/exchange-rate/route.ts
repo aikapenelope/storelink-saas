@@ -47,9 +47,18 @@ export async function POST(
     }
 
     const currentBranding = (tenant as any).branding || {};
-    const newRate = exchangeRateVES !== undefined && exchangeRateVES !== null && Number(exchangeRateVES) > 0
-      ? Number(exchangeRateVES)
-      : null;
+
+    // Cota superior de la tasa (evita Infinity / tasas absurdas que rompen
+    // la serialización JSON y los totales de pedidos futuros)
+    const rawRate = exchangeRateVES;
+    let newRate: number | null = null;
+    if (rawRate !== undefined && rawRate !== null) {
+      const rateNum = Number(rawRate);
+      if (!Number.isFinite(rateNum) || rateNum < 1 || rateNum > 100000) {
+        return NextResponse.json({ error: 'Tasa de cambio inválida' }, { status: 400 });
+      }
+      newRate = rateNum;
+    }
 
     await payload.update({
       collection: 'tenants',
@@ -77,8 +86,8 @@ export async function POST(
       exchangeRateVES: newRate,
       message: newRate ? `Tasa actualizada a Bs. ${newRate.toFixed(2)} / $` : 'Tasa restablecida a modo automático en tiempo real.',
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error updating exchange rate:', error);
-    return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }

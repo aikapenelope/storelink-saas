@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { hasTenantAccess } from '@/lib/utils';
 
 export const Media: CollectionConfig = {
   slug: 'media',
@@ -23,9 +24,9 @@ export const Media: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => Boolean(user),
-    update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => Boolean(user),
+    create: ({ req: { user } }) => hasTenantAccess(user),
+    update: ({ req: { user } }) => hasTenantAccess(user),
+    delete: ({ req: { user } }) => hasTenantAccess(user),
   },
   fields: [
     {

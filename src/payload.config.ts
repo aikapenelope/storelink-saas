@@ -19,6 +19,7 @@ import { Categories } from './collections/Categories';
 import { Orders } from './collections/Orders';
 import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
+import { orderJobs } from './jobs/order-created';
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -128,6 +129,13 @@ export default buildConfig({
     defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
     apiKey: process.env.RESEND_API_KEY || '', // Empty string: Payload skips email if no key is set
   }),
+  // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
+  // workflow `order-created` (Trello + email) y Vercel Cron ejecuta
+  // /api/payload-jobs/run. Requiere migración nueva: `pnpm migrate:create`.
+  jobs: {
+    tasks: orderJobs.tasks,
+    workflows: orderJobs.workflows,
+  },
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),

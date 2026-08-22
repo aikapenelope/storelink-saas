@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload';
-import { getUserRole } from '@/lib/utils';
+import { getUserRole, hasTenantAccess } from '@/lib/utils';
 
 export const Customers: CollectionConfig = {
   slug: 'customers',
@@ -8,9 +8,11 @@ export const Customers: CollectionConfig = {
     defaultColumns: ['name', 'phone', 'totalOrders', 'totalSpent', 'lastOrderAt', 'tag'],
   },
   access: {
-    read: ({ req: { user } }) => Boolean(user),
-    create: ({ req: { user } }) => Boolean(user), // Allows server actions to register or update customer records
-    update: ({ req: { user } }) => Boolean(user),
+    // Audit fix: datos de clientes son privados y tenant-scoped; un usuario
+    // sin tenants asignados no puede leer ni escribir sobre el CRM global.
+    read: ({ req: { user } }) => hasTenantAccess(user),
+    create: ({ req: { user } }) => hasTenantAccess(user), // Server actions usan overrideAccess:true
+    update: ({ req: { user } }) => hasTenantAccess(user),
     delete: ({ req: { user } }) => getUserRole(user) === 'super-admin',
   },
   fields: [

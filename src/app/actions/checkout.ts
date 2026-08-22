@@ -1,35 +1,13 @@
 'use server';
 
-import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
-import { getLiveExchangeRate } from '@/lib/exchange-rate';
+import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { orderPdfToken } from '@/lib/order-token';
-import { Resend } from 'resend';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
 import type { Tenant, Product, Customer } from '@/payload-types';
-
-/**
- * Audit fix A5: escapa todo dato ingresado por el cliente antes de
- * interpolarlo en el HTML del correo (previene HTML/phishing injection) y en
- * el mensaje de WhatsApp (previene suplantación de líneas como "TOTAL").
- */
-function escapeHtml(value: string | undefined | null): string {
-  if (!value) return '';
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/** Neutraliza saltos de línea y caracteres de control para el texto plano de WhatsApp */
-function sanitizePlainText(value: string | undefined | null): string {
-  if (!value) return '';
-  return value.replace(/[\r\n\t]+/g, ' ').replace(/[\u0000-\u001F\u007F]/g, '').trim();
-}
+import { sanitizePlainText } from '@/lib/order-email';
 
 export interface CheckoutCustomerData {
   name: string;
@@ -62,12 +40,13 @@ export interface CheckoutItemData {
   title: string;
   quantity: number;
   price: number;
+  /** Nombres de las opciones de modificadores seleccionadas (resueltas en el servidor) */
+  modifiers?: string[];
 }
 
 export interface CheckoutRequest {
   tenantSlug: string;
   storeName: string;
-  whatsappPhone: string;
   currency: string;
   exchangeRateVES?: number;
   showVES?: boolean;
@@ -89,7 +68,7 @@ export interface CheckoutResponse {
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
-    const { tenantSlug, storeName, whatsappPhone, currency, showVES, customer, items } = request;
+    const { tenantSlug, storeName, currency, showVES, customer, items } = request;
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };
@@ -114,81 +93,127 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const tenantDoc = tenantResult?.docs?.[0] as Tenant | undefined;
     const tenantId = tenantDoc?.id;
 
+    // Tienda inexistente → no existe (404 en el storefront; aquí se rechaza)
+    if (!tenantId || !tenantDoc) {
+      return { success: false, error: 'Tienda no encontrada' };
+    }
+
+    // Regla de negocio: toda tienda real siempre tiene WhatsApp configurado.
+    // Sin whatsappPhone la tienda no recibe pedidos (p.ej. la tienda demo real).
+    if (!tenantDoc.whatsappPhone) {
+      return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
+    }
+
     // ------------------------------------------------------------------
     // 2. Server-Side Price & Stock Verification (Fraud Prevention)
+    // Patrón oficial adaptado de `defaultProductsValidation` del plugin
+    // oficial @payloadcms/plugin-ecommerce (packages/plugin-ecommerce/
+    // src/utilities/defaultProductsValidation.ts): precio requerido desde
+    // la BD, stock suficiente, y rechazo de productos no verificados.
     // ------------------------------------------------------------------
     const verifiedItems: CheckoutItemData[] = [];
 
     for (const item of items) {
-      let finalPrice = Number(item.price) || 0;
-      let finalTitle = item.title || 'Producto';
+      // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
+        return { success: false, error: 'Cantidad inválida en el carrito' };
+      }
 
-      if (tenantId && item.sku) {
-        const dbProductRes = await payload.find({
-          collection: 'products',
-          where: {
-            and: [
-              { tenant: { equals: tenantId } },
-              { sku: { equals: item.sku } },
-            ],
-          },
-          limit: 1,
-          overrideAccess: true,
-        });
+      if (!item.sku) {
+        return { success: false, error: 'Producto no disponible' };
+      }
 
-        if (dbProductRes.docs.length > 0) {
-          const dbProd = dbProductRes.docs[0] as Product;
-          finalPrice = Number(dbProd.price) || finalPrice;
-          finalTitle = dbProd.title || finalTitle;
+      // Todo item debe resolver a un producto REAL del tenant (el SKU y el
+      // precio los decide el servidor, nunca el cliente). El lookup acepta
+      // SKU base o SKU de variante (catálogo con variantes).
+      const dbProductRes = await payload.find({
+        collection: 'products',
+        where: {
+          and: [
+            { tenant: { equals: tenantId } },
+            {
+              or: [
+                { sku: { equals: item.sku } },
+                { 'variants.sku': { equals: item.sku } },
+              ],
+            },
+          ],
+        },
+        limit: 1,
+        overrideAccess: true,
+      });
 
-          // Validate stock availability before creating order
-          if (dbProd.trackStock && typeof dbProd.stockQuantity === 'number') {
-            const currentStock = dbProd.stockQuantity;
-            const requestedQty = Number(item.quantity) || 1;
+      if (dbProductRes.docs.length === 0) {
+        return { success: false, error: `Producto no disponible: ${item.sku}` };
+      }
 
-            if (currentStock < requestedQty) {
-              return {
-                success: false,
-                error: `Disculpe, solo quedan ${currentStock} unidades disponibles de "${finalTitle}".`,
-              };
-            }
+      const dbProd = dbProductRes.docs[0] as Product;
+
+      // Precio y stock desde el servidor: si el SKU es de una variante, se
+      // usan el precio y stock de la variante; si no, los del producto base.
+      let basePrice = Number(dbProd.price) || 0;
+      let stockAvailable: number | null =
+        dbProd.trackStock && typeof dbProd.stockQuantity === 'number' ? dbProd.stockQuantity : null;
+      const matchedVariant = Array.isArray(dbProd.variants)
+        ? dbProd.variants.find((v) => v.sku === item.sku)
+        : undefined;
+      if (matchedVariant) {
+        if (typeof matchedVariant.price === 'number') basePrice = matchedVariant.price;
+        if (typeof matchedVariant.stockQuantity === 'number') stockAvailable = matchedVariant.stockQuantity;
+      }
+
+      // Modificadores: el servidor resuelve los deltas por nombre de opción
+      // (nunca se confía en el precio que envía el cliente).
+      let modifiersDelta = 0;
+      if (item.modifiers && item.modifiers.length > 0) {
+        const optionList = Array.isArray(dbProd.modifiers)
+          ? dbProd.modifiers.flatMap((g) => (Array.isArray(g.options) ? g.options : []))
+          : [];
+        for (const optionName of item.modifiers) {
+          const option = optionList.find((o) => o.name === optionName);
+          if (!option) {
+            return { success: false, error: `Opción no disponible: ${optionName}` };
           }
+          modifiersDelta += Number(option.priceDelta) || 0;
         }
       }
 
+      const finalPrice = basePrice + modifiersDelta;
+
+      // Validación de stock previa a la venta (el descuento atómico $inc lo
+      // aplica el hook de inventario dentro de la transacción del pedido)
+      if (stockAvailable !== null && stockAvailable < qty) {
+        return {
+          success: false,
+          error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
+        };
+      }
+
       verifiedItems.push({
-        sku: item.sku || 'S/N',
-        title: finalTitle,
-        quantity: Number(item.quantity) || 1,
+        sku: item.sku,
+        // El título con personalizaciones lo genera el cliente (solo display;
+        // se escapa al renderizar en email/PDF/WhatsApp)
+        title: item.title || dbProd.title,
+        quantity: qty,
         price: finalPrice,
       });
     }
 
     const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
-
-    // ------------------------------------------------------------------
-    // 3. Resolve Exchange Rate — UNA sola resolución para TODO el pedido
-    // (PDF, WhatsApp, email y documento Orders). Jerarquía oficial:
-    //    tenant manual > Binance live > fallback env/890
-    // Audit fix: antes había tres fuentes distintas (890 checkout / 898 PDF /
-    // 70 dashboard) y se confiaba en la tasa que enviara el cliente.
-    // ------------------------------------------------------------------
-    const FALLBACK_RATE = Number(process.env.FALLBACK_EXCHANGE_RATE_VES) > 0
-      ? Number(process.env.FALLBACK_EXCHANGE_RATE_VES)
-      : 890.0;
-    let effectiveExchangeRate = FALLBACK_RATE;
-    if (tenantDoc?.branding?.exchangeRateVES && tenantDoc.branding.exchangeRateVES > 0) {
-      effectiveExchangeRate = Number(tenantDoc.branding.exchangeRateVES);
-    } else {
-      try {
-        const live = await getLiveExchangeRate('binance');
-        if (live && live > 0) effectiveExchangeRate = live;
-      } catch {
-        effectiveExchangeRate = FALLBACK_RATE; // mantiene el fallback estipulado
-      }
+    if (total <= 0) {
+      return { success: false, error: 'El total del pedido es inválido' };
     }
 
-    const totalVES = total * effectiveExchangeRate;
+    // ------------------------------------------------------------------
+    // 3. Resolve Exchange Rate — jerarquía del producto:
+    //    manual del tenant (desde Analíticas) > Binance P2P en vivo >
+    //    dólar paralelo (dolarapi) > ninguna (no se muestra Bs).
+    // ------------------------------------------------------------------
+    const { rate: vesRate } = await resolveExchangeRateVES(tenantDoc);
+    const showVESEffective = showVES === false ? false : vesRate !== null;
+    const totalVES = vesRate ? total * vesRate : 0;
+
     const now = new Date();
     let orderNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -237,8 +262,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         currency: currency || 'USD',
         total,
         totalVES,
-        exchangeRateVES: effectiveExchangeRate,
-        showVES: showVES ?? true,
+        exchangeRateVES: vesRate ?? 0,
+        showVES: showVESEffective,
         items: verifiedItems,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');
@@ -249,7 +274,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     // 5. Build Structured WhatsApp Message
     // ------------------------------------------------------------------
-    const targetPhone = tenantDoc?.whatsappPhone || whatsappPhone || '584141234567';
+    // El WhatsApp es siempre el del tenant (ya validado arriba); sin
+    // fallbacks hardcodeados.
+    const targetPhone = tenantDoc.whatsappPhone;
     const cleanPhone = targetPhone.replace(/\D/g, '');
 
     const itemsSummary = verifiedItems
@@ -283,7 +310,7 @@ ${itemsSummary}
 
 💰 *TOTAL A PAGAR:*
 💵 *$${total.toFixed(2)} USD*
-${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)\n` : ''}
+${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
 📄 _He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._`;
 
     // Token opaco para que ESTE cliente descargue SU nota sin sesión
@@ -295,163 +322,12 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
     )}`;
 
     // ------------------------------------------------------------------
-    // 6. Dispatch Trello Card — credencial MASTER global (Vercel) +
-    // listId por tenant. Modelo de operación: una sola cuenta maestra de
-    // Trello en las env vars de Vercel; cada comercio configura SOLO su
-    // workspace/tablero/lista destino (trelloConfig.listId). Si el tenant
-    // no tiene listId propio, NO se despacha (sin fallback a tableros ajenos).
+    // 6. Dispatch Trello + Email — AHORA ASÍNCRONO vía Jobs Queue oficial
+    // de Payload (https://payloadcms.com/docs/jobs-queue/overview):
+    // el workflow `order-created` (src/jobs/order-created.ts) crea la tarjeta
+    // de Trello y envía el correo con el PDF, con reintentos y sin bloquear
+    // el checkout. El cron de Vercel ejecuta /api/payload-jobs/run.
     // ------------------------------------------------------------------
-    let trelloCardUrl: string | undefined = undefined;
-    try {
-      const isTrelloEnabled = tenantDoc?.trelloConfig?.enabled !== false;
-      const trelloApiKey = process.env.TRELLO_API_KEY || '';
-      const trelloToken = process.env.TRELLO_TOKEN || '';
-      const trelloListId = tenantDoc?.trelloConfig?.listId || '';
-
-      if (isTrelloEnabled && trelloApiKey && trelloToken && trelloListId) {
-        const trelloRes = await createTrelloOrderCard({
-          apiKey: trelloApiKey,
-          token: trelloToken,
-          listId: trelloListId,
-          orderNumber,
-          customerName: customer.name,
-          customerPhone: customer.phone,
-          customerAddress: customer.address,
-          paymentMethod: customer.paymentMethod,
-          notes: customer.notes,
-          total,
-          totalVES,
-          exchangeRateVES: effectiveExchangeRate,
-          currency: currency || 'USD',
-          items: verifiedItems,
-          pdfUrl: pdfUrlWithToken,
-        });
-        trelloCardUrl = trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined;
-      }
-    } catch (trelloErr) {
-      console.warn('Trello dispatch warning:', trelloErr);
-    }
-
-    // ------------------------------------------------------------------
-    // 7. Send Confirmation Email via Resend with PDF Attachment (Tenant BYOK)
-    // ------------------------------------------------------------------
-    let emailSent = false;
-    const resendKey =
-      tenantDoc?.emailConfig?.resendApiKey ||
-      process.env.RESEND_API_KEY ||
-      '';
-
-    const fromEmail =
-      tenantDoc?.emailConfig?.fromEmail ||
-      process.env.RESEND_FROM_EMAIL ||
-      'pedidos@flow.martes.app';
-
-    const emailSubject =
-      tenantDoc?.emailConfig?.emailSubject ||
-      `✨ ¡Hola, ${customer.name}! Tu pedido #${orderNumber} en ${tenantDoc?.name || storeName} está registrado`;
-
-    if (resendKey && customer.email) {
-      try {
-        const resend = new Resend(resendKey);
-
-        const itemsHtml = verifiedItems
-          .map(
-            (i) =>
-              `<tr>
-                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;"><strong>[${i.sku || 'N/A'}]</strong> ${i.title}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: center;">${i.quantity}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: bold;">$${(i.quantity * i.price).toFixed(2)}</td>
-              </tr>`
-          )
-          .join('');
-
-        const emailHtml = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px 12px; color: #1e293b; }
-              .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
-              .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-              .store-name { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 6px 0; color: #ffffff; }
-              .badge { display: inline-block; background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.5px; }
-              .body-content { padding: 28px 24px; }
-              .greeting { font-size: 16px; line-height: 1.6; color: #334155; margin-bottom: 20px; }
-              .order-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin: 20px 0; font-size: 13px; }
-              .order-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-              .order-row:last-child { margin-bottom: 0; }
-              .table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
-              .th { background: #f1f5f9; padding: 10px; text-align: left; font-weight: 700; color: #475569; font-size: 11px; text-transform: uppercase; }
-              .total-box { text-align: right; padding-top: 14px; border-top: 2px solid #e2e8f0; }
-              .total-usd { font-size: 20px; font-weight: 900; color: #0f172a; margin: 0; }
-              .total-ves { font-size: 13px; color: #059669; font-weight: 700; margin: 4px 0 0 0; }
-              .next-steps { background: #fffbeb; border: 1px solid #fef3c7; border-radius: 14px; padding: 16px; margin-top: 24px; }
-              .footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <h1 class="store-name">${escapeHtml(tenantDoc?.name || storeName)}</h1>
-                <span class="badge">Pedido Registrado</span>
-              </div>
-              <div class="body-content">
-                <p class="greeting">¡Hola <strong>${escapeHtml(customer.name)}</strong>! Hemos registrado tu pedido con éxito.</p>
-                <div class="order-box">
-                  <div class="order-row"><span style="color: #64748b;">N° Pedido:</span><strong>#${orderNumber}</strong></div>
-                  <div class="order-row"><span style="color: #64748b;">Modalidad:</span><strong>${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}</strong></div>
-                  <div class="order-row"><span style="color: #64748b;">Método de Pago:</span><strong>${escapeHtml(paymentLabel)}</strong></div>
-                  ${safeNotes ? `<div class="order-row"><span style="color: #64748b;">Nota:</span><em>${escapeHtml(safeNotes)}</em></div>` : ''}
-                </div>
-                <table class="table">
-                  <thead>
-                    <tr><th class="th">Producto</th><th class="th" style="text-align: center;">Cant.</th><th class="th" style="text-align: right;">Total</th></tr>
-                  </thead>
-                  <tbody>${itemsHtml}</tbody>
-                </table>
-                <div class="total-box">
-                  <p class="total-usd">Total: $${total.toFixed(2)} USD</p>
-                  ${showVES ? `<p class="total-ves">Equivalente VES: Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)</p>` : ''}
-                </div>
-                <div class="next-steps">
-                  <strong style="color: #92400e; font-size: 13px;">💡 Pasos para agilizar tu entrega:</strong>
-                  <p style="margin: 6px 0 0 0; font-size: 12px; color: #78350f; line-height: 1.5;">
-                    Por favor envía tu captura de pago / foto de billetes y comparte tu <strong>ubicación en tiempo real por WhatsApp</strong> para coordinar el despacho de inmediato.
-                  </p>
-                </div>
-                <p style="font-size: 12px; color: #64748b; text-align: center; margin-top: 24px;">
-                  📎 <em>Hemos adjuntado tu <strong>Nota de Entrega en PDF</strong> a este correo.</em>
-                </p>
-              </div>
-              <div class="footer">
-                Generado electrónicamente por <strong>${tenantDoc?.name || storeName}</strong> en Flow • Caracas, Venezuela
-              </div>
-            </div>
-          </body>
-          </html>
-        `;
-
-        await resend.emails.send({
-          from: fromEmail,
-          to: customer.email,
-          subject: emailSubject,
-          html: emailHtml,
-          attachments: pdfBase64
-            ? [
-                {
-                  filename: `Nota-Entrega-${orderNumber}.pdf`,
-                  content: pdfBase64,
-                },
-              ]
-            : undefined,
-        });
-
-        emailSent = true;
-      } catch (emailErr) {
-        console.warn('Resend exception:', emailErr);
-      }
-    }
 
     // ------------------------------------------------------------------
     // 8. Upsert Customer in CRM Collection & Tagging (Atomic Sync)
@@ -515,7 +391,7 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
       // 9. Persist Order in Orders Collection
       // ------------------------------------------------------------------
       try {
-        await payload.create({
+        const orderDoc = await payload.create({
           collection: 'orders',
           overrideAccess: true,
           data: {
@@ -543,10 +419,21 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
             totalAmount: total,
             currency: currency || 'USD',
             // Snapshot de la tasa aplicada — conciliación exacta por pedido
-            exchangeRateVES: effectiveExchangeRate,
-            trelloCardUrl,
+            exchangeRateVES: vesRate ?? undefined,
           },
         });
+
+        // Despacho asíncrono oficial (Jobs Queue): Trello + email con PDF.
+        // El workflow `order-created` actualiza trelloCardUrl cuando termine.
+        try {
+          await payload.jobs.queue({
+            workflow: 'order-created',
+            input: { orderId: orderDoc.id as number },
+          });
+        } catch (queueErr) {
+          // Visible en logs: un fallo aquí pierde Trello+email del pedido
+          console.error('Jobs queue error:', queueErr);
+        }
       } catch (orderErr) {
         console.error('Order creation error:', orderErr);
       }
@@ -567,7 +454,8 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
       orderNumber,
       whatsappUrl,
       pdfBase64,
-      emailSent,
+      // El email ahora se envía de forma asíncrona vía Jobs Queue
+      emailSent: false,
       // Audit fix C4: token opaco para que el cliente descargue su nota
       pdfToken,
       pdfUrl: pdfUrlWithToken,
@@ -576,7 +464,7 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
     console.error('Unhandled processOrder error:', err);
     return {
       success: false,
-      error: err.message || 'Error inesperado al procesar el pedido',
+      error: 'Error inesperado al procesar el pedido',
     };
   }
 }

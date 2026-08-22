@@ -13,7 +13,13 @@ export const Users: CollectionConfig = {
     defaultColumns: ['email', 'role'],
   },
   access: {
-    read: ({ req: { user } }) => Boolean(user),
+    // Audit fix: un tenant-admin NO puede enumerar todos los usuarios de la
+    // plataforma (emails + roles). Solo super-admin o su propio documento.
+    read: ({ req: { user } }) => {
+      if (!user) return false;
+      if (getUserRole(user) === 'super-admin') return true;
+      return { id: { equals: (user as { id?: number }).id } };
+    },
     create: ({ req: { user } }) => getUserRole(user) === 'super-admin',
     update: ({ req: { user }, id }) =>
       getUserRole(user) === 'super-admin' ||

@@ -273,7 +273,7 @@ export default function FlowLandingPage() {
 
                 {/* Quick Action Bar (Connected to Real Link) */}
                 <div className="flex items-center gap-1.5 text-xs font-semibold">
-                  <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-white px-2.5 py-1 text-black hover:bg-neutral-200 transition text-[10px] sm:text-[11px] font-bold">
+                  <a href="/demo" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-white px-2.5 py-1 text-black hover:bg-neutral-200 transition text-[10px] sm:text-[11px] font-bold">
                     <iconify-icon icon="solar:shop-2-bold" width="12" height="12"></iconify-icon>
                     <span>Ver Tienda</span>
                   </a>
@@ -505,7 +505,7 @@ export default function FlowLandingPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-[#7C3AED] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-violet-600 shadow-sm">
+                <a href="/demo" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-[#7C3AED] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-violet-600 shadow-sm">
                   <span>Abrir pantalla completa</span>
                   <iconify-icon icon="solar:arrow-right-up-linear" width="12" height="12"></iconify-icon>
                 </a>
@@ -516,7 +516,7 @@ export default function FlowLandingPage() {
             <div className="relative h-[36rem] sm:h-[46rem] md:h-[52rem] w-full overflow-hidden rounded-b-xl bg-slate-100">
               <iframe 
                 id="catalogFrame"
-                src="/don-luigi" 
+                src="/demo" 
                 title="Catálogo E-commerce Demo Don Luigi" 
                 className="h-full w-full border-0"
                 loading="lazy"
@@ -750,7 +750,7 @@ export default function FlowLandingPage() {
                         “¡Buenas tardes, <strong>Carlos</strong>! Qué gusto saludarte de nuevo. Sí, tenemos disponibles los <strong>tornillos hexagonales de 1/2"</strong> y las <strong>empacaduras</strong> en nuestra tienda online. Sí realizamos envíos hoy en Caracas y aceptamos Pago Móvil, Zelle y transferencias.”
                       </p>
                       <div className="rounded-lg bg-violet-600/25 p-2 border border-violet-500/40 text-violet-200">
-                        👉 <a href="/don-luigi" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos en la tienda y hacer tu pedido en 2 clics</a>
+                        👉 <a href="/demo" target="_blank" rel="noopener noreferrer" className="font-bold underline text-white hover:text-violet-300">Toca aquí para ver los modelos de tienda en acción</a>
                       </div>
                       <p className="text-[11px] text-slate-300 bg-white/[0.04] p-2 rounded-lg border border-white/5">
                         “<strong>Aquí me quedo esperándote en el chat para cuando termines la compra</strong>, recibir tu comprobante, confirmarte el pago y pasarte tu número de guía de una vez.”

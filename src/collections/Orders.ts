@@ -1,4 +1,5 @@
 import type { CollectionConfig, CollectionAfterChangeHook } from 'payload';
+import { hasTenantAccess } from '@/lib/utils';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
@@ -103,10 +104,12 @@ export const Orders: CollectionConfig = {
     afterChange: [manageOrderInventoryHook],
   },
   access: {
-    read: ({ req: { user } }) => Boolean(user),
-    create: ({ req: { user } }) => Boolean(user), // Allows server action to record customer orders
-    update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => Boolean(user),
+    // Audit fix: sin tenants asignados no se puede leer/escribir pedidos
+    // (antes Boolean(user) dejaba ver TODOS los pedidos de la plataforma)
+    read: ({ req: { user } }) => hasTenantAccess(user),
+    create: ({ req: { user } }) => hasTenantAccess(user), // Server action usa overrideAccess:true
+    update: ({ req: { user } }) => hasTenantAccess(user),
+    delete: ({ req: { user } }) => hasTenantAccess(user),
   },
   fields: [
     {
@@ -159,6 +162,11 @@ export const Orders: CollectionConfig = {
           type: 'text',
           label: 'Teléfono / WhatsApp',
           required: true,
+        },
+        {
+          name: 'email',
+          type: 'email',
+          label: 'Correo Electrónico (para el envío de la confirmación)',
         },
         {
           name: 'address',

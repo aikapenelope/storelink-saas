@@ -19,10 +19,25 @@ export async function PATCH(
     const body = await request.json();
     const { status, paymentStatus } = body;
 
-    // Fetch existing order
+    // Whitelist de estados (evita valores arbitrarios que rompen los selects
+    // del dashboard y el flujo de reposición de inventario del hook).
+    // 'ready' se conserva por compatibilidad con pedidos legacy.
+    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'in_delivery', 'delivered', 'cancelled'];
+    const ALLOWED_PAYMENT_STATUSES = ['pending_verification', 'verified', 'rejected'];
+
+    if (status && !ALLOWED_STATUSES.includes(status)) {
+      return NextResponse.json({ error: `Estado inválido: ${status}` }, { status: 400 });
+    }
+    if (paymentStatus && !ALLOWED_PAYMENT_STATUSES.includes(paymentStatus)) {
+      return NextResponse.json({ error: `Estado de pago inválido: ${paymentStatus}` }, { status: 400 });
+    }
+
+    // Fetch existing order — con el `user` real para que apliquen los
+    // constraints multi-tenant (antes, req anónimo → 404 para tenant-admins)
     const order = await payload.findByID({
       collection: 'orders',
       id,
+      user,
     });
 
     if (!order) {
@@ -78,8 +93,8 @@ export async function PATCH(
       order: updated,
       message: 'Estado del pedido actualizado correctamente',
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error updating order status:', error);
-    return NextResponse.json({ error: error.message || 'Error al actualizar el pedido' }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno al actualizar el pedido' }, { status: 500 });
   }
 }

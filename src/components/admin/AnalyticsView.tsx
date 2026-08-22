@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
-import { getAllLiveExchangeRates } from '@/lib/exchange-rate';
+import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-rate';
 import {
   Wallet,
   ShoppingCart,
@@ -78,12 +78,14 @@ export async function AnalyticsView() {
     const storeUrl = `${siteUrl}/${tenantSlug}`;
     const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
 
-    // Fetch live market exchange rates
+    // Fetch live market exchange rates (solo informativo para el widget)
     const liveRates = await getAllLiveExchangeRates();
     const customRate = tenantDoc?.branding?.exchangeRateVES
       ? Number(tenantDoc.branding.exchangeRateVES)
       : null;
-    const rateVES = customRate && customRate > 0 ? customRate : liveRates.binance;
+    // Tasa activa (jerarquía del producto): manual > Binance en vivo >
+    // dólar paralelo > ninguna (sin Bs)
+    const { rate: rateVES, source: rateSource } = await resolveExchangeRateVES(tenantDoc);
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
@@ -127,13 +129,13 @@ export async function AnalyticsView() {
 
     // 1. Financial Metrics
     const totalSalesUSD = orders.reduce((acc, o) => acc + (Number(o.totalAmount || o.total) || 0), 0);
-    const totalSalesVES = totalSalesUSD * rateVES;
+    const totalSalesVES = rateVES ? totalSalesUSD * rateVES : 0;
 
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const todayOrders = orders.filter((o) => o.createdAt && o.createdAt.startsWith(todayStr));
     const todaySalesUSD = todayOrders.reduce((acc, o) => acc + (Number(o.totalAmount || o.total) || 0), 0);
-    const todaySalesVES = todaySalesUSD * rateVES;
+    const todaySalesVES = rateVES ? todaySalesUSD * rateVES : 0;
 
     const pendingOrdersCount = orders.filter(
       (o) => !o.status || o.status === 'pending' || o.status === 'preparing' || o.status === 'in_delivery'
@@ -317,16 +319,22 @@ export async function AnalyticsView() {
                 <p className="mt-1 text-xs text-zinc-400">
                   Panel de ventas, gestión de pedidos y control de inventario
                   <span className="mx-2 text-zinc-700">•</span>
-                  Tasa Activa: <span className="font-mono text-white font-bold">Bs. {rateVES.toFixed(2)} / $</span>
-                  {customRate ? (
+                  Tasa Activa: <span className="font-mono text-white font-bold">
+                    {rateVES ? `Bs. ${rateVES.toFixed(2)} / $` : '— (sin tasa)'}
+                  </span>
+                  {rateSource === 'manual' ? (
                     <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
                       (Personalizada)
                     </span>
-                  ) : (
+                  ) : rateSource === 'binance' ? (
                     <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
                       (Binance P2P en vivo)
                     </span>
-                  )}
+                  ) : rateSource === 'paralelo' ? (
+                    <span className="ml-1.5 text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 border border-zinc-800">
+                      (Dólar paralelo)
+                    </span>
+                  ) : null}
                 </p>
               </div>
 
@@ -375,9 +383,11 @@ export async function AnalyticsView() {
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
-                <span className="font-mono text-xs text-zinc-400">
-                  Bs. {todaySalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                </span>
+                {rateVES ? (
+                  <span className="font-mono text-xs text-zinc-400">
+                    Bs. {todaySalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </span>
+                ) : null}
                 <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
                   {todayOrders.length} hoy
                 </span>
@@ -396,9 +406,11 @@ export async function AnalyticsView() {
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
-                <span className="font-mono text-xs text-zinc-400">
-                  Bs. {totalSalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                </span>
+                {rateVES ? (
+                  <span className="font-mono text-xs text-zinc-400">
+                    Bs. {totalSalesVES.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </span>
+                ) : null}
                 <span className="text-xs font-mono text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
                   {orders.length} pedidos
                 </span>
@@ -493,7 +505,7 @@ export async function AnalyticsView() {
               initialOrders={orders}
               tenantSlug={tenantSlug}
               tenantName={tenantName}
-              rateVES={rateVES}
+              rateVES={rateVES ?? 0}
             />
           </section>
 

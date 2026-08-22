@@ -259,7 +259,7 @@ export async function POST(
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Error interno del servidor durante la importación' },
+      { error: 'Error interno del servidor durante la importación' },
       { status: 500 }
     );
   }

@@ -2,7 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
-import { getLiveExchangeRate } from '@/lib/exchange-rate';
+import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import type { Tenant } from '@/payload-types';
 import {
   StorefrontClient,
@@ -23,6 +23,8 @@ const RESERVED_SLUGS = new Set([
   'manifest.json',
   'admin',
   'api',
+  // Ruta estática de la página demo visual (nunca un tenant real)
+  'demo',
 ]);
 
 export async function generateMetadata({
@@ -105,25 +107,10 @@ export default async function TenantStorefrontPage({
     notFound();
   }
 
-  // Fetch live exchange rate from Binance / Paralelo API
-  const liveRate = await getLiveExchangeRate('binance');
-
-  let tenantConfig: TenantConfig = {
-    id: 'demo-tenant',
-    name: tenantSlug
-      .split('-')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' '),
-    slug: tenantSlug,
-    whatsappPhone: '34600123456',
-    welcomeMessage: 'Catálogo interactivo con pedidos por WhatsApp',
-    exchangeRateVES: liveRate,
-    showVES: true,
-  };
-
+  let tenantConfig: TenantConfig;
   let products: ProductItem[] = [];
   let categories: string[] = ['Todos'];
-  let isDemo = true;
+  // Tenant real sin productos → cascarón vacío (products = [])
 
   try {
     const payload = await getPayload({ config });
@@ -138,104 +125,112 @@ export default async function TenantStorefrontPage({
       limit: 1,
     });
 
-    if (tenantResult.docs.length > 0) {
-      const doc = tenantResult.docs[0] as Tenant;
-      const branding = doc.branding as any;
-      tenantConfig = {
-        id: String(doc.id),
-        name: doc.name || tenantConfig.name,
-        slug: doc.slug || tenantSlug,
-        theme: doc.theme || 'basic-banner',
-        whatsappPhone: doc.whatsappPhone || '34600123456',
-        welcomeMessage: branding?.welcomeMessage || undefined,
-        primaryColor: branding?.primaryColor || undefined,
-        exchangeRateVES: Number(branding?.exchangeRateVES) > 0 ? Number(branding?.exchangeRateVES) : liveRate,
-        showVES: branding?.showVES ?? true,
-        pickupConfig: doc.pickupConfig || undefined,
-        paymentMethodsConfig: doc.paymentMethodsConfig || undefined,
-        deliveryConfig: doc.deliveryConfig || undefined,
-      };
+    // La tienda no existe, no existe → 404 (sin página demo genérica)
+    if (tenantResult.docs.length === 0) {
+      notFound();
+    }
 
-      // Fetch products for this tenant
-      const productsResult = await payload.find({
-        collection: 'products',
-        where: {
-          tenant: {
-            equals: doc.id,
-          },
+    const doc = tenantResult.docs[0] as Tenant;
+    const branding = doc.branding as any;
+
+    // Tasa VES (jerarquía del producto): manual > Binance en vivo >
+    // dólar paralelo > ninguna (no se muestran Bs)
+    const { rate: exchangeRateVES } = await resolveExchangeRateVES(doc);
+
+    tenantConfig = {
+      id: String(doc.id),
+      name: doc.name || tenantSlug,
+      slug: doc.slug || tenantSlug,
+      theme: doc.theme || 'basic-banner',
+      whatsappPhone: doc.whatsappPhone || '',
+      welcomeMessage: branding?.welcomeMessage || undefined,
+      primaryColor: branding?.primaryColor || undefined,
+      exchangeRateVES: exchangeRateVES ?? undefined,
+      showVES: branding?.showVES ?? true,
+      pickupConfig: doc.pickupConfig || undefined,
+      paymentMethodsConfig: doc.paymentMethodsConfig || undefined,
+      deliveryConfig: doc.deliveryConfig || undefined,
+    };
+
+    // Fetch products for this tenant
+    const productsResult = await payload.find({
+      collection: 'products',
+      where: {
+        tenant: {
+          equals: doc.id,
         },
-        limit: 100,
+      },
+      limit: 100,
+    });
+
+    if (productsResult.docs.length > 0) {
+      products = productsResult.docs.map((p) => {
+        const prod = p as any;
+        return {
+          id: String(prod.id),
+          sku: prod.sku || `SKU-${prod.id}`,
+          title: prod.title,
+          price: Number(prod.price) || 0,
+          description: prod.description || '',
+          category: prod.category && typeof prod.category === 'object'
+            ? { id: String(prod.category.id), name: prod.category.name || 'General' }
+            : undefined,
+          stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
+          trackStock: Boolean(prod.trackStock),
+          stockQuantity: prod.stockQuantity ? Number(prod.stockQuantity) : undefined,
+          featured: Boolean(prod.featured),
+          variants: Array.isArray(prod.variants)
+            ? prod.variants.map((v: any) => ({
+                name: v.name,
+                sku: v.sku || undefined,
+                price: Number(v.price) || 0,
+                stockQuantity: v.stockQuantity ? Number(v.stockQuantity) : undefined,
+                stockStatus: v.stockStatus || undefined,
+              }))
+            : [],
+          modifiers: Array.isArray(prod.modifiers)
+            ? prod.modifiers.map((m: any) => ({
+                groupName: m.groupName,
+                options: Array.isArray(m.options)
+                  ? m.options.map((opt: any) => ({
+                      name: opt.name,
+                      priceDelta: Number(opt.priceDelta) || 0,
+                    }))
+                  : [],
+              }))
+            : [],
+          images: prod.imageUrl
+            ? [{ url: prod.imageUrl }]
+            : Array.isArray(prod.images) && prod.images.length > 0
+            ? prod.images.map((img: any) => ({
+                url: (typeof img.image === 'object' && img.image?.url)
+                  ? img.image.url
+                  : typeof img.url === 'string'
+                  ? img.url
+                  : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+              }))
+            : [{ url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80' }],
+        };
       });
 
-      if (productsResult.docs.length > 0) {
-        isDemo = false;
-        products = productsResult.docs.map((p) => {
-          const prod = p as any;
-          return {
-            id: String(prod.id),
-            sku: prod.sku || `SKU-${prod.id}`,
-            title: prod.title,
-            price: Number(prod.price) || 0,
-            description: prod.description || '',
-            category: prod.category && typeof prod.category === 'object'
-              ? { id: String(prod.category.id), name: prod.category.name || 'General' }
-              : undefined,
-            stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
-            trackStock: Boolean(prod.trackStock),
-            stockQuantity: prod.stockQuantity ? Number(prod.stockQuantity) : undefined,
-            featured: Boolean(prod.featured),
-            variants: Array.isArray(prod.variants)
-              ? prod.variants.map((v: any) => ({
-                  name: v.name,
-                  sku: v.sku || undefined,
-                  price: Number(v.price) || 0,
-                  stockQuantity: v.stockQuantity ? Number(v.stockQuantity) : undefined,
-                  stockStatus: v.stockStatus || undefined,
-                }))
-              : [],
-            modifiers: Array.isArray(prod.modifiers)
-              ? prod.modifiers.map((m: any) => ({
-                  groupName: m.groupName,
-                  options: Array.isArray(m.options)
-                    ? m.options.map((opt: any) => ({
-                        name: opt.name,
-                        priceDelta: Number(opt.priceDelta) || 0,
-                      }))
-                    : [],
-                }))
-              : [],
-            images: prod.imageUrl
-              ? [{ url: prod.imageUrl }]
-              : Array.isArray(prod.images) && prod.images.length > 0
-              ? prod.images.map((img: any) => ({
-                  url: (typeof img.image === 'object' && img.image?.url)
-                    ? img.image.url
-                    : typeof img.url === 'string'
-                    ? img.url
-                    : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
-                }))
-              : [{ url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80' }],
-          };
-        });
-
-        // Dynamic categories from loaded products
-        const catSet = new Set<string>(['Todos']);
-        products.forEach((p) => {
-          if (p.category?.name) catSet.add(p.category.name);
-        });
-        categories = Array.from(catSet);
-      }
+      // Dynamic categories from loaded products
+      const catSet = new Set<string>(['Todos']);
+      products.forEach((p) => {
+        if (p.category?.name) catSet.add(p.category.name);
+      });
+      categories = Array.from(catSet);
     }
+    // Tenant real sin productos: cascarón vacío (no catálogo demo)
   } catch (err) {
     console.error('Error fetching tenant products from Payload:', err);
+    notFound();
   }
 
   return (
     <StorefrontClient
-      tenant={tenantConfig}
+      tenant={tenantConfig!}
       products={products}
       categories={categories}
-      isDemo={isDemo}
     />
   );
 }

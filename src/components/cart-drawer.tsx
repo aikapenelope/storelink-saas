@@ -40,6 +40,8 @@ interface CartDrawerProps {
   showVES?: boolean;
   storeName: string;
   whatsappPhone: string;
+  /** Modo preview visual (página demo /demo): el carrito se ve pero NO envía pedidos */
+  preview?: boolean;
   tenantSlug: string;
   pickupConfig?: {
     enabled?: boolean | null;
@@ -103,10 +105,11 @@ export function CartDrawer({
   onClose,
   items,
   currency = 'USD',
-  exchangeRateVES = 910.0,
-  showVES = true,
+  exchangeRateVES = 0,
+  showVES = false,
   storeName,
   whatsappPhone,
+  preview = false,
   tenantSlug,
   pickupConfig,
   paymentMethodsConfig,
@@ -192,6 +195,12 @@ export function CartDrawer({
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Modo preview visual (página demo): no se envían pedidos
+    if (preview) {
+      return;
+    }
+
     if (!customer.name.trim()) {
       alert('Por favor ingresa tu nombre completo.');
       return;
@@ -249,7 +258,6 @@ export function CartDrawer({
       const response = await processOrder({
         tenantSlug,
         storeName,
-        whatsappPhone,
         currency,
         exchangeRateVES,
         showVES,
@@ -286,6 +294,7 @@ export function CartDrawer({
           title: i.title,
           quantity: i.quantity,
           price: i.price,
+          modifiers: i.selectedModifiers,
         })),
       });
 
@@ -406,7 +415,7 @@ export function CartDrawer({
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs font-mono text-slate-400">SKU: {item.sku}</span>
                         <span className="text-xs font-bold text-emerald-700">{formatPrice(item.price, currency)}</span>
-                        {showVES && (
+                        {showVES && exchangeRateVES > 0 && (
                           <span className="text-[10px] text-slate-500 font-mono font-bold">
                             (Bs. {(item.price * exchangeRateVES).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                           </span>
@@ -634,9 +643,11 @@ export function CartDrawer({
                     <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
                       Método de Pago:
                     </label>
-                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Tasa: {exchangeRateVES.toFixed(2)} Bs/$
-                    </span>
+                    {showVES && exchangeRateVES > 0 && (
+                      <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Tasa: {exchangeRateVES.toFixed(2)} Bs/$
+                      </span>
+                    )}
                   </div>
 
                   {/* Payment Methods Grid */}
@@ -1383,11 +1394,15 @@ export function CartDrawer({
             <button
               type="submit"
               form="checkout-form"
-              disabled={isLoading}
+              disabled={isLoading || preview}
               className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-600/25 active:scale-95 text-sm"
             >
               <Send className="w-4 h-4" />
-              {isLoading ? 'Procesando Pedido...' : 'Confirmar y Enviar a WhatsApp'}
+              {preview
+                ? 'Vista previa — pedidos desactivados'
+                : isLoading
+                ? 'Procesando Pedido...'
+                : 'Confirmar y Enviar a WhatsApp'}
             </button>
           </div>
         )}

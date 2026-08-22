@@ -92,10 +92,20 @@ export async function POST(
       );
     }
 
-    // SSRF Protection: Only allow Google Sheets URLs
-    if (!sheetUrl.includes('docs.google.com/spreadsheets') && !sheetUrl.includes('googleapis.com')) {
+    // SSRF Protection: solo URLs reales de Google Sheets (hostname EXACTO,
+    // no substring — antes un `includes` permitía hosts atacantes), con
+    // timeout y verificación del host final tras redirects.
+    try {
+      const parsed = new URL(sheetUrl);
+      if (parsed.hostname !== 'docs.google.com' || !parsed.pathname.startsWith('/spreadsheets/')) {
+        return NextResponse.json(
+          { error: 'Solo se aceptan URLs de Google Sheets por seguridad.' },
+          { status: 400 }
+        );
+      }
+    } catch {
       return NextResponse.json(
-        { error: 'Solo se aceptan URLs de Google Sheets por seguridad.' },
+        { error: 'URL de Google Sheets inválida.' },
         { status: 400 }
       );
     }
@@ -108,13 +118,35 @@ export async function POST(
       }
     }
 
-    // Fetch live CSV from Google Sheets
-    const res = await fetch(sheetUrl, { cache: 'no-store' });
+    // Fetch live CSV from Google Sheets (timeout + verificación del host final)
+    let res: Response;
+    try {
+      res = await fetch(sheetUrl, {
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (fetchErr) {
+      console.warn('Sync sheets fetch error:', fetchErr);
+      return NextResponse.json(
+        { error: 'No se pudo descargar la hoja de cálculo. Revisa el enlace e inténtalo de nuevo.' },
+        { status: 400 }
+      );
+    }
+
     if (!res.ok) {
       return NextResponse.json(
         {
           error: `No se pudo descargar la hoja de cálculo (HTTP ${res.status}). Asegúrate de que el enlace de Google Sheets esté configurado como público ("Cualquiera con el enlace puede ver").`,
         },
+        { status: 400 }
+      );
+    }
+
+    const finalHost = res.url ? new URL(res.url).hostname : '';
+    if (finalHost && finalHost !== 'docs.google.com') {
+      return NextResponse.json(
+        { error: 'La URL redirige fuera de Google Sheets y fue bloqueada por seguridad.' },
         { status: 400 }
       );
     }
@@ -276,9 +308,10 @@ export async function POST(
       totalProcessed: createdCount + updatedCount,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (err: any) {
+  } catch (err) {
+    console.error('Sync sheets error:', err);
     return NextResponse.json(
-      { error: err.message || 'Error durante la sincronización con Google Sheets' },
+      { error: 'Error interno durante la sincronización con Google Sheets' },
       { status: 500 }
     );
   }

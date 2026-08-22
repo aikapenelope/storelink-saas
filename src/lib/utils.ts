@@ -44,3 +44,13 @@ export function getUserTenantIds(user: unknown): Array<number | string> {
   }
   return ids;
 }
+
+/** Patrón oficial de acceso multi-tenant (igual que Tenants.ts): un usuario
+ *  autenticado solo opera si tiene tenants asignados, salvo super-admin. */
+export function isSuperAdmin(user: unknown): boolean {
+  return getUserRole(user) === 'super-admin';
+}
+
+export function hasTenantAccess(user: unknown): boolean {
+  return isSuperAdmin(user) || getUserTenantIds(user).length > 0;
+}
