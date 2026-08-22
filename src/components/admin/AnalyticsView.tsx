@@ -7,6 +7,8 @@ import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
 import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-rate';
+import { getOrderKpis, getSalesSeries, getBestSellers } from '@/lib/analytics';
+import { fetchOrdersPage } from '@/app/actions/admin-orders';
 import {
   Wallet,
   ShoppingCart,
@@ -89,59 +91,62 @@ export async function AnalyticsView() {
 
     const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
-    // Fetch orders, customers, products and low stock items
-    const [ordersRes, customersRes, productsRes, lowStockRes] = await Promise.all([
-      payload.find({
-        collection: 'orders',
-        ...(tenantFilter ? { where: tenantFilter } : {}),
-        limit: 300,
-        sort: '-createdAt',
-      }),
-      payload.find({
-        collection: 'customers',
-        ...(tenantFilter ? { where: tenantFilter } : {}),
-        limit: 50,
-        sort: '-totalSpent',
-      }),
-      payload.find({
-        collection: 'products',
-        ...(tenantFilter ? { where: tenantFilter } : {}),
-        limit: 100,
-      }),
-      payload.find({
-        collection: 'products',
-        where: {
-          and: [
-            ...(tenantFilter ? [{ tenant: { equals: tenantId } }] : []),
-            { trackStock: { equals: true } },
-            { stockQuantity: { less_than_equal: 5 } },
-          ],
-        },
-        limit: 6,
-      }),
-    ]);
+    // Pedidos: primera página (25) para la lista en vivo; el resto se pide
+    // bajo demanda (paginación real). KPIs, serie y más vendidos vienen de
+    // agregaciones SQL (src/lib/analytics.ts, zona America/Caracas) — ya no
+    // se cargan 300 documentos para sumar en memoria.
+    const [ordersRes, customersRes, productsRes, lowStockRes, kpis, series14, bestSellers] =
+      await Promise.all([
+        payload.find({
+          collection: 'orders',
+          ...(tenantFilter ? { where: tenantFilter } : {}),
+          limit: 25,
+          sort: '-createdAt',
+          depth: 0,
+        }),
+        payload.find({
+          collection: 'customers',
+          ...(tenantFilter ? { where: tenantFilter } : {}),
+          limit: 50,
+          sort: '-totalSpent',
+        }),
+        payload.find({
+          collection: 'products',
+          ...(tenantFilter ? { where: tenantFilter } : {}),
+          limit: 100,
+        }),
+        payload.find({
+          collection: 'products',
+          where: {
+            and: [
+              ...(tenantFilter ? [{ tenant: { equals: tenantId } }] : []),
+              { trackStock: { equals: true } },
+              { stockQuantity: { less_than_equal: 5 } },
+            ],
+          },
+          limit: 6,
+        }),
+        getOrderKpis(payload, tenantId),
+        getSalesSeries(payload, tenantId, 14),
+        getBestSellers(payload, tenantId, 5),
+      ]);
 
     const orders = (ordersRes.docs || []) as any[];
     const customers = (customersRes.docs || []) as any[];
     const products = (productsRes.docs || []) as any[];
     const lowStockProducts = (lowStockRes.docs || []) as any[];
-    const totalOrders = orders.length;
 
-    // 1. Financial Metrics
-    const totalSalesUSD = orders.reduce((acc, o) => acc + (Number(o.totalAmount || o.total) || 0), 0);
+    // 1. Financial Metrics (agregadas en SQL)
+    const totalOrders = kpis.orderCount;
+    const totalSalesUSD = kpis.totalUSD;
     const totalSalesVES = rateVES ? totalSalesUSD * rateVES : 0;
-
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const todayOrders = orders.filter((o) => o.createdAt && o.createdAt.startsWith(todayStr));
-    const todaySalesUSD = todayOrders.reduce((acc, o) => acc + (Number(o.totalAmount || o.total) || 0), 0);
+    const todaySalesUSD = kpis.todayUSD;
     const todaySalesVES = rateVES ? todaySalesUSD * rateVES : 0;
-
-    const pendingOrdersCount = orders.filter(
-      (o) => !o.status || o.status === 'pending' || o.status === 'preparing' || o.status === 'in_delivery'
-    ).length;
+    const todayOrdersCount = kpis.todayOrderCount;
+    const pendingOrdersCount = kpis.pendingCount;
 
     // Date formatting in Spanish
+    const now = new Date();
     const dateFormatted = now.toLocaleDateString('es-ES', {
       weekday: 'long',
       day: 'numeric',
@@ -149,51 +154,15 @@ export async function AnalyticsView() {
     });
     const dateTitle = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
 
-    // 2. 7-Day Trend
-    const last7Days: Array<{ dateStr: string; label: string; amount: number; count: number }> = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const dayName = d.toLocaleDateString('es-ES', { weekday: 'short' });
-
-      const daysOrders = orders.filter((o) => o.createdAt && o.createdAt.startsWith(dateStr));
-      const amount = daysOrders.reduce((acc, o) => acc + (Number(o.totalAmount || o.total) || 0), 0);
-
-      last7Days.push({
-        dateStr,
-        label: dayName.charAt(0).toUpperCase() + dayName.slice(1, 3),
-        amount,
-        count: daysOrders.length,
-      });
-    }
+    // 2. 7-Day Trend (últimos 7 de la serie de 14) + % real vs semana previa
+    const last7Days = series14.slice(7);
+    const currentWeekTotal = last7Days.reduce((acc, d) => acc + d.amount, 0);
+    const prevWeekTotal = series14.slice(0, 7).reduce((acc, d) => acc + d.amount, 0);
+    const changePct = prevWeekTotal > 0 ? ((currentWeekTotal - prevWeekTotal) / prevWeekTotal) * 100 : null;
     const maxDaySales = Math.max(...last7Days.map((d) => d.amount), 1);
 
-    // 3. Best Sellers
-    const productStats = new Map<string, { title: string; sku: string; units: number; revenue: number }>();
-    orders.forEach((order) => {
-      if (Array.isArray(order.items)) {
-        order.items.forEach((item: any) => {
-          const key = item.sku || item.title || 'prod';
-          const qty = Number(item.quantity) || 1;
-          const subtotal = Number(item.subtotal || (Number(item.price) || 0) * qty);
-          const existing = productStats.get(key) || {
-            title: item.title || 'Producto',
-            sku: item.sku || '',
-            units: 0,
-            revenue: 0,
-          };
-          existing.units += qty;
-          existing.revenue += subtotal;
-          productStats.set(key, existing);
-        });
-      }
-    });
-
-    const top5Products = Array.from(productStats.values())
-      .sort((a, b) => b.units - a.units)
-      .slice(0, 5);
-
+    // 3. Best Sellers (agregado en SQL)
+    const top5Products = bestSellers;
     const maxProductUnits = Math.max(...top5Products.map((p) => p.units), 1);
 
     // 4. Categorized CRM
@@ -389,7 +358,7 @@ export async function AnalyticsView() {
                   </span>
                 ) : null}
                 <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
-                  {todayOrders.length} hoy
+                  {todayOrdersCount} hoy
                 </span>
               </div>
             </article>
@@ -412,7 +381,7 @@ export async function AnalyticsView() {
                   </span>
                 ) : null}
                 <span className="text-xs font-mono text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
-                  {orders.length} pedidos
+                  {totalOrders} pedidos
                 </span>
               </div>
             </article>
@@ -422,7 +391,7 @@ export async function AnalyticsView() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs text-zinc-400 font-mono uppercase tracking-wider">Clientes CRM</p>
-                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{customers.length}</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{kpis.customerCount}</p>
                 </div>
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none">
                   <Users className="w-4 h-4" />
@@ -506,6 +475,8 @@ export async function AnalyticsView() {
               tenantSlug={tenantSlug}
               tenantName={tenantName}
               rateVES={rateVES ?? 0}
+              totalOrders={totalOrders}
+              fetchPage={fetchOrdersPage}
             />
           </section>
 
@@ -559,7 +530,8 @@ export async function AnalyticsView() {
                   <strong className="text-zinc-300">Pedidos {totalOrders}</strong>
                 </span>
                 <span className="ml-auto flex items-center gap-1 text-white font-bold">
-                  +18.4% <TrendingUp className="w-3.5 h-3.5 inline text-white" />
+                  {changePct !== null ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%` : '—'}
+                  <TrendingUp className="w-3.5 h-3.5 inline text-white" />
                 </span>
               </div>
             </div>

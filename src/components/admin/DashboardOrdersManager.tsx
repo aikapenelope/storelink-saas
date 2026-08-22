@@ -18,11 +18,11 @@ import {
 } from 'lucide-react';
 
 interface OrderItem {
-  sku?: string;
+  sku?: string | null;
   title: string;
   price: number;
   quantity: number;
-  subtotal?: number;
+  subtotal?: number | null;
 }
 
 interface Order {
@@ -30,26 +30,26 @@ interface Order {
   orderNumber: string;
   createdAt: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'in_delivery' | 'delivered' | 'cancelled' | string;
-  deliveryType?: 'delivery' | 'pickup' | string;
+  deliveryType?: 'delivery' | 'pickup' | null | string;
   totalAmount?: number;
   total?: number;
-  currency?: string;
+  currency?: string | null;
   customer?: {
     name?: string;
-    phone?: string;
-    address?: string;
-    paymentMethod?: string;
-    notes?: string;
+    phone?: string | null;
+    address?: string | null;
+    paymentMethod?: string | null;
+    notes?: string | null;
   };
   customerName?: string;
   paymentDetails?: {
-    methodKey?: string;
-    referenceNumber?: string;
-    paymentStatus?: 'pending_verification' | 'verified' | 'rejected' | string;
-    issuingBank?: string;
-    senderName?: string;
-  };
-  items?: OrderItem[];
+    methodKey?: string | null;
+    referenceNumber?: string | null;
+    paymentStatus?: 'pending_verification' | 'verified' | 'rejected' | null | string;
+    issuingBank?: string | null;
+    senderName?: string | null;
+  } | null;
+  items?: OrderItem[] | null;
 }
 
 interface DashboardOrdersManagerProps {
@@ -57,6 +57,8 @@ interface DashboardOrdersManagerProps {
   tenantSlug: string;
   tenantName: string;
   rateVES: number;
+  totalOrders?: number;
+  fetchPage?: (page: number) => Promise<{ docs: Order[]; hasNextPage: boolean; totalDocs: number }>;
 }
 
 export function DashboardOrdersManager({
@@ -64,17 +66,38 @@ export function DashboardOrdersManager({
   tenantSlug,
   tenantName,
   rateVES,
+  totalOrders,
+  fetchPage,
 }: DashboardOrdersManagerProps) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [updatingId, setUpdatingId] = useState<string | number | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(initialOrders.length >= 25);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const filteredOrders = orders.filter((o) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'pending') return !o.status || o.status === 'pending';
     return o.status === activeFilter;
   });
+
+  const handleLoadMore = async () => {
+    if (!fetchPage || loadingMore || !hasNextPage) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await fetchPage(next);
+      setOrders((prev) => [...prev, ...res.docs]);
+      setPage(next);
+      setHasNextPage(res.hasNextPage);
+    } catch (err) {
+      console.error('Error cargando más pedidos:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const handleUpdateStatus = async (orderId: string | number, newStatus: string) => {
     setUpdatingId(orderId);
@@ -228,7 +251,7 @@ export function DashboardOrdersManager({
           </p>
           <h2 className="text-base font-bold text-white flex items-center gap-2">
             <span>Gestión y Confirmación de Pedidos</span>
-            <span className="text-xs font-mono text-zinc-400 font-normal">({orders.length} totales)</span>
+            <span className="text-xs font-mono text-zinc-400 font-normal">({totalOrders ?? orders.length} totales)</span>
           </h2>
         </div>
 
@@ -481,6 +504,18 @@ export function DashboardOrdersManager({
               })}
             </tbody>
           </table>
+          {hasNextPage && (
+            <div className="pt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition rounded-none cursor-pointer disabled:opacity-50"
+              >
+                {loadingMore ? 'Cargando…' : 'Cargar más pedidos'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
