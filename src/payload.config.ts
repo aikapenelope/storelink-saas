@@ -6,9 +6,9 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
 import { seoPlugin } from '@payloadcms/plugin-seo';
 import { s3Storage } from '@payloadcms/storage-s3';
-import { resendAdapter } from '@payloadcms/email-resend';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
+import { resendTenantAdapter } from './lib/email/resend-tenant-adapter';
 import { getUserRole } from './lib/utils';
 import sharp from 'sharp';
 
@@ -124,10 +124,10 @@ export default buildConfig({
     },
     fallbackLanguage: 'es',
   },
-  email: resendAdapter({
+  email: resendTenantAdapter({
     defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app',
     defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
-    apiKey: process.env.RESEND_API_KEY || '', // Empty string: Payload skips email if no key is set
+    apiKey: process.env.RESEND_API_KEY || '', // Master fallback; por-tenant se resuelve por from
   }),
   // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
   // workflow `order-created` (Trello + email) y lo procesa al instante con
