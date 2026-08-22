@@ -19,6 +19,18 @@ export async function PATCH(
     const body = await request.json();
     const { status, paymentStatus } = body;
 
+    // Whitelist de estados (evita valores arbitrarios que rompen los selects
+    // del dashboard y el flujo de reposición de inventario del hook)
+    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'in_delivery', 'delivered', 'cancelled'];
+    const ALLOWED_PAYMENT_STATUSES = ['pending_verification', 'verified', 'rejected'];
+
+    if (status && !ALLOWED_STATUSES.includes(status)) {
+      return NextResponse.json({ error: `Estado inválido: ${status}` }, { status: 400 });
+    }
+    if (paymentStatus && !ALLOWED_PAYMENT_STATUSES.includes(paymentStatus)) {
+      return NextResponse.json({ error: `Estado de pago inválido: ${paymentStatus}` }, { status: 400 });
+    }
+
     // Fetch existing order
     const order = await payload.findByID({
       collection: 'orders',
@@ -78,8 +90,8 @@ export async function PATCH(
       order: updated,
       message: 'Estado del pedido actualizado correctamente',
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error updating order status:', error);
-    return NextResponse.json({ error: error.message || 'Error al actualizar el pedido' }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno al actualizar el pedido' }, { status: 500 });
   }
 }

@@ -3,15 +3,18 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { verifyOrderPdfToken } from '@/lib/order-token';
+import { FALLBACK_EXCHANGE_RATE_VES } from '@/lib/exchange-rate';
 import type { Order, Tenant } from '@/payload-types';
 
 /**
- * Audit fix C4: este endpoint antes era público y aceptaba IDs secuenciales o
- * orderNumbers adivinables (YYMMDD + 4 dígitos), exponiendo nombre, teléfono,
- * dirección y montos de CUALQUIER pedido por enumeración. Ahora exige sesión
- * de admin (patrón oficial payload.auth en route handlers:
- * https://payloadcms.com/docs/local-api/overview#auth) o un token opaco por
- * orden, que es lo que recibe el cliente en su checkout para descargar SU nota.
+ * Endpoint de la Nota de Entrega en PDF.
+ * Autorización (patrón oficial de access control):
+ * - Con token opaco válido (lo recibe el cliente en su checkout): acceso
+ *   público SOLO para ese pedido (token determinístico por orderNumber).
+ * - Sin token: requiere sesión activa y el lookup se hace SIN overrideAccess,
+ *   por lo que aplican los constraints de la colección + el plugin
+ *   multi-tenant (un tenant-admin solo ve pedidos de SUS tenants; los IDs
+ *   numéricos enumerables ya no son accesibles para otros comercios).
  */
 export async function GET(
   request: NextRequest,
@@ -27,31 +30,29 @@ export async function GET(
 
     // 2. Token opaco por pedido (misma vía que usa el cliente en checkout)
     const providedToken = request.nextUrl.searchParams.get('token') || '';
+    const tokenValid = providedToken ? verifyOrderPdfToken(id, providedToken) : false;
 
-    // Look up by ID or by orderNumber
+    if (!isAuthenticated && !tokenValid) {
+      return new NextResponse('No autorizado', { status: 401 });
+    }
+
+    // 3. Lookup: token válido → override (el token ya autoriza ESTE pedido);
+    //    sesión autenticada → acceso controlado (constraints multi-tenant).
     let orderDoc: Order | null = null;
+    const canOverride = tokenValid;
 
     if (/^\d+$/.test(id)) {
-      // Los IDs numéricos solo son accesibles con sesión activa
-      if (!isAuthenticated) {
-        return new NextResponse('No autorizado', { status: 401 });
-      }
-      const resById = await payload.findByID({
-        collection: 'orders',
-        id,
-        overrideAccess: true,
-      });
-      if (resById) orderDoc = resById as Order;
+      orderDoc = (await payload
+        .findByID({ collection: 'orders', id, ...(canOverride ? { overrideAccess: true } : {}) })
+        .catch(() => null)) as Order | null;
     }
 
     if (!orderDoc) {
       const resByNum = await payload.find({
         collection: 'orders',
-        where: {
-          orderNumber: { equals: id },
-        },
+        where: { orderNumber: { equals: id } },
         limit: 1,
-        overrideAccess: true,
+        ...(canOverride ? { overrideAccess: true } : {}),
       });
       if (resByNum.docs.length > 0) {
         orderDoc = resByNum.docs[0] as Order;
@@ -62,16 +63,10 @@ export async function GET(
       return new NextResponse('Pedido no encontrado', { status: 404 });
     }
 
-    // 3. Autorización: sesión activa O token correcto para ESTE pedido
-    if (!isAuthenticated && !verifyOrderPdfToken(orderDoc.orderNumber || String(orderDoc.id), providedToken)) {
-      return new NextResponse('No autorizado', { status: 401 });
-    }
-
-    // Resolve Store Name & Currency
+    // 4. Resolve Store Name & Exchange Rate (jerarquía unificada):
+    //    snapshot del pedido > tasa manual del tenant > fallback env/890
     let storeName = 'Tienda StoreLink';
-    let exchangeRateVES = Number(process.env.FALLBACK_EXCHANGE_RATE_VES) > 0
-      ? Number(process.env.FALLBACK_EXCHANGE_RATE_VES)
-      : 898.0;
+    let exchangeRateVES = Number(orderDoc.exchangeRateVES) || 0;
 
     const tenantId = typeof orderDoc.tenant === 'object' ? orderDoc.tenant?.id : orderDoc.tenant;
     if (tenantId) {
@@ -82,8 +77,13 @@ export async function GET(
           overrideAccess: true,
         })) as Tenant;
         if (tenantDoc?.name) storeName = tenantDoc.name;
-        if (tenantDoc?.branding?.exchangeRateVES) exchangeRateVES = tenantDoc.branding.exchangeRateVES;
+        if (!exchangeRateVES && Number(tenantDoc?.branding?.exchangeRateVES) > 0) {
+          exchangeRateVES = Number(tenantDoc?.branding?.exchangeRateVES);
+        }
       } catch {}
+    }
+    if (!exchangeRateVES) {
+      exchangeRateVES = FALLBACK_EXCHANGE_RATE_VES;
     }
 
     const total = Number(orderDoc.totalAmount) || 0;
@@ -132,9 +132,9 @@ export async function GET(
         'Cache-Control': 'private, max-age=3600',
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error generating PDF delivery note:', error);
-    return new NextResponse(`Error generando PDF: ${error.message || 'Error del servidor'}`, {
+    return new NextResponse('Error generando PDF: error interno del servidor', {
       status: 500,
     });
   }

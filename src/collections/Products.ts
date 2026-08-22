@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { hasTenantAccess } from '@/lib/utils';
 
 export const Products: CollectionConfig = {
   slug: 'products',
@@ -8,9 +9,11 @@ export const Products: CollectionConfig = {
   },
   access: {
     read: () => true, // Public read so storefront can display items
-    create: ({ req: { user } }) => Boolean(user),
-    update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => Boolean(user),
+    // Audit fix: sin tenants asignados no se puede crear/editar/borrar
+    // (antes Boolean(user) dejaba operar sobre productos de TODOS los tenants)
+    create: ({ req: { user } }) => hasTenantAccess(user),
+    update: ({ req: { user } }) => hasTenantAccess(user),
+    delete: ({ req: { user } }) => hasTenantAccess(user),
   },
   fields: [
     {
