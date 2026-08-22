@@ -4,4 +4,5 @@ export * as migration_20260820_add_media_tenant_isolation from './20260820_add_m
 export * as migration_20260821_add_trello_workspace_fields from './20260821_add_trello_workspace_fields';
 export * as migration_20260821_2_order_uniqueness_rate_snapshot from './20260821_2_order_uniqueness_rate_snapshot';
 export * as migration_20260822_jobs_queue from './20260822_jobs_queue';
+export * as migration_20260822_2_analytics_indexes from './20260822_2_analytics_indexes';
 
