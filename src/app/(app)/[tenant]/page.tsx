@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
+import { unstable_cache } from 'next/cache';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import type { Tenant } from '@/payload-types';
 import {
@@ -12,7 +13,19 @@ import {
 
 import { notFound } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
+// ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
+// 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
+// import-csv, tasa) vía revalidatePath/revalidateTag.
+export const revalidate = 300;
+
+// La tasa VES NO se resuelve en vivo por visita (gastaba fetch a Binance/
+// dolarapi por cada render): se cachea 120s con tag `rate`; el endpoint de
+// tasa manual la invalida con revalidateTag('rate').
+const getRateVES = unstable_cache(
+  async (tenantDoc: Tenant) => (await resolveExchangeRateVES(tenantDoc)).rate ?? undefined,
+  ['exchange-rate'],
+  { revalidate: 120, tags: ['rate'] }
+);
 
 const RESERVED_SLUGS = new Set([
   'favicon.ico',
@@ -134,8 +147,8 @@ export default async function TenantStorefrontPage({
     const branding = doc.branding as any;
 
     // Tasa VES (jerarquía del producto): manual > Binance en vivo >
-    // dólar paralelo > ninguna (no se muestran Bs)
-    const { rate: exchangeRateVES } = await resolveExchangeRateVES(doc);
+    // dólar paralelo > ninguna (no se muestran Bs) — cacheada 120s
+    const exchangeRateVES = await getRateVES(doc);
 
     tenantConfig = {
       id: String(doc.id),

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 
 export async function POST(
   request: NextRequest,
@@ -76,6 +76,8 @@ export async function POST(
       revalidatePath(`/${tenantSlug}`);
       revalidatePath('/admin/analytics');
       revalidatePath('/admin');
+      // Invalida la tasa cacheada del storefront (ISR)
+      revalidateTag('rate');
     } catch (e) {
       // Ignored in edge cases
     }
