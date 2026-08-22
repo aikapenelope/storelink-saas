@@ -37,7 +37,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
       "executed_at" timestamp(3) with time zone NOT NULL,
       "completed_at" timestamp(3) with time zone NOT NULL,
       "task_slug" varchar NOT NULL,
-      "task_id" varchar NOT NULL,
+      "task_i_d" varchar NOT NULL,
       "input" jsonb,
       "output" jsonb,
       "state" varchar NOT NULL,
