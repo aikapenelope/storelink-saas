@@ -584,7 +584,7 @@ export function StorefrontClient({
     ...tenant,
     name: isRealStore ? tenant.name : currentVertical.name,
     welcomeMessage: isRealStore ? tenant.welcomeMessage : currentVertical.welcome,
-    exchangeRateVES: tenant.exchangeRateVES || 910.0,
+    exchangeRateVES: tenant.exchangeRateVES,
     showVES: tenant.showVES ?? true,
   };
 

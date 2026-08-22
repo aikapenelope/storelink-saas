@@ -103,8 +103,8 @@ export function CartDrawer({
   onClose,
   items,
   currency = 'USD',
-  exchangeRateVES = 910.0,
-  showVES = true,
+  exchangeRateVES = 0,
+  showVES = false,
   storeName,
   whatsappPhone,
   tenantSlug,
@@ -407,7 +407,7 @@ export function CartDrawer({
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs font-mono text-slate-400">SKU: {item.sku}</span>
                         <span className="text-xs font-bold text-emerald-700">{formatPrice(item.price, currency)}</span>
-                        {showVES && (
+                        {showVES && exchangeRateVES > 0 && (
                           <span className="text-[10px] text-slate-500 font-mono font-bold">
                             (Bs. {(item.price * exchangeRateVES).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                           </span>
@@ -635,9 +635,11 @@ export function CartDrawer({
                     <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
                       Método de Pago:
                     </label>
-                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Tasa: {exchangeRateVES.toFixed(2)} Bs/$
-                    </span>
+                    {showVES && exchangeRateVES > 0 && (
+                      <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Tasa: {exchangeRateVES.toFixed(2)} Bs/$
+                      </span>
+                    )}
                   </div>
 
                   {/* Payment Methods Grid */}

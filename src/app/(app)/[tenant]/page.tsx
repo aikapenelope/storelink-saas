@@ -2,7 +2,6 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
-import { getLiveExchangeRate } from '@/lib/exchange-rate';
 import type { Tenant } from '@/payload-types';
 import {
   StorefrontClient,
@@ -105,9 +104,6 @@ export default async function TenantStorefrontPage({
     notFound();
   }
 
-  // Fetch live exchange rate from Binance / Paralelo API
-  const liveRate = await getLiveExchangeRate('binance');
-
   let tenantConfig: TenantConfig = {
     id: 'demo-tenant',
     name: tenantSlug
@@ -117,8 +113,9 @@ export default async function TenantStorefrontPage({
     slug: tenantSlug,
     whatsappPhone: '34600123456',
     welcomeMessage: 'Catálogo interactivo con pedidos por WhatsApp',
-    exchangeRateVES: liveRate,
-    showVES: true,
+    // Sin tasa manual no se muestran Bs (moneda del sistema: USD desde sheets)
+    exchangeRateVES: undefined,
+    showVES: false,
   };
 
   let products: ProductItem[] = [];
@@ -149,7 +146,7 @@ export default async function TenantStorefrontPage({
         whatsappPhone: doc.whatsappPhone || '34600123456',
         welcomeMessage: branding?.welcomeMessage || undefined,
         primaryColor: branding?.primaryColor || undefined,
-        exchangeRateVES: Number(branding?.exchangeRateVES) > 0 ? Number(branding?.exchangeRateVES) : liveRate,
+        exchangeRateVES: Number(branding?.exchangeRateVES) > 0 ? Number(branding?.exchangeRateVES) : undefined,
         showVES: branding?.showVES ?? true,
         pickupConfig: doc.pickupConfig || undefined,
         paymentMethodsConfig: doc.paymentMethodsConfig || undefined,

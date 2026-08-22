@@ -111,25 +111,13 @@ export async function getLiveExchangeRate(provider: 'binance' | 'paralelo' | 'bc
   return rates.binance;
 }
 
-/** Fallback único de tasa (env FALLBACK_EXCHANGE_RATE_VES, default 890). */
-export const FALLBACK_EXCHANGE_RATE_VES: number = (() => {
-  const env = Number(process.env.FALLBACK_EXCHANGE_RATE_VES);
-  return Number.isFinite(env) && env > 0 ? env : 890.0;
-})();
-
-/** Resolución única de tasa de cambio (jerarquía oficial documentada):
- *  tasa manual del tenant > Binance live > fallback env/890.
- *  Sustituye los tres fallbacks divergentes que había (890/898/70). */
+/** Resolución de la tasa VES (bolívares): SOLO la tasa manual del tenant.
+ *  La moneda del sistema es USD (precios desde Google Sheets); el VES es una
+ *  conversión opcional de display. Sin tasa manual → null → la app NO muestra
+ *  Bs (no hay fallback a APIs ni montos fijos). */
 export async function resolveExchangeRateVES(
   tenantDoc?: { branding?: { exchangeRateVES?: number | null } } | null
-): Promise<number> {
+): Promise<number | null> {
   const custom = Number(tenantDoc?.branding?.exchangeRateVES);
-  if (Number.isFinite(custom) && custom > 0) return custom;
-  try {
-    const live = await getLiveExchangeRate('binance');
-    if (Number.isFinite(live) && live > 0) return live;
-  } catch {
-    // fall through al fallback
-  }
-  return FALLBACK_EXCHANGE_RATE_VES;
+  return Number.isFinite(custom) && custom > 0 ? custom : null;
 }

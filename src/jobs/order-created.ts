@@ -3,7 +3,6 @@ import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { orderPdfToken } from '@/lib/order-token';
 import { buildOrderConfirmationEmailHtml } from '@/lib/order-email';
-import { FALLBACK_EXCHANGE_RATE_VES } from '@/lib/exchange-rate';
 import { Resend } from 'resend';
 import type { Order, Tenant } from '@/payload-types';
 
@@ -80,7 +79,8 @@ const trelloDispatchOrder: TaskConfig = {
         }))
       : [];
     const total = Number(order.totalAmount) || 0;
-    const exchangeRateVES = Number(order.exchangeRateVES) || FALLBACK_EXCHANGE_RATE_VES;
+    // Tasa VES del snapshot del pedido (manual del tenant al momento de comprar)
+    const exchangeRateVES = Number(order.exchangeRateVES) || 0;
 
     const trelloRes = await createTrelloOrderCard({
       apiKey,
@@ -163,7 +163,9 @@ const sendOrderConfirmationEmail: TaskConfig = {
     const orderNumber = order.orderNumber || String(order.id);
     const storeName = tenantDoc?.name || 'Flow Store';
     const total = Number(order.totalAmount) || 0;
-    const exchangeRateVES = Number(order.exchangeRateVES) || FALLBACK_EXCHANGE_RATE_VES;
+    // Tasa VES del snapshot del pedido (manual del tenant); sin ella no se muestra Bs
+    const exchangeRateVES = Number(order.exchangeRateVES) || 0;
+    const showVES = exchangeRateVES > 0;
     const totalVES = total * exchangeRateVES;
     const items = Array.isArray(order.items)
       ? order.items.map((i: any) => ({
@@ -189,7 +191,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
       total,
       totalVES,
       exchangeRateVES,
-      showVES: true,
+      showVES,
     });
 
     // PDF de la Nota de Entrega (mismo generador del endpoint público)
@@ -216,7 +218,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
         total,
         totalVES,
         exchangeRateVES,
-        showVES: true,
+        showVES,
         items,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');

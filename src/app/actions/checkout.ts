@@ -100,8 +100,25 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // oficial @payloadcms/plugin-ecommerce (packages/plugin-ecommerce/
     // src/utilities/defaultProductsValidation.ts): precio requerido desde
     // la BD, stock suficiente, y rechazo de productos no verificados.
+    //
+    // Modo DEMO (landing / pruebas de clientes potenciales, p.ej. la tienda
+    // "donluigi"): si el tenant no existe o no tiene productos en la BD, el
+    // checkout sigue completo (WhatsApp + PDF + Trello + email) con los datos
+    // del cliente — sabemos que no es real y queda aislado: solo afecta a su
+    // propio tenant, nunca a los demás.
     // ------------------------------------------------------------------
     const verifiedItems: CheckoutItemData[] = [];
+
+    let tenantHasProducts = false;
+    if (tenantId) {
+      const countRes = await payload.count({
+        collection: 'products',
+        where: { tenant: { equals: tenantId } },
+        overrideAccess: true,
+      });
+      tenantHasProducts = countRes.totalDocs > 0;
+    }
+    const isDemoTenant = !tenantId || !tenantHasProducts;
 
     for (const item of items) {
       // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
@@ -110,13 +127,25 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         return { success: false, error: 'Cantidad inválida en el carrito' };
       }
 
-      // Todo item debe resolver a un producto REAL del tenant (el SKU y el
-      // precio los decide el servidor, nunca el cliente). El lookup acepta
-      // SKU base o SKU de variante (el catálogo permite variantes).
-      if (!tenantId || !item.sku) {
+      if (!item.sku) {
         return { success: false, error: 'Producto no disponible' };
       }
 
+      // En modo demo los SKUs del catálogo de muestra no existen en la BD:
+      // se aceptan los datos del cliente (precio/título) sin verificación.
+      if (isDemoTenant) {
+        verifiedItems.push({
+          sku: item.sku,
+          title: item.title || 'Producto',
+          quantity: qty,
+          price: Math.max(0, Number(item.price) || 0),
+        });
+        continue;
+      }
+
+      // Tienda real: todo item debe resolver a un producto REAL del tenant
+      // (el SKU y el precio los decide el servidor, nunca el cliente). El
+      // lookup acepta SKU base o SKU de variante (catálogo con variantes).
       const dbProductRes = await payload.find({
         collection: 'products',
         where: {
@@ -196,13 +225,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // ------------------------------------------------------------------
-    // 3. Resolve Exchange Rate — UNA sola resolución para TODO el pedido
-    // (PDF, WhatsApp, email y documento Orders). Jerarquía oficial:
-    //    tenant manual > Binance live > fallback env/890
+    // 3. Resolve Exchange Rate — tasa VES SOLO manual del tenant.
+    // La moneda del sistema es USD (precios desde Google Sheets). Sin tasa
+    // manual no se muestra Bs (ni en WhatsApp, PDF, email ni en el pedido).
     // ------------------------------------------------------------------
-    const effectiveExchangeRate = await resolveExchangeRateVES(tenantDoc);
+    const vesRate = await resolveExchangeRateVES(tenantDoc);
+    const showVESEffective = showVES === false ? false : vesRate !== null;
+    const totalVES = vesRate ? total * vesRate : 0;
 
-    const totalVES = total * effectiveExchangeRate;
     const now = new Date();
     let orderNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -251,8 +281,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         currency: currency || 'USD',
         total,
         totalVES,
-        exchangeRateVES: effectiveExchangeRate,
-        showVES: showVES ?? true,
+        exchangeRateVES: vesRate ?? 0,
+        showVES: showVESEffective,
         items: verifiedItems,
       });
       pdfBase64 = Buffer.from(pdfBytes).toString('base64');
@@ -297,7 +327,7 @@ ${itemsSummary}
 
 💰 *TOTAL A PAGAR:*
 💵 *$${total.toFixed(2)} USD*
-${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${effectiveExchangeRate.toFixed(2)} Bs/$)\n` : ''}
+${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
 📄 _He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._`;
 
     // Token opaco para que ESTE cliente descargue SU nota sin sesión
@@ -406,7 +436,7 @@ ${showVES ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionD
             totalAmount: total,
             currency: currency || 'USD',
             // Snapshot de la tasa aplicada — conciliación exacta por pedido
-            exchangeRateVES: effectiveExchangeRate,
+            exchangeRateVES: vesRate ?? undefined,
           },
         });
 

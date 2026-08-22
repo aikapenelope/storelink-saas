@@ -3,7 +3,6 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { verifyOrderPdfToken } from '@/lib/order-token';
-import { FALLBACK_EXCHANGE_RATE_VES } from '@/lib/exchange-rate';
 import type { Order, Tenant } from '@/payload-types';
 
 /**
@@ -68,8 +67,8 @@ export async function GET(
       return new NextResponse('Pedido no encontrado', { status: 404 });
     }
 
-    // 4. Resolve Store Name & Exchange Rate (jerarquía unificada):
-    //    snapshot del pedido > tasa manual del tenant > fallback env/890
+    // 4. Resolve Store Name & Exchange Rate (tasa VES manual-only):
+    //    snapshot del pedido > tasa manual del tenant > sin VES (no mostrar Bs)
     let storeName = 'Tienda StoreLink';
     let exchangeRateVES = Number(orderDoc.exchangeRateVES) || 0;
 
@@ -87,12 +86,10 @@ export async function GET(
         }
       } catch {}
     }
-    if (!exchangeRateVES) {
-      exchangeRateVES = FALLBACK_EXCHANGE_RATE_VES;
-    }
+    const showVES = exchangeRateVES > 0;
 
     const total = Number(orderDoc.totalAmount) || 0;
-    const totalVES = total * exchangeRateVES;
+    const totalVES = showVES ? total * exchangeRateVES : 0;
 
     const dateStr = orderDoc.createdAt
       ? new Date(orderDoc.createdAt).toLocaleDateString('es-VE', {
@@ -115,7 +112,7 @@ export async function GET(
       total,
       totalVES,
       exchangeRateVES,
-      showVES: true,
+      showVES,
       items: Array.isArray(orderDoc.items)
         ? orderDoc.items.map((i) => ({
             sku: i.sku || 'N/A',

@@ -35,8 +35,8 @@ export function ThemeBasicBanner({
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const exchangeRate = tenant.exchangeRateVES || 910.0;
-  const showVES = tenant.showVES ?? true;
+  const exchangeRate = tenant.exchangeRateVES || 0;
+  const showVES = (tenant.showVES ?? false) && exchangeRate > 0;
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
