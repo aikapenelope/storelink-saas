@@ -3,7 +3,6 @@ import { createTrelloOrderCard } from '@/lib/trello';
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { orderPdfToken } from '@/lib/order-token';
 import { buildOrderConfirmationEmailHtml } from '@/lib/order-email';
-import { Resend } from 'resend';
 import type { Order, Tenant } from '@/payload-types';
 
 /**
@@ -148,15 +147,17 @@ const sendOrderConfirmationEmail: TaskConfig = {
         }).catch(() => null)) as Tenant | null)
       : null;
 
-    const resendKey = tenantDoc?.emailConfig?.resendApiKey || process.env.RESEND_API_KEY || '';
+    // Email oficial de Payload (adapter resend único): el remitente se
+    // identifica con el NOMBRE de la tienda y su fromEmail (verificado en la
+    // cuenta Resend master); el envío va por payload.sendEmail, nunca con
+    // SDK directo. Sin correo del cliente → se omite.
     const fromEmail =
       tenantDoc?.emailConfig?.fromEmail ||
       process.env.RESEND_FROM_EMAIL ||
       'pedidos@flow.martes.app';
     const customerEmail = order.customer?.email;
 
-    // Sin clave Resend configurada o sin correo del cliente → se omite
-    if (!resendKey || !customerEmail) {
+    if (!customerEmail) {
       return { output: { skipped: true } };
     }
 
@@ -226,9 +227,8 @@ const sendOrderConfirmationEmail: TaskConfig = {
       console.warn('PDF generation warning (job):', pdfErr);
     }
 
-    const resend = new Resend(resendKey);
-    await resend.emails.send({
-      from: fromEmail,
+    await payload.sendEmail({
+      from: { name: storeName, address: fromEmail },
       to: customerEmail,
       subject: emailSubject,
       html: emailHtml,

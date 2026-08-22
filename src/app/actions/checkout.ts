@@ -75,8 +75,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       return { success: false, error: 'El carrito está vacío' };
     }
 
-    if (!customer.name || !customer.phone) {
-      return { success: false, error: 'Por favor completa el nombre y teléfono de contacto' };
+    if (!customer.name || !customer.phone || !customer.email) {
+      return { success: false, error: 'Por favor completa el nombre, teléfono y correo de contacto' };
     }
 
     // ------------------------------------------------------------------
@@ -97,12 +97,6 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // Tienda inexistente → no existe (404 en el storefront; aquí se rechaza)
     if (!tenantId || !tenantDoc) {
       return { success: false, error: 'Tienda no encontrada' };
-    }
-
-    // Regla de negocio: toda tienda real siempre tiene WhatsApp configurado.
-    // Sin whatsappPhone la tienda no recibe pedidos (p.ej. la tienda demo real).
-    if (!tenantDoc.whatsappPhone) {
-      return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
     }
 
     // ------------------------------------------------------------------
@@ -273,12 +267,19 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // ------------------------------------------------------------------
-    // 5. Build Structured WhatsApp Message
+    // 5. Build Structured WhatsApp Message (opcional: si la tienda no tiene
+    // whatsappPhone configurado, el pedido se procesa igual sin enlace).
     // ------------------------------------------------------------------
-    // El WhatsApp es siempre el del tenant (ya validado arriba); sin
-    // fallbacks hardcodeados.
     const targetPhone = tenantDoc.whatsappPhone;
-    const cleanPhone = targetPhone.replace(/\D/g, '');
+    const cleanPhone = targetPhone ? targetPhone.replace(/\D/g, '') : '';
+
+    // Token opaco para que ESTE cliente descargue SU nota sin sesión
+    // (válido 48h; se genera siempre, con o sin WhatsApp)
+    const pdfToken = orderPdfToken(orderNumber);
+    const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
+
+    let whatsappUrl: string | null = null;
+    if (cleanPhone) {
 
     const itemsSummary = verifiedItems
       .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
@@ -318,9 +319,10 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     const pdfToken = orderPdfToken(orderNumber);
     const pdfUrlWithToken = `/api/orders/${orderNumber}/pdf?token=${pdfToken}`;
 
-    const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
+    whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
       whatsappMessage
     )}`;
+    }
 
     // ------------------------------------------------------------------
     // 6. Dispatch Trello + Email — ASÍNCRONO vía Jobs Queue oficial de
@@ -468,7 +470,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     return {
       success: true,
       orderNumber,
-      whatsappUrl,
+      whatsappUrl: whatsappUrl ?? undefined,
       pdfBase64,
       // El email ahora se envía de forma asíncrona vía Jobs Queue
       emailSent: false,

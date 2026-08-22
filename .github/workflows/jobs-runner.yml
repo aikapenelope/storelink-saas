@@ -16,4 +16,4 @@ jobs:
         run: |
           curl -fsS -m 120 \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "https://flow.martes.app/api/jobs/run"
+            "https://flow.martes.app/api/payload-jobs/run?queue=default"
