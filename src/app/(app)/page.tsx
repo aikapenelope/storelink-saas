@@ -256,166 +256,24 @@ export default function FlowLandingPage() {
           </div>
 
           {/* ========================================================================= */}
-          {/* COMPACT CRM DASHBOARD (Payload CMS Pure Black Style - Mobile Optimized)   */}
+          {/* REAL SYSTEM DASHBOARD IMAGE (Payload Pure Black Contrast)                 */}
           {/* ========================================================================= */}
-          <div className="mt-10 sm:mt-12 w-full max-w-5xl rounded-2xl border border-neutral-800 bg-black/90 p-2 shadow-2xl shadow-black/90 backdrop-blur-2xl relative z-20 text-white">
-            <div className="overflow-hidden rounded-xl border border-neutral-800 bg-[#000000] text-left">
-              
-              {/* Top Bar (Payload Style) */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-3.5 py-2 sm:px-5">
-                {/* Breadcrumbs */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="flex h-5 w-5 items-center justify-center rounded bg-white text-black font-black text-[10px]">FL</span>
-                  <span className="font-extrabold text-white text-[11px] sm:text-xs">Flow</span>
-                  <span className="text-neutral-600">/</span>
-                  <span className="font-bold text-emerald-400 text-[11px] sm:text-xs truncate max-w-[120px] sm:max-w-none">Don Luigi & Burgers</span>
-                </div>
+          <div className="mt-10 sm:mt-12 w-full max-w-5xl rounded-2xl border border-neutral-800 bg-black/90 p-2 shadow-2xl shadow-black/90 backdrop-blur-2xl relative z-20 text-white md:p-3">
+            <div className="overflow-hidden rounded-xl border border-neutral-800/80 bg-[#000000] text-left shadow-2xl">
+              <img
+                src="/flow-dashboard-real.png"
+                alt="Dashboard real del sistema operativo Flow en producción"
+                className="w-full h-auto block rounded-lg select-none"
+                loading="eager"
+                width={1024}
+                height={528}
+              />
+            </div>
 
-                {/* Quick Action Bar (Connected to Real Link) */}
-                <div className="flex items-center gap-1.5 text-xs font-semibold">
-                  <a href="/demo" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-white px-2.5 py-1 text-black hover:bg-neutral-200 transition text-[10px] sm:text-[11px] font-bold">
-                    <iconify-icon icon="solar:shop-2-bold" width="12" height="12"></iconify-icon>
-                    <span>Ver Tienda</span>
-                  </a>
-                  <span className="hidden sm:inline-flex items-center gap-1 rounded bg-neutral-900 px-2 py-1 text-neutral-300 border border-neutral-800 text-[10px]">
-                    <iconify-icon icon="solar:add-circle-bold" width="12" height="12" className="text-emerald-400"></iconify-icon>
-                    + Producto
-                  </span>
-                </div>
-              </div>
-
-              {/* CRM Layout: Sidebar + Main Content */}
-              <div className="grid lg:grid-cols-[12rem_1fr]">
-                {/* CRM Sidebar Navigation */}
-                <aside className="hidden lg:block border-r border-neutral-800 bg-[#050505] p-3 space-y-3 text-xs">
-                  <div>
-                    <p className="px-2 text-[9px] font-bold uppercase tracking-wider text-neutral-500">Módulos CRM</p>
-                    <div className="mt-1.5 space-y-1">
-                      <div className="flex items-center gap-2 rounded bg-neutral-900 px-2.5 py-1.5 font-bold text-white border border-neutral-700">
-                        <iconify-icon icon="solar:chart-2-bold" width="13" height="13"></iconify-icon>
-                        <span>Dashboard</span>
-                      </div>
-                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white transition">
-                        <iconify-icon icon="solar:cart-large-2-linear" width="13" height="13"></iconify-icon>
-                        <span>Pedidos & Ventas</span>
-                        <span className="ml-auto rounded bg-neutral-800 px-1 py-0.2 text-[8px] font-bold text-white">3</span>
-                      </div>
-                      <div className="flex items-center gap-2 rounded px-2.5 py-1.5 text-neutral-400 hover:text-white transition">
-                        <iconify-icon icon="solar:users-group-rounded-linear" width="13" height="13"></iconify-icon>
-                        <span>Clientes & VIPs</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-emerald-500/30 bg-emerald-950/20 p-2 text-[10px]">
-                    <div className="flex items-center gap-1 font-bold text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Agente Activo 24/7
-                    </div>
-                    <p className="mt-0.5 text-neutral-400">Cerrando ventas sin colas.</p>
-                  </div>
-                </aside>
-
-                {/* Dashboard Main Grid Content */}
-                <div className="bg-[#000000] p-3 sm:p-4 space-y-2.5 sm:space-y-3">
-                  {/* Compact KPI 2x2 Grid on Mobile */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">💵 Ventas Hoy</span>
-                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white font-mono">$145.00</p>
-                      <p className="text-[9px] text-emerald-400 font-mono">Bs. 10.150 (+18%)</p>
-                    </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">🛍️ Total Mes</span>
-                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white font-mono">$1.280.00</p>
-                      <p className="text-[9px] text-neutral-300 font-mono">84 pedidos</p>
-                    </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">👑 Clientes CRM</span>
-                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-white">18 Clientes</p>
-                      <p className="text-[9px] text-amber-400 font-bold">4 VIPs</p>
-                    </div>
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2 sm:p-2.5">
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium">⏳ Despachos</span>
-                      <p className="mt-0.5 text-base sm:text-lg font-extrabold text-amber-300">3 Órdenes</p>
-                      <p className="text-[9px] text-neutral-400">Listos para enviar</p>
-                    </div>
-                  </div>
-
-                  {/* Compact Split: Left (Chart 7 Days) | Right (Mini CRM + Orders) */}
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {/* Left: 7-Day Chart */}
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5 sm:p-3">
-                      <div className="flex items-center justify-between text-xs pb-1 border-b border-neutral-800">
-                        <span className="font-bold text-neutral-300 text-[10px] sm:text-[11px]">📊 Ventas Últimos 7 Días</span>
-                        <span className="text-[9px] text-neutral-400 font-mono">$1.090 Total</span>
-                      </div>
-                      <div className="mt-2 grid grid-cols-7 gap-1 items-end h-14 sm:h-16">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-neutral-800 rounded-t h-5"></div>
-                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Lun</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-neutral-700 rounded-t h-8"></div>
-                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Mar</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-neutral-800 rounded-t h-6"></div>
-                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Mie</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-neutral-600 rounded-t h-9"></div>
-                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Jue</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-neutral-500 rounded-t h-11"></div>
-                          <span className="text-[7px] sm:text-[8px] text-neutral-500 font-mono">Vie</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-emerald-500 rounded-t h-14"></div>
-                          <span className="text-[7px] sm:text-[8px] text-emerald-400 font-bold font-mono">Sab</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="w-full bg-white rounded-t h-10"></div>
-                          <span className="text-[7px] sm:text-[8px] text-white font-bold font-mono">Hoy</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: CRM & Orders Stream */}
-                    <div className="rounded border border-neutral-800 bg-[#0a0a0a] p-2.5 sm:p-3 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs pb-1 border-b border-neutral-800 font-bold text-neutral-300">
-                        <span className="text-[10px] sm:text-[11px]">👥 Pedidos en Tiempo Real</span>
-                        <span className="text-[8px] text-emerald-400 font-mono">🟢 En Vivo</span>
-                      </div>
-
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center justify-between rounded bg-[#111111] p-1.5 sm:p-2 border border-neutral-800">
-                          <div>
-                            <p className="font-bold text-white text-[10px]">Carlos Pérez <span className="text-[8px] text-amber-300 font-mono">👑 VIP</span></p>
-                            <p className="text-[8px] sm:text-[9px] text-neutral-400">#ORD-104 · Chacao</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-mono font-bold text-white text-[10px]">$24.50</p>
-                            <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[7px] sm:text-[8px] text-emerald-400 font-bold">Entregado</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded bg-[#111111] p-1.5 sm:p-2 border border-neutral-800">
-                          <div>
-                            <p className="font-bold text-white text-[10px]">Ana Morales <span className="text-[8px] text-neutral-300 font-mono">🔁 Recurrente</span></p>
-                            <p className="text-[8px] sm:text-[9px] text-neutral-400">#ORD-103 · Pickup</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-mono font-bold text-white text-[10px]">$18.00</p>
-                            <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[7px] sm:text-[8px] text-amber-400 font-bold">Pendiente</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Subtle indicator: Real System Image */}
+            <div className="mt-3 flex items-center justify-center gap-2 text-center text-[11px] font-mono text-neutral-400">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
+              <span>Imágenes reales del sistema en producción · Aura Concept Store</span>
             </div>
           </div>
 
