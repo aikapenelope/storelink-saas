@@ -11,7 +11,9 @@
     "generate:types": "cross-env PAYLOAD_SECRET=generate-types-only DATABASE_URI='' payload generate:types",
     "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
     "migrate:create": "payload migrate:create",
-    "vercel-build": "pnpm build"
+    "vercel-build": "pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -51,11 +53,16 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "cross-env": "^10.1.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
   "pnpm": {
     "overrides": {
       "@aws-sdk/types": "3.974.4"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
   }
 }
