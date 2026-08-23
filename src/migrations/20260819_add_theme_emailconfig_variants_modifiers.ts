@@ -24,7 +24,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   // PRODUCTS_VARIANTS: Product size/color/format variants
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS products_variants (
-      id SERIAL PRIMARY KEY,
+      id varchar PRIMARY KEY,
       _order INTEGER NOT NULL,
       _parent_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
       name VARCHAR NOT NULL,
@@ -39,7 +39,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   // PRODUCTS_MODIFIERS: Modifier groups (extras, sauces, etc.)
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS products_modifiers (
-      id SERIAL PRIMARY KEY,
+      id varchar PRIMARY KEY,
       _order INTEGER NOT NULL,
       _parent_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
       group_name VARCHAR NOT NULL,
@@ -52,9 +52,9 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   // PRODUCTS_MODIFIERS_OPTIONS: Options within each modifier group
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS products_modifiers_options (
-      id SERIAL PRIMARY KEY,
+      id varchar PRIMARY KEY,
       _order INTEGER NOT NULL,
-      _parent_id INTEGER NOT NULL REFERENCES products_modifiers(id) ON DELETE CASCADE,
+      _parent_id varchar NOT NULL REFERENCES products_modifiers(id) ON DELETE CASCADE,
       name VARCHAR NOT NULL,
       price_delta NUMERIC DEFAULT 0
     )
