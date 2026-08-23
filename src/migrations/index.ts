@@ -5,6 +5,7 @@ import * as migration_20260821_add_trello_workspace_fields from './20260821_add_
 import * as migration_20260821_2_order_uniqueness_rate_snapshot from './20260821_2_order_uniqueness_rate_snapshot';
 import * as migration_20260822_jobs_queue from './20260822_jobs_queue';
 import * as migration_20260822_2_analytics_indexes from './20260822_2_analytics_indexes';
+import * as migration_20260822_3_security_and_performance_optimizations from './20260822_3_security_and_performance_optimizations';
 
 export const migrations = [
   {
@@ -41,5 +42,10 @@ export const migrations = [
     up: migration_20260822_2_analytics_indexes.up,
     down: migration_20260822_2_analytics_indexes.down,
     name: '20260822_2_analytics_indexes',
+  },
+  {
+    up: migration_20260822_3_security_and_performance_optimizations.up,
+    down: migration_20260822_3_security_and_performance_optimizations.down,
+    name: '20260822_3_security_and_performance_optimizations',
   },
 ];
