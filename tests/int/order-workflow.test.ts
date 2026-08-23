@@ -93,6 +93,13 @@ d('workflow order-created (Jobs Queue oficial)', () => {
     const doneRes = await payload.db.drizzle.execute(
       (await import('@payloadcms/db-postgres/drizzle')).sql`SELECT completed_at FROM payload_jobs WHERE id = ${job.id}`
     );
+    // Diagnóstico completo del job en caso de fallo
+    if (!doneRes.rows[0]?.completed_at) {
+      const diag = await payload.db.drizzle.execute(
+        (await import('@payloadcms/db-postgres/drizzle')).sql`SELECT * FROM payload_jobs WHERE id = ${job.id}`
+      );
+      console.log('JOB STATE:', JSON.stringify(diag.rows[0], null, 2));
+    }
     expect(doneRes.rows[0]?.completed_at).toBeTruthy();
 
     // El pedido quedó marcado con la tarjeta de Trello (mock)
