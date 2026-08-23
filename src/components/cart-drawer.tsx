@@ -278,7 +278,7 @@ export function CartDrawer({
         showVES,
         checkoutNonce: checkoutNonce ?? '',
         honeypotWebsite,
-        formRenderedAtMs: formRenderedAtMs || Date.now(),
+        formRenderedAtMs: formRenderedAtMs || undefined,
         customer: {
           name: customer.name,
           phone: fullFormattedPhone,

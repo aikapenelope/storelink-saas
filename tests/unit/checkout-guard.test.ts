@@ -45,9 +45,11 @@ describe('evaluateHoneypot', () => {
     expect(evaluateHoneypot({ honeypotWebsite: '', formRenderedAtMs: NOW - 1_000 }, NOW)).toBe(false);
   });
 
-  it('rechaza timestamps ausentes o del futuro (más allá del skew tolerado)', () => {
+  it('rechaza timestamps ausentes, cero, negativos o del futuro (más allá del skew tolerado)', () => {
     expect(evaluateHoneypot({ honeypotWebsite: '' }, NOW)).toBe(false);
     expect(evaluateHoneypot({ honeypotWebsite: '', formRenderedAtMs: Number.NaN }, NOW)).toBe(false);
+    expect(evaluateHoneypot({ honeypotWebsite: '', formRenderedAtMs: 0 }, NOW)).toBe(false);
+    expect(evaluateHoneypot({ honeypotWebsite: '', formRenderedAtMs: -5_000 }, NOW)).toBe(false);
     expect(evaluateHoneypot({ honeypotWebsite: '', formRenderedAtMs: NOW + 60_000 }, NOW)).toBe(false);
   });
 });

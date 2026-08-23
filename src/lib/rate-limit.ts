@@ -13,6 +13,11 @@ import { Redis } from '@upstash/redis';
  * debe tumbar las ventas; honeypot+nonce siguen activos como filtro local.
  */
 
+export function parseRateLimitMax(raw: string | undefined): number {
+  const configured = Number(raw);
+  return Number.isFinite(configured) && configured > 0 ? configured : 5;
+}
+
 // Singleton por instancia serverless: conexión reutilizada entre invocaciones.
 let limiter: Ratelimit | null | undefined;
 
@@ -27,12 +32,9 @@ function getCheckoutLimiter(): Ratelimit | null {
     return limiter;
   }
 
-  const configured = Number(process.env.RATE_LIMIT_CHECKOUT_PER_MIN);
-  const max = Number.isFinite(configured) && configured > 0 ? configured : 5;
-
   limiter = new Ratelimit({
     redis: new Redis({ url, token }),
-    limiter: Ratelimit.fixedWindow(max, '60 s'),
+    limiter: Ratelimit.fixedWindow(parseRateLimitMax(process.env.RATE_LIMIT_CHECKOUT_PER_MIN), '60 s'),
     prefix: 'storelink:checkout',
   });
   return limiter;

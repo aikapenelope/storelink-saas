@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseRateLimitMax } from '../../src/lib/rate-limit';
 
 /**
  * El wrapper de Upstash debe ser fail-open en ambos modos de fallo (decisión
@@ -50,5 +51,19 @@ describe('checkCheckoutRateLimit — fail-open', () => {
     const mod = await import('../../src/lib/rate-limit');
     const verdict = await mod.checkCheckoutRateLimit('1.2.3.4:tienda-a');
     expect(verdict.allowed).toBe(true);
+  });
+});
+
+describe('parseRateLimitMax', () => {
+  it('default 5 con env ausente, inválida, cero o negativa', () => {
+    expect(parseRateLimitMax(undefined)).toBe(5);
+    expect(parseRateLimitMax('')).toBe(5);
+    expect(parseRateLimitMax('abc')).toBe(5);
+    expect(parseRateLimitMax('0')).toBe(5);
+    expect(parseRateLimitMax('-3')).toBe(5);
+  });
+
+  it('respeta un valor configurado positivo', () => {
+    expect(parseRateLimitMax('12')).toBe(12);
   });
 });

@@ -33,6 +33,9 @@ function signWindow(tenantSlug: string, windowStart: number): string {
 }
 
 export function issueCheckoutNonce(tenantSlug: string, now: number = Date.now()): string {
+  if (!signingSecret()) {
+    throw new Error('Nonce de checkout sin secreto: configura CHECKOUT_NONCE_SECRET o PAYLOAD_SECRET');
+  }
   const windowStart = checkoutWindowStart(now);
   return `${windowStart}.${signWindow(tenantSlug, windowStart)}`;
 }

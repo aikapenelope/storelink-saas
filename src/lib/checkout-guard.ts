@@ -39,7 +39,7 @@ export function evaluateHoneypot(
     return false;
   }
   const renderedAt = Number(input.formRenderedAtMs);
-  if (!Number.isFinite(renderedAt)) return false;
+  if (!Number.isFinite(renderedAt) || renderedAt <= 0) return false;
   if (renderedAt > now + MAX_CLOCK_SKEW_MS) return false;
   if (now - renderedAt < MIN_FORM_FILL_MS) return false;
   return true;
