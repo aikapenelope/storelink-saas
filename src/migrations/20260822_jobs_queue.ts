@@ -31,7 +31,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
     CREATE INDEX IF NOT EXISTS "payload_jobs_processing_idx" ON "payload_jobs" ("processing");
 
     CREATE TABLE IF NOT EXISTS "payload_jobs_log" (
-      "id" SERIAL PRIMARY KEY,
+      "id" varchar PRIMARY KEY,
       "_order" integer NOT NULL,
       "_parent_id" integer NOT NULL REFERENCES "payload_jobs"("id") ON DELETE CASCADE,
       "executed_at" timestamp(3) with time zone NOT NULL,
