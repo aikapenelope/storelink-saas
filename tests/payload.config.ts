@@ -37,6 +37,9 @@ export default buildConfig({
   jobs: {
     tasks: orderJobs.tasks,
     workflows: orderJobs.workflows,
+    // En tests mantenemos el registro para poder asertar sobre el completado
+    // (en producción el default es borrar el job al terminar con éxito).
+    deleteJobOnComplete: false,
     access: {
       run: () => true,
     },
