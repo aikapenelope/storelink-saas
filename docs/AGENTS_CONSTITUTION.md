@@ -90,6 +90,7 @@ Las migraciones son la operación de mayor riesgo del proyecto. Sin excepción:
 - **Atomic commits:** un cambio lógico por commit; jamás mezclar cambios no relacionados.
 - Formato convencional (ya usado en el repo): `type(scope): description` — ej. `fix(security): restrict tenants to super-admin`, `refactor(inventory): use $inc atomic operator`.
 - Commit antes de cada hito significativo: cada commit es un punto de rollback.
+- **PROHIBIDO MERGEAR PULL REQUESTS:** El agente tiene terminantemente prohibido hacer merge de un PR o realizar un push directo a `main`. Su única responsabilidad es crear y proponer el PR en GitHub. El merge queda reservado exclusivamente para el usuario humano.
 
 ---
 

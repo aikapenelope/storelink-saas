@@ -28,7 +28,7 @@ La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga 
 - NO ejecutar SQL crudo que salte hooks/validaciones de Payload; inventario usa `$inc` atómico oficial
 - Aislamiento multi-tenant: filtrar por tenant salvo `super-admin`; el array `tenants` de users solo lo toca super-admin
 - **Identidad git = la del dueño** (`AngelDelN <57774536+aikapenelope@users.noreply.github.com>`). Verificar con `git config user.email` antes de commitear; nunca correos de host (`@...MacBook-Pro...local`): Vercel marca como usuario externo y bloquea previews/deploys.
-- **PROHIBIDO hacer merge de PRs ni push directo a `main`** — solo crear PRs; el merge lo hace el usuario.
+- **PROHIBIDO hacer merge de PRs ni push directo a `main`** — EL AGENTE TIENE TERMINANTEMENTE PROHIBIDO MERGEAR PRs. Solo debe crear el PR en GitHub. El merge lo realiza única y exclusivamente el usuario de forma manual.
 - Build command de Vercel = `pnpm vercel-build`. NUNCA usar un script llamado `ci` (pnpm lo intercepta como comando built-in).
 
 ## Proceso obligatorio por PR (aprendido de los fallos de Ago 2026)
