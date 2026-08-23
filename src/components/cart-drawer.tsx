@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShoppingBag,
   Trash2,
@@ -43,6 +43,8 @@ interface CartDrawerProps {
   /** Modo preview visual (página demo /demo): el carrito se ve pero NO envía pedidos */
   preview?: boolean;
   tenantSlug: string;
+  /** Nonce anti-abuso emitido por [tenant]/page.tsx (Sprint 5) */
+  checkoutNonce?: string;
   pickupConfig?: {
     enabled?: boolean | null;
     locationAddress?: string | null;
@@ -111,6 +113,7 @@ export function CartDrawer({
   whatsappPhone,
   preview = false,
   tenantSlug,
+  checkoutNonce,
   pickupConfig,
   paymentMethodsConfig,
   deliveryConfig,
@@ -120,6 +123,18 @@ export function CartDrawer({
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
   const [phoneOperator, setPhoneOperator] = useState('414');
   const [phoneNumber, setPhoneNumber] = useState('');
+
+  // Anti-abuso Sprint 5: honeypot (debe llegar vacío) y timestamp del primer
+  // render del formulario. Se fija en useEffect al abrir el drawer para no
+  // depender del render SSR (evita mismatch de hidratación) y para que el
+  // servidor pueda rechazar envíos <3s como bots.
+  const [honeypotWebsite, setHoneypotWebsite] = useState('');
+  const [formRenderedAtMs, setFormRenderedAtMs] = useState(0);
+  useEffect(() => {
+    if (isOpen && formRenderedAtMs === 0) {
+      setFormRenderedAtMs(Date.now());
+    }
+  }, [isOpen, formRenderedAtMs]);
 
   // Dynamic merchant account values from Payload DB
   // Audit fix: sin datos bancarios FALSOS hardcodeados. Si el comercio no ha
@@ -261,6 +276,9 @@ export function CartDrawer({
         currency,
         exchangeRateVES,
         showVES,
+        checkoutNonce: checkoutNonce ?? '',
+        honeypotWebsite,
+        formRenderedAtMs: formRenderedAtMs || Date.now(),
         customer: {
           name: customer.name,
           phone: fullFormattedPhone,
@@ -444,6 +462,21 @@ export function CartDrawer({
 
               {/* Customer Checkout Form */}
               <form id="checkout-form" onSubmit={handleCheckout} className="space-y-4 pt-4 border-t border-slate-100">
+                {/* Honeypot anti-bot (Sprint 5): invisible para humanos y
+                    lectores de pantalla; un bot que autorrellena todo campo
+                    lo llena y el servidor rechaza en silencio. */}
+                <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
+                  <label htmlFor="website-field">Sitio web</label>
+                  <input
+                    id="website-field"
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypotWebsite}
+                    onChange={(e) => setHoneypotWebsite(e.target.value)}
+                  />
+                </div>
                 {/* 1. Modalidad de Entrega (Delivery vs Pickup) */}
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-2">
