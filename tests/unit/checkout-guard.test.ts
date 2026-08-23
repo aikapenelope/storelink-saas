@@ -72,8 +72,10 @@ describe('evaluateCheckoutGuards', () => {
 
   it('honeypot lleno → mismo error genérico (sin revelar la trampa)', async () => {
     const result = await evaluateCheckoutGuards(legitInput({ honeypotWebsite: 'spam' }));
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('No se pudo validar');
+    expect(result).toEqual({
+      ok: false,
+      error: 'No se pudo validar el pedido. Recarga la página e inténtalo de nuevo.',
+    });
     expect(mockRateLimit).not.toHaveBeenCalled();
   });
 
