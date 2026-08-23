@@ -23,9 +23,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
  * Config ligera de Payload para tests (patrón oficial: "test directories
  * contain a lightweight Payload config"). Igual que producción en colecciones,
  * jobs y plugins de negocio; distinto SOLO en lo que no debe tocar el mundo
- * real: BD efímera (TEST_DATABASE_URI, contenedor Postgres de CI) y email por
- * consola (consoleEmailAdapter oficial — cero red). Sin storage-s3, sin
- * prodMigrations y SIN credenciales de producción.
+ * real: BD efímera (TEST_DATABASE_URI, contenedor Postgres de CI) y SIN
+ * adapter de email (modo oficial sin email: sendEmail solo registra warning).
+ * Sin storage-s3, sin prodMigrations y SIN credenciales de producción.
  */
 export default buildConfig({
   telemetry: false,
