@@ -17,7 +17,8 @@ type SignedUrlClient = Parameters<typeof getSignedUrl>[0];
  * (getSignedUrl), sin costo de red ni runs adicionales.
  */
 
-const DELIVERY_NOTE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 días
+// Máximo permitido por firma sigv4 de S3/R2: 7 días (no se puede 30).
+const DELIVERY_NOTE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 let client: S3Client | null = null;
 
