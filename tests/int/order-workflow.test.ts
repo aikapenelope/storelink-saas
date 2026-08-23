@@ -73,6 +73,7 @@ d('workflow order-created (Jobs Queue oficial)', () => {
       data: {
         tenant: tenantId,
         status: 'pending',
+        orderNumber: `TEST-${Date.now()}`,
         customer: { name: 'Cliente Test', phone: '+584121234567', email: 'cliente@test.local' },
         items: [{ sku: 'TEST-SKU', title: 'Producto Test', price: 10, quantity: 2 }],
         totalAmount: 20,
