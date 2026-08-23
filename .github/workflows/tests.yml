@@ -29,6 +29,10 @@ jobs:
       TEST_DATABASE_URI: postgres://postgres:postgres@localhost:5432/storelink_test
       PAYLOAD_SECRET: test-secret
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      # Credenciales ficticias: el SDK de Trello está mockeado en los tests
+      # (ejercita el camino completo sin red ni cuenta real).
+      TRELLO_API_KEY: test-trello-key
+      TRELLO_TOKEN: test-trello-token
     steps:
       - uses: actions/checkout@v4
 
