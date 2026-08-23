@@ -10,7 +10,8 @@
     "lint": "next lint",
     "generate:types": "cross-env PAYLOAD_SECRET=generate-types-only DATABASE_URI='' payload generate:types",
     "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
-    "migrate:create": "payload migrate:create"
+    "migrate:create": "payload migrate:create",
+    "ci": "pnpm migrate && pnpm build"
   },
   "keywords": [],
   "author": "",
