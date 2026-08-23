@@ -34,7 +34,7 @@ export type BestSeller = {
 };
 
 function tenantClause(tenantId?: number | string | null) {
-  return tenantId != null ? sql`AND tenant_id = ${tenantId}` : sql``;
+  return tenantId != null ? sql`AND tenant_id = (${tenantId})::int` : sql``;
 }
 
 const num = (v: unknown): number => Number(v) || 0;
@@ -104,7 +104,7 @@ export async function getSalesSeries(
            COUNT(*)::int AS count,
            COALESCE(SUM(total_amount), 0)::float8 AS total
     FROM orders
-    WHERE created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => ${days}) ${t}
+    WHERE created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${t}
     GROUP BY (created_at AT TIME ZONE ${TZ})::date
     ORDER BY d ASC
   `);
@@ -134,7 +134,7 @@ export async function getBestSellers(
   limit = 5
 ): Promise<BestSeller[]> {
   const tenantFilter =
-    tenantId != null ? sql`WHERE o.tenant_id = ${tenantId}` : sql``;
+    tenantId != null ? sql`WHERE o.tenant_id = (${tenantId})::int` : sql``;
 
   const res = await payload.db.drizzle.execute(sql`
     SELECT i.sku, i.title, SUM(i.quantity)::int AS units, COALESCE(SUM(i.subtotal), 0)::float8 AS revenue
@@ -143,7 +143,7 @@ export async function getBestSellers(
     ${tenantFilter}
     GROUP BY i.sku, i.title
     ORDER BY units DESC
-    LIMIT ${limit}
+    LIMIT (${limit})::int
   `);
 
   return res.rows.map((row) => ({
