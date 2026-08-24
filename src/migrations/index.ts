@@ -6,6 +6,7 @@ import * as migration_20260821_2_order_uniqueness_rate_snapshot from './20260821
 import * as migration_20260822_jobs_queue from './20260822_jobs_queue';
 import * as migration_20260822_2_analytics_indexes from './20260822_2_analytics_indexes';
 import * as migration_20260822_3_security_and_performance_optimizations from './20260822_3_security_and_performance_optimizations';
+import * as migration_20260824_products_sku_index from './20260824_products_sku_index';
 
 export const migrations = [
   {
@@ -47,5 +48,10 @@ export const migrations = [
     up: migration_20260822_3_security_and_performance_optimizations.up,
     down: migration_20260822_3_security_and_performance_optimizations.down,
     name: '20260822_3_security_and_performance_optimizations',
+  },
+  {
+    up: migration_20260824_products_sku_index.up,
+    down: migration_20260824_products_sku_index.down,
+    name: '20260824_products_sku_index',
   },
 ];

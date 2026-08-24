@@ -37,6 +37,10 @@ export const Products: CollectionConfig = {
       name: 'sku',
       type: 'text',
       required: true,
+      // Query caliente del checkout y de imports: se resuelve por
+      // tenant + sku por cada item del carrito (skill: index frequently
+      // queried fields). La migración la genera pnpm migrate:create.
+      index: true,
       label: 'Código SKU Base (ej: PIZ-001)',
     },
     {
