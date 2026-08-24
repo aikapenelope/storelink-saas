@@ -69,7 +69,7 @@ export interface CheckoutResponse {
   whatsappUrl?: string;
   pdfBase64?: string;
   emailSent?: boolean;
-  /** URL firmada (R2) de la Nota de Entrega, válida 30 días */
+  /** URL firmada (R2) de la Nota de Entrega, válida 7 días (máx permitido por firma sigv4) */
   pdfUrl?: string;
   error?: string;
 }
@@ -526,7 +526,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
       orderNumber,
       whatsappUrl,
       pdfBase64,
-      // URL firmada (R2) de la Nota de Entrega, válida 30 días
+      // URL firmada (R2) de la Nota de Entrega, válida 7 días (máx sigv4)
       pdfUrl,
       // El email ahora se envía de forma asíncrona vía Jobs Queue
       emailSent: false,
