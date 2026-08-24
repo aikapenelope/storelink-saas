@@ -445,53 +445,67 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     // de CRM nunca bloquea la venta ya registrada.
     try {
       const cleanPhone = customer.phone.trim();
-      const existingCustomerRes = await payload.find({
-        collection: 'customers',
-        where: {
-          and: [
-            { tenant: { equals: tenantId } },
-            { phone: { equals: cleanPhone } },
-          ],
-        },
-        limit: 1,
-        overrideAccess: true,
-      });
 
-      if (existingCustomerRes.docs.length > 0) {
-        const existingCust = existingCustomerRes.docs[0] as Customer;
-        const newOrdersCount = (Number(existingCust.totalOrders) || 0) + 1;
-        const newSpent = (Number(existingCust.totalSpent) || 0) + total;
-        const newTag: 'vip' | 'frecuente' | 'nuevo' =
-          newOrdersCount >= 3 || newSpent >= 50 ? 'vip' : 'frecuente';
+      const findCustomerByTenantPhone = () =>
+        payload.find({
+          collection: 'customers',
+          where: {
+            and: [
+              { tenant: { equals: tenantId } },
+              { phone: { equals: cleanPhone } },
+            ],
+          },
+          limit: 1,
+          overrideAccess: true,
+        });
 
+      const applyOrderToCustomer = async (cust: Customer): Promise<void> => {
+        const newOrdersCount = (Number(cust.totalOrders) || 0) + 1;
+        const newSpent = (Number(cust.totalSpent) || 0) + total;
         await payload.update({
           collection: 'customers',
-          id: existingCust.id,
+          id: cust.id,
           overrideAccess: true,
           data: {
-            name: customer.name || existingCust.name,
-            email: customer.email || existingCust.email,
+            name: customer.name || cust.name,
+            email: customer.email || cust.email,
             totalOrders: newOrdersCount,
             totalSpent: newSpent,
-            tag: newTag,
+            tag: newOrdersCount >= 3 || newSpent >= 50 ? 'vip' : 'frecuente',
             lastOrderAt: now.toISOString(),
           },
         });
+      };
+
+      const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
+
+      if (existingCust) {
+        await applyOrderToCustomer(existingCust);
       } else {
-        await payload.create({
-          collection: 'customers',
-          overrideAccess: true,
-          data: {
-            name: customer.name,
-            phone: cleanPhone,
-            email: customer.email || '',
-            tenant: tenantId,
-            totalOrders: 1,
-            totalSpent: total,
-            tag: 'nuevo',
-            lastOrderAt: now.toISOString(),
-          },
-        });
+        try {
+          await payload.create({
+            collection: 'customers',
+            overrideAccess: true,
+            data: {
+              name: customer.name,
+              phone: cleanPhone,
+              email: customer.email || '',
+              tenant: tenantId,
+              totalOrders: 1,
+              totalSpent: total,
+              tag: 'nuevo',
+              lastOrderAt: now.toISOString(),
+            },
+          });
+        } catch (createErr) {
+          // Carrera con otro checkout simultáneo: el índice único compuesto
+          // customers_tenant_phone_unique (migración 20260824_2) rechazó el
+          // insert porque otro request creó al cliente entre el find y el
+          // create. Reintento como update sobre el registro ganador.
+          const winner = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
+          if (!winner) throw createErr;
+          await applyOrderToCustomer(winner);
+        }
       }
     } catch (crmErr) {
       console.warn('CRM upsert warning:', crmErr);
