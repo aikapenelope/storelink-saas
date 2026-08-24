@@ -12,6 +12,7 @@ import {
 } from '@/components/storefront-client';
 
 import { notFound } from 'next/navigation';
+import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -244,6 +245,7 @@ export default async function TenantStorefrontPage({
       tenant={tenantConfig!}
       products={products}
       categories={categories}
+      checkoutNonce={issueCheckoutNonce(tenantConfig!.slug)}
     />
   );
 }

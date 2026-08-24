@@ -15,9 +15,9 @@ La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga 
 - `src/payload.config.ts` — config maestro (plugins multi-tenant, seo, storage-s3/R2, email adapter multi-tenant, jobs, `push: false`, `prodMigrations`)
 - `src/app/(payload)/` — admin + REST de Payload (`[...slug]/route.ts`)
 - `src/app/(app)/[tenant]/` — storefront PWA por comercio (ISR 300s; `revalidatePath`/`revalidateTag` en mutaciones)
-- `src/app/actions/checkout.ts` — Server Action de checkout (Trello + PDF R2 + WhatsApp)
+- `src/app/actions/checkout.ts` — Server Action de checkout (Trello + PDF R2 + WhatsApp); guards anti-abuso al inicio (nonce → honeypot → rate-limit)
 - `src/app/api/[tenant]/` y `src/app/api/orders/` — endpoints REST propios
-- `src/lib/` — `trello.ts`, `pdf.ts`, `delivery-note.ts` (PDF→R2 + URLs firmadas), `exchange-rate.ts`, `analytics.ts` (agregaciones SQL), `email/` (adapter Resend multi-tenant)
+- `src/lib/` — `trello.ts`, `pdf.ts`, `delivery-note.ts` (PDF→R2 + URLs firmadas), `exchange-rate.ts`, `analytics.ts` (agregaciones SQL), `email/` (adapter Resend multi-tenant), `checkout-nonce.ts` + `rate-limit.ts` + `checkout-guard.ts` (anti-abuso Sprint 5; rate-limit fail-open sobre Upstash)
 - `src/jobs/` — Jobs Queue oficial (workflow `order-created`; runner externo GitHub Actions → `/api/payload-jobs/run`)
 - `src/migrations/` — migraciones PostgreSQL de Payload
 

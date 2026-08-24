@@ -9,6 +9,8 @@ import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import type { Tenant, Product, Customer } from '@/payload-types';
 import { sanitizePlainText } from '@/lib/order-email';
+import { headers } from 'next/headers';
+import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 
 export interface CheckoutCustomerData {
   name: string;
@@ -53,6 +55,12 @@ export interface CheckoutRequest {
   showVES?: boolean;
   customer: CheckoutCustomerData;
   items: CheckoutItemData[];
+  // Anti-abuso Sprint 5: el nonce lo emite el storefront al renderizar y las
+  // trampas de honeypot/tiempo las rellena el carrito. Sin estos campos el
+  // pedido se rechaza con error genérico.
+  checkoutNonce: string;
+  honeypotWebsite?: string;
+  formRenderedAtMs?: number;
 }
 
 export interface CheckoutResponse {
@@ -69,6 +77,23 @@ export interface CheckoutResponse {
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
     const { tenantSlug, storeName, currency, showVES, customer, items } = request;
+
+    // ------------------------------------------------------------------
+    // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP.
+    // Antes de tocar BD/Trello/R2/Resend: cada spam que llegue aquí no debe
+    // costar nada más que una validación HMAC local y un comando Redis.
+    // ------------------------------------------------------------------
+    const hdrs = await headers();
+    const guard = await evaluateCheckoutGuards({
+      tenantSlug,
+      nonce: request.checkoutNonce,
+      honeypotWebsite: request.honeypotWebsite,
+      formRenderedAtMs: request.formRenderedAtMs,
+      clientIp: clientIpFromHeaders(hdrs),
+    });
+    if (!guard.ok) {
+      return { success: false, error: guard.error };
+    }
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };

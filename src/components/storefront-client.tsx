@@ -121,6 +121,8 @@ interface StorefrontClientProps {
   products: ProductItem[];
   categories: string[];
   isDemo?: boolean;
+  /** Nonce anti-abuso emitido por [tenant]/page.tsx; en /demo no hay checkout real */
+  checkoutNonce?: string;
 }
 
 // Curated Pure Industry Datasets for Live Preview
@@ -487,6 +489,7 @@ export function StorefrontClient({
   products,
   categories,
   isDemo = false,
+  checkoutNonce,
 }: StorefrontClientProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -771,6 +774,7 @@ export function StorefrontClient({
         storeName={activeTenantConfig.name}
         whatsappPhone={tenant.whatsappPhone}
         preview={isDemo}
+        checkoutNonce={checkoutNonce}
         pickupConfig={tenant.pickupConfig}
         paymentMethodsConfig={tenant.paymentMethodsConfig}
         deliveryConfig={tenant.deliveryConfig}
