@@ -17,3 +17,9 @@ jobs:
           curl -fsS -m 120 \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             "https://flow.martes.app/api/payload-jobs/run?queue=default"
+
+      - name: Purgar jobs fallidos antiguos (>30d, plan v2 R2)
+        run: |
+          curl -fsS -m 120 -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "https://flow.martes.app/api/admin/cleanup-jobs"
