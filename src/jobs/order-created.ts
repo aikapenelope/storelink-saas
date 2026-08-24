@@ -48,7 +48,7 @@ const trelloDispatchOrder: TaskConfig = {
     const tenantDoc = tenantId
       ? ((await payload.findByID({
           collection: 'tenants',
-          id: tenantId as any,
+          id: tenantId,
           overrideAccess: true,
           req,
         }).catch(() => null)) as Tenant | null)
@@ -141,7 +141,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
     const tenantDoc = tenantId
       ? ((await payload.findByID({
           collection: 'tenants',
-          id: tenantId as any,
+          id: tenantId,
           overrideAccess: true,
           req,
         }).catch(() => null)) as Tenant | null)
@@ -169,7 +169,7 @@ const sendOrderConfirmationEmail: TaskConfig = {
     const showVES = exchangeRateVES > 0;
     const totalVES = total * exchangeRateVES;
     const items = Array.isArray(order.items)
-      ? order.items.map((i: any) => ({
+      ? order.items.map((i) => ({
           sku: i.sku || 'N/A',
           title: i.title,
           quantity: Number(i.quantity) || 1,
