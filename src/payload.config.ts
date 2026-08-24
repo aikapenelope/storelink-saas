@@ -103,6 +103,27 @@ if (
 }
 
 export default buildConfig({
+  // Endurecimiento según docs/production/preventing-abuse.mdx (patrones
+  // oficiales de Payload contra abuso en producción):
+  // - CORS/CSRF: orígenes permitidos explícitos (serverURL se añade solo
+  //   si está definido; se listan igual para dev con localhost).
+  // - GraphQL deshabilitado: la app usa REST + Local API únicamente; los
+  //   docs recomiendan deshabilitarlo si no se necesita.
+  // - maxDepth: default 10 → 5, el mayor uso real en el repo es depth 1.
+  cors: [
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app',
+    'http://localhost:3000',
+    'http://localhost:3001',
+  ],
+  csrf: [
+    process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app',
+    'http://localhost:3000',
+    'http://localhost:3001',
+  ],
+  graphQL: {
+    disable: true,
+  },
+  maxDepth: 5,
   admin: {
     user: Users.slug,
     components: {
