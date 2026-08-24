@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath, revalidateTag } from 'next/cache';
+import { assertTenantAccess } from '@/lib/utils';
 
 export async function POST(
   request: NextRequest,
@@ -32,21 +33,13 @@ export async function POST(
 
     const tenant = tenantsRes.docs[0];
 
-    // Check user tenant access
-    const isSuperAdmin = (user as any).role === 'super-admin';
-    const userTenants = (user as any).tenants || [];
-    const hasAccess =
-      isSuperAdmin ||
-      userTenants.some((t: any) => {
-        const tid = typeof t.tenant === 'object' ? t.tenant.id : t.tenant;
-        return tid === tenant.id;
-      });
-
-    if (!hasAccess) {
+    // Autorización multi-tenant con el guard compartido (super-admin o
+    // tenant asignado al usuario; los IDs vienen en el JWT/objeto user).
+    if (!assertTenantAccess(user, tenant.id)) {
       return NextResponse.json({ error: 'No tienes permiso para modificar esta tienda.' }, { status: 403 });
     }
 
-    const currentBranding = (tenant as any).branding || {};
+    const currentBranding = tenant.branding || {};
 
     // Cota superior de la tasa (evita Infinity / tasas absurdas que rompen
     // la serialización JSON y los totales de pedidos futuros)

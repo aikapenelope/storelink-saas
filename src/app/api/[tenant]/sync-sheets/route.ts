@@ -3,6 +3,7 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { assertTenantAccess } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,27 +60,14 @@ export async function POST(
 
     const tenantId = tenantResult.docs[0].id;
 
-    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3)
-    const currentUser = authResult.user as any;
-    const isSuperAdmin = currentUser.role === 'super-admin';
-
-    if (!isSuperAdmin) {
-      const userDoc: any = await payload.findByID({
-        collection: 'users',
-        id: currentUser.id,
-        depth: 1,
-      });
-
-      const allowedTenantIds = (userDoc?.tenants || []).map((t: any) =>
-        typeof t.tenant === 'object' && t.tenant !== null ? t.tenant.id : t.tenant
+    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3) con el guard
+    // compartido: super-admin o tenant asignado (los IDs ya vienen en el
+    // objeto/JWT del usuario; no hace falta reconsultar users).
+    if (!assertTenantAccess(authResult.user, tenantId)) {
+      return NextResponse.json(
+        { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
+        { status: 403 }
       );
-
-      if (!allowedTenantIds.includes(tenantId)) {
-        return NextResponse.json(
-          { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
-          { status: 403 }
-        );
-      }
     }
 
     const body = await request.json().catch(() => ({}));
@@ -193,7 +181,7 @@ export async function POST(
     const errors: Array<{ line: number; error: string }> = [];
 
     // Cache categories to avoid duplicate finds/creates in loop
-    const categoryCache = new Map<string, string | number>();
+    const categoryCache = new Map<string, number>();
 
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
@@ -208,7 +196,7 @@ export async function POST(
       if (!title) continue;
 
       try {
-        let categoryId: string | number | undefined;
+        let categoryId: number | undefined;
         if (rawCategory) {
           const catSlug = rawCategory.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           if (categoryCache.has(catSlug)) {
@@ -233,7 +221,7 @@ export async function POST(
                 data: {
                   name: rawCategory,
                   slug: catSlug,
-                  tenant: tenantId as any,
+                  tenant: tenantId,
                 },
               });
               categoryId = newCat.id;
@@ -261,7 +249,7 @@ export async function POST(
               title,
               price,
               description,
-              category: categoryId as any,
+              category: categoryId,
               imageUrl: imageUrl || undefined,
               stockQuantity,
               trackStock: stockQuantity !== undefined,
@@ -278,8 +266,8 @@ export async function POST(
               price,
               description,
               imageUrl: imageUrl || undefined,
-              category: categoryId as any,
-              tenant: tenantId as any,
+              category: categoryId,
+              tenant: tenantId,
               stockQuantity,
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',

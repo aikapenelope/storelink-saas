@@ -54,3 +54,13 @@ export function isSuperAdmin(user: unknown): boolean {
 export function hasTenantAccess(user: unknown): boolean {
   return isSuperAdmin(user) || getUserTenantIds(user).length > 0;
 }
+
+/** Autorización multi-tenant puntual: super-admin o tenant asignado al usuario.
+ *  Unifica el check artesanal que antes se repetía (con casts) en las rutas
+ *  de /api/[tenant]/*; los IDs se comparan como string para tolerar el valor
+ *  poblado (objeto) o plano del array `tenants` del JWT. */
+export function assertTenantAccess(user: unknown, tenantId: number | string): boolean {
+  if (!user) return false;
+  if (isSuperAdmin(user)) return true;
+  return getUserTenantIds(user).some((id) => String(id) === String(tenantId));
+}
