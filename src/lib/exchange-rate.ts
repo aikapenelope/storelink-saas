@@ -79,10 +79,12 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
     });
 
     if (binanceRes.ok) {
-      const binanceData = await binanceRes.json();
+      const binanceData = (await binanceRes.json()) as {
+        data?: Array<{ adv?: { price?: string | number } }>;
+      };
       if (Array.isArray(binanceData?.data) && binanceData.data.length > 0) {
         const prices = binanceData.data
-          .map((item: any) => Number(item?.adv?.price))
+          .map((item) => Number(item?.adv?.price))
           .filter((p: number) => !isNaN(p) && p > 0);
 
         if (prices.length > 0) {

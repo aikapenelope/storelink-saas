@@ -1,4 +1,4 @@
-import type { CollectionConfig, CollectionAfterChangeHook } from 'payload';
+import type { CollectionConfig, CollectionAfterChangeHook, Where } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 
 /**
@@ -17,7 +17,7 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // (patrón oficial: https://payloadcms.com/docs/database/transactions).
   // Si cualquier paso falla, Payload revierte pedido Y descuento de stock
   // como una sola unidad (all-or-nothing).
-  const { payload, transactionID } = req;
+  const { payload } = req;
 
   if (!doc?.items || !Array.isArray(doc.items) || doc.items.length === 0) {
     return doc;
@@ -36,7 +36,7 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
 
   const findProduct = async (item: { sku?: string | null; title?: string | null }) => {
     if (!item.title && !item.sku) return null;
-    const whereQuery: any = {
+    const whereQuery: Where = {
       and: [
         ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
         item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
@@ -47,7 +47,7 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       where: whereQuery,
       limit: 1,
       overrideAccess: true,
-      ...(transactionID ? { req: { transactionID } as any } : {}),
+      req,
     });
     return productRes.docs[0] ?? null;
   };
@@ -78,15 +78,17 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToRestore = Number(item.quantity) || 1;
-      await payload.update({
+      // Reposición ATÓMICA con $inc (mismo patrón que el descuento): evita la
+      // ventana TOCTOU del read-modify-write entre cancelaciones concurrentes.
+      // db.updateOne es de bajo nivel (sin hooks), igual que el descuento.
+      await payload.db.updateOne({
         collection: 'products',
         id: prod.id,
-        overrideAccess: true,
         data: {
-          stockQuantity: prod.stockQuantity + qtyToRestore,
+          stockQuantity: { $inc: qtyToRestore },
           stockStatus: 'in_stock',
         },
-        ...(transactionID ? { req: { transactionID } as any } : {}),
+        req,
       });
     }
   }

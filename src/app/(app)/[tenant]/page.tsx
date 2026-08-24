@@ -13,6 +13,7 @@ import {
 
 import { notFound } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
+import { getTenantBySlug } from '@/lib/tenants';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -28,8 +29,10 @@ const getRateVES = unstable_cache(
   { revalidate: 120, tags: ['rate'] }
 );
 
-const RESERVED_SLUGS = new Set([
-  'favicon.ico',
+const FALLBACK_IMAGE_URL =
+  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+
+const RESERVED_SLUGS = new Set([  'favicon.ico',
   'robots.txt',
   'sitemap.xml',
   'apple-touch-icon.png',
@@ -57,19 +60,9 @@ export async function generateMetadata({
     .join(' ');
 
   try {
-    const payload = await getPayload({ config });
-    const tenantResult = await payload.find({
-      collection: 'tenants',
-      where: {
-        slug: {
-          equals: tenantSlug,
-        },
-      },
-      limit: 1,
-    });
+    const doc = await getTenantBySlug(tenantSlug);
 
-    if (tenantResult.docs.length > 0) {
-      const doc = tenantResult.docs[0] as Tenant;
+    if (doc) {
       const title = doc.meta?.title || `${doc.name || storeName} | Catálogo Online Oficial`;
       const description =
         doc.meta?.description ||
@@ -129,23 +122,13 @@ export default async function TenantStorefrontPage({
   try {
     const payload = await getPayload({ config });
 
-    const tenantResult = await payload.find({
-      collection: 'tenants',
-      where: {
-        slug: {
-          equals: tenantSlug,
-        },
-      },
-      limit: 1,
-    });
-
-    // La tienda no existe, no existe → 404 (sin página demo genérica)
-    if (tenantResult.docs.length === 0) {
+    // La tienda no existe → 404 (sin página demo genérica)
+    const doc = await getTenantBySlug(tenantSlug);
+    if (!doc) {
       notFound();
     }
 
-    const doc = tenantResult.docs[0] as Tenant;
-    const branding = doc.branding as any;
+    const branding = doc.branding;
 
     // Tasa VES (jerarquía del producto): manual > Binance en vivo >
     // dólar paralelo > ninguna (no se muestran Bs) — cacheada 120s
@@ -178,8 +161,7 @@ export default async function TenantStorefrontPage({
     });
 
     if (productsResult.docs.length > 0) {
-      products = productsResult.docs.map((p) => {
-        const prod = p as any;
+      products = productsResult.docs.map((prod) => {
         return {
           id: String(prod.id),
           sku: prod.sku || `SKU-${prod.id}`,
@@ -194,7 +176,7 @@ export default async function TenantStorefrontPage({
           stockQuantity: prod.stockQuantity ? Number(prod.stockQuantity) : undefined,
           featured: Boolean(prod.featured),
           variants: Array.isArray(prod.variants)
-            ? prod.variants.map((v: any) => ({
+            ? prod.variants.map((v) => ({
                 name: v.name,
                 sku: v.sku || undefined,
                 price: Number(v.price) || 0,
@@ -203,10 +185,10 @@ export default async function TenantStorefrontPage({
               }))
             : [],
           modifiers: Array.isArray(prod.modifiers)
-            ? prod.modifiers.map((m: any) => ({
+            ? prod.modifiers.map((m) => ({
                 groupName: m.groupName,
                 options: Array.isArray(m.options)
-                  ? m.options.map((opt: any) => ({
+                  ? m.options.map((opt) => ({
                       name: opt.name,
                       priceDelta: Number(opt.priceDelta) || 0,
                     }))
@@ -216,14 +198,15 @@ export default async function TenantStorefrontPage({
           images: prod.imageUrl
             ? [{ url: prod.imageUrl }]
             : Array.isArray(prod.images) && prod.images.length > 0
-            ? prod.images.map((img: any) => ({
-                url: (typeof img.image === 'object' && img.image?.url)
-                  ? img.image.url
-                  : typeof img.url === 'string'
-                  ? img.url
-                  : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+            ? prod.images.map((img) => ({
+                // La fila ProductImage solo trae la relación `image`
+                // (poblada como Media con url, o id numérico sin resolver).
+                url:
+                  typeof img.image === 'object' && img.image?.url
+                    ? img.image.url
+                    : FALLBACK_IMAGE_URL,
               }))
-            : [{ url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80' }],
+            : [{ url: FALLBACK_IMAGE_URL }],
         };
       });
 

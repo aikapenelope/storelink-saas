@@ -361,125 +361,138 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
-    // 8. Upsert Customer in CRM Collection & Tagging (Atomic Sync)
+    // 8. Persist Order in Orders Collection
     // ------------------------------------------------------------------
-    if (tenantId) {
-      try {
-        const cleanPhone = customer.phone.trim();
-        const existingCustomerRes = await payload.find({
-          collection: 'customers',
-          where: {
-            and: [
-              { tenant: { equals: tenantId } },
-              { phone: { equals: cleanPhone } },
-            ],
+    // El pedido se persiste PRIMERO y su fallo se propaga al cliente
+    // (success:false): devolver éxito sin pedido dejaría al cliente en
+    // WhatsApp sin orden registrada, sin inventario y sin despacho
+    // (Trello/email). El CRM va después como best-effort.
+    if (!tenantId) {
+      return { success: false, error: 'Tienda no encontrada' };
+    }
+
+    try {
+      const orderDoc = await payload.create({
+        collection: 'orders',
+        overrideAccess: true,
+        data: {
+          orderNumber,
+          status: 'pending',
+          tenant: tenantId,
+          deliveryType: customer.deliveryType || 'delivery',
+          deliveryDetails: customer.deliveryDetails || undefined,
+          paymentDetails: customer.paymentDetails || undefined,
+          customer: {
+            name: customer.name,
+            phone: customer.phone,
+            email: customer.email || '',
+            address: customer.address || '',
+            paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
+            notes: customer.notes || '',
           },
-          limit: 1,
-          overrideAccess: true,
+          items: verifiedItems.map((item) => ({
+            sku: item.sku || 'N/A',
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            subtotal: item.price * item.quantity,
+          })),
+          totalAmount: total,
+          currency: currency || 'USD',
+          // Snapshot de la tasa aplicada — conciliación exacta por pedido
+          exchangeRateVES: vesRate ?? undefined,
+        },
+      });
+
+      // Despacho asíncrono (Jobs Queue): Trello + email con PDF. El job se
+      // encola (durabilidad + reintentos) y se procesa AL INSTANTE vía
+      // runByID dentro de after(): corre justo después de responder al
+      // cliente, sin esperar a ningún cron. Si falla, queda en la cola y el
+      // runner externo (/api/jobs/run) lo reintenta.
+      try {
+        const job = await payload.jobs.queue({
+          workflow: 'order-created',
+          input: { orderId: orderDoc.id as number },
         });
 
-        if (existingCustomerRes.docs.length > 0) {
-          const existingCust = existingCustomerRes.docs[0] as Customer;
-          const newOrdersCount = (Number(existingCust.totalOrders) || 0) + 1;
-          const newSpent = (Number(existingCust.totalSpent) || 0) + total;
-          const newTag: 'vip' | 'frecuente' | 'nuevo' =
-            newOrdersCount >= 3 || newSpent >= 50 ? 'vip' : 'frecuente';
-
-          await payload.update({
-            collection: 'customers',
-            id: existingCust.id,
-            overrideAccess: true,
-            data: {
-              name: customer.name || existingCust.name,
-              email: customer.email || existingCust.email,
-              totalOrders: newOrdersCount,
-              totalSpent: newSpent,
-              tag: newTag,
-              lastOrderAt: now.toISOString(),
-            },
-          });
-        } else {
-          await payload.create({
-            collection: 'customers',
-            overrideAccess: true,
-            data: {
-              name: customer.name,
-              phone: cleanPhone,
-              email: customer.email || '',
-              tenant: tenantId as any,
-              totalOrders: 1,
-              totalSpent: total,
-              tag: 'nuevo',
-              lastOrderAt: now.toISOString(),
-            },
-          });
-        }
-      } catch (crmErr) {
-        console.warn('CRM upsert warning:', crmErr);
+        after(async () => {
+          try {
+            const jobsPayload = await getPayload({ config });
+            await jobsPayload.jobs.runByID({ id: job.id });
+          } catch (runErr) {
+            console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
+          }
+        });
+      } catch (queueErr) {
+        // Visible en logs: un fallo aquí pierde Trello+email del pedido
+        console.error('Jobs queue error:', queueErr);
       }
+    } catch (orderErr) {
+      console.error('Order creation error:', orderErr);
+      return {
+        success: false,
+        error: 'No se pudo registrar tu pedido. Por favor inténtalo de nuevo.',
+      };
+    }
 
-      // ------------------------------------------------------------------
-      // 9. Persist Order in Orders Collection
-      // ------------------------------------------------------------------
-      try {
-        const orderDoc = await payload.create({
-          collection: 'orders',
+    // ------------------------------------------------------------------
+    // 9. Upsert Customer in CRM Collection & Tagging
+    // ------------------------------------------------------------------
+    // Best-effort y DESPUÉS del pedido: los totales del CRM (totalOrders /
+    // totalSpent) solo cuentan pedidos realmente persistidos en BD; un fallo
+    // de CRM nunca bloquea la venta ya registrada.
+    try {
+      const cleanPhone = customer.phone.trim();
+      const existingCustomerRes = await payload.find({
+        collection: 'customers',
+        where: {
+          and: [
+            { tenant: { equals: tenantId } },
+            { phone: { equals: cleanPhone } },
+          ],
+        },
+        limit: 1,
+        overrideAccess: true,
+      });
+
+      if (existingCustomerRes.docs.length > 0) {
+        const existingCust = existingCustomerRes.docs[0] as Customer;
+        const newOrdersCount = (Number(existingCust.totalOrders) || 0) + 1;
+        const newSpent = (Number(existingCust.totalSpent) || 0) + total;
+        const newTag: 'vip' | 'frecuente' | 'nuevo' =
+          newOrdersCount >= 3 || newSpent >= 50 ? 'vip' : 'frecuente';
+
+        await payload.update({
+          collection: 'customers',
+          id: existingCust.id,
           overrideAccess: true,
           data: {
-            orderNumber,
-            status: 'pending',
-            tenant: tenantId as any,
-            deliveryType: customer.deliveryType || 'delivery',
-            deliveryDetails: customer.deliveryDetails || undefined,
-            paymentDetails: customer.paymentDetails || undefined,
-            customer: {
-              name: customer.name,
-              phone: customer.phone,
-              email: customer.email || '',
-              address: customer.address || '',
-              paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
-              notes: customer.notes || '',
-            },
-            items: verifiedItems.map((item) => ({
-              sku: item.sku || 'N/A',
-              title: item.title,
-              price: item.price,
-              quantity: item.quantity,
-              subtotal: item.price * item.quantity,
-            })),
-            totalAmount: total,
-            currency: currency || 'USD',
-            // Snapshot de la tasa aplicada — conciliación exacta por pedido
-            exchangeRateVES: vesRate ?? undefined,
+            name: customer.name || existingCust.name,
+            email: customer.email || existingCust.email,
+            totalOrders: newOrdersCount,
+            totalSpent: newSpent,
+            tag: newTag,
+            lastOrderAt: now.toISOString(),
           },
         });
-
-        // Despacho asíncrono (Jobs Queue): Trello + email con PDF. El job se
-        // encola (durabilidad + reintentos) y se procesa AL INSTANTE vía
-        // runByID dentro de after(): corre justo después de responder al
-        // cliente, sin esperar a ningún cron. Si falla, queda en la cola y el
-        // runner externo (/api/jobs/run) lo reintenta.
-        try {
-          const job = await payload.jobs.queue({
-            workflow: 'order-created',
-            input: { orderId: orderDoc.id as number },
-          });
-
-          after(async () => {
-            try {
-              const jobsPayload = await getPayload({ config });
-              await jobsPayload.jobs.runByID({ id: job.id });
-            } catch (runErr) {
-              console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
-            }
-          });
-        } catch (queueErr) {
-          // Visible en logs: un fallo aquí pierde Trello+email del pedido
-          console.error('Jobs queue error:', queueErr);
-        }
-      } catch (orderErr) {
-        console.error('Order creation error:', orderErr);
+      } else {
+        await payload.create({
+          collection: 'customers',
+          overrideAccess: true,
+          data: {
+            name: customer.name,
+            phone: cleanPhone,
+            email: customer.email || '',
+            tenant: tenantId,
+            totalOrders: 1,
+            totalSpent: total,
+            tag: 'nuevo',
+            lastOrderAt: now.toISOString(),
+          },
+        });
       }
+    } catch (crmErr) {
+      console.warn('CRM upsert warning:', crmErr);
     }
 
     // ------------------------------------------------------------------

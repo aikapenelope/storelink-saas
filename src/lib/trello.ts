@@ -100,10 +100,10 @@ _Generado automáticamente desde StoreLink PWA_
       return { success: false, error: errorText };
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { id?: string };
     return { success: true, cardId: data.id };
-  } catch (err: any) {
+  } catch (err) {
     console.error('Trello API exception:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
