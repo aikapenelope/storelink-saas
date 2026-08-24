@@ -23,10 +23,16 @@ export async function GET(
       return new NextResponse('No autorizado', { status: 401 });
     }
 
+    // Patrón oficial Local API (docs/local-api): overrideAccess es true por
+    // defecto y SALTA el access control. Con false + user, el plugin
+    // multi-tenant aplica el constraint { tenant: { in: [...] } } y un
+    // tenant-admin solo resuelve pedidos de SUS tiendas.
     const orderRes = await payload.find({
       collection: 'orders',
       where: { orderNumber: { equals: id } },
       limit: 1,
+      user,
+      overrideAccess: false,
     });
     const orderDoc = orderRes.docs[0];
 

@@ -32,38 +32,24 @@ export async function PATCH(
       return NextResponse.json({ error: `Estado de pago inválido: ${paymentStatus}` }, { status: 400 });
     }
 
-    // Fetch existing order — con el `user` real para que apliquen los
-    // constraints multi-tenant (antes, req anónimo → 404 para tenant-admins)
-    const order = await payload.findByID({
-      collection: 'orders',
-      id,
-      user,
-    });
-
-    if (!order) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
-    }
-
-    // Verify multi-tenant authorization
-    const isSuperAdmin = (user as any).role === 'super-admin';
-    const userTenants = (user as any).tenants || [];
-    const orderTenantId = typeof (order as any).tenant === 'object'
-      ? (order as any).tenant?.id
-      : (order as any).tenant;
-
-    const hasAccess =
-      isSuperAdmin ||
-      !orderTenantId ||
-      userTenants.some((t: any) => {
-        const tid = typeof t.tenant === 'object' ? t.tenant?.id : t.tenant;
-        return tid === orderTenantId;
+    // Autorización multi-tenant 100% nativa (docs/access-control + plugin
+    // multi-tenant): con overrideAccess:false + user, read/update devuelven el
+    // constraint { tenant: { in: [...] } } y Payload lo combina con la query.
+    // Un pedido de otra tienda o huérfano (tenant vacío) no coincide → NotFound
+    // (404). El super-admin pasa vía userHasAccessToAllTenants del plugin.
+    let order;
+    try {
+      order = await payload.findByID({
+        collection: 'orders',
+        id,
+        user,
+        overrideAccess: false,
       });
-
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: 'No tienes permiso para modificar pedidos de otra tienda.' },
-        { status: 403 }
-      );
+    } catch (error) {
+      if ((error as { status?: number }).status === 404 || (error as Error).name === 'NotFound') {
+        return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+      }
+      throw error;
     }
 
     const updateData: any = {};
@@ -77,22 +63,31 @@ export async function PATCH(
       };
     }
 
-    const updated = await payload.update({
-      collection: 'orders',
-      id,
-      data: updateData,
-    });
-
     try {
-      revalidatePath('/admin/analytics');
-      revalidatePath('/admin/collections/orders');
-    } catch {}
+      const updated = await payload.update({
+        collection: 'orders',
+        id,
+        data: updateData,
+        user,
+        overrideAccess: false,
+      });
 
-    return NextResponse.json({
-      success: true,
-      order: updated,
-      message: 'Estado del pedido actualizado correctamente',
-    });
+      try {
+        revalidatePath('/admin/analytics');
+        revalidatePath('/admin/collections/orders');
+      } catch {}
+
+      return NextResponse.json({
+        success: true,
+        order: updated,
+        message: 'Estado del pedido actualizado correctamente',
+      });
+    } catch (error) {
+      if ((error as { status?: number }).status === 404 || (error as Error).name === 'NotFound') {
+        return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Error updating order status:', error);
     return NextResponse.json({ error: 'Error interno al actualizar el pedido' }, { status: 500 });

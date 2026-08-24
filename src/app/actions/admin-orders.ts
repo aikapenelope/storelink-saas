@@ -19,12 +19,17 @@ export async function fetchOrdersPage(
     return { docs: [], hasNextPage: false, totalDocs: 0 };
   }
 
+  // Patrón oficial Local API (docs/local-api): sin overrideAccess:false el
+  // access control NO corre y el listado sería global para cualquier usuario
+  // autenticado. Con false + user, el plugin multi-tenant filtra por tenancia.
   const res = await payload.find({
     collection: 'orders',
     page,
     limit: PAGE_SIZE,
     sort: '-createdAt',
     depth: 0,
+    user,
+    overrideAccess: false,
   });
 
   return {
