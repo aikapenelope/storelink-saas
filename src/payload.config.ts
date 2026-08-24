@@ -1,6 +1,5 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { timingSafeEqual } from 'crypto';
 import { buildConfig, type Plugin } from 'payload';
 import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
@@ -13,6 +12,7 @@ import { en } from '@payloadcms/translations/languages/en';
 import { resendTenantAdapter } from './lib/email/resend-tenant-adapter';
 import { migrations } from './migrations';
 import { getUserRole } from './lib/utils';
+import { verifyCronSecret } from './lib/cron-secret';
 import sharp from 'sharp';
 
 import { Users } from './collections/Users';
@@ -171,19 +171,16 @@ export default buildConfig({
   // Actions → GET /api/payload-jobs/run, con x-cron-secret) reintenta fallos;
   // access.run valida ese secreto sobre el endpoint REST oficial.
   jobs: {
+    // R2 (plan v2): explícito a propósito — el default oficial SOLO borra los
+    // exitosos; los fallidos (hasError) persisten y los purga el endpoint
+    // /api/admin/cleanup-jobs vía runner externo.
+    deleteJobOnComplete: true,
     tasks: orderJobs.tasks,
     workflows: orderJobs.workflows,
     access: {
-      run: ({ req }) => {
-        const provided = req.headers.get('x-cron-secret');
-        if (!provided) return false;
-        // Comparación timing-safe (crypto.timingSafeEqual de Node): evita
-        // filtrar el secreto por diferencias medibles de tiempo.
-        const expected = process.env.CRON_SECRET ?? '';
-        const a = Buffer.from(provided);
-        const b = Buffer.from(expected);
-        return a.length === b.length && timingSafeEqual(a, b);
-      },
+      // Secreto del runner verificado timing-safe (helper compartido con
+      // /api/admin/cleanup-jobs).
+      run: ({ req }) => verifyCronSecret(req.headers.get('x-cron-secret')),
     },
   },
   // Workaround documentado: buildConfig espera el tipo estático de sharp que
