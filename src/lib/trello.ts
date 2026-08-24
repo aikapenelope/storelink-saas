@@ -92,6 +92,10 @@ _Generado automáticamente desde StoreLink PWA_
       headers: {
         Accept: 'application/json',
       },
+      // R3 (plan v2): timeout duro — sin él, un cuelgue de Trello retiene el
+      // job hasta el timeout de la plataforma. Los reintentos ya los da la
+      // Jobs Queue (3 attempts/backoff 30s).
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {

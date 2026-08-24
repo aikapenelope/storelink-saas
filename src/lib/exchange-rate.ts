@@ -34,6 +34,7 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
     const bcvRes = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', {
       next: { revalidate: 300 },
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
     });
     if (bcvRes.ok) {
       const data = await bcvRes.json();
@@ -49,6 +50,7 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
     const parRes = await fetch('https://ve.dolarapi.com/v1/dolares/paralelo', {
       next: { revalidate: 300 },
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
     });
     if (parRes.ok) {
       const data = await parRes.json();
@@ -76,6 +78,9 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
         tradeType: 'BUY',
       }),
       next: { revalidate: 300 },
+      // R3 (plan v2): esta llamada corre en el camino crítico del checkout
+      // (resolveExchangeRateVES en processOrder) — timeout duro obligatorio.
+      signal: AbortSignal.timeout(10000),
     });
 
     if (binanceRes.ok) {
