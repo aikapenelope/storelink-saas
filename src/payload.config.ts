@@ -6,6 +6,7 @@ import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
 import { seoPlugin } from '@payloadcms/plugin-seo';
+import type { GenerateDescription, GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types';
 import { s3Storage } from '@payloadcms/storage-s3';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
@@ -22,9 +23,25 @@ import { Orders } from './collections/Orders';
 import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
 import { orderJobs } from './jobs/order-created';
+import type { Product, Tenant } from './payload-types';
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
+
+// El plugin SEO corre sobre tenants y products: el doc es la unión parcial
+// de ambos (title/name/description/branding/slug según colección).
+type SeoDoc = Partial<Tenant & Product>;
+
+const generateSeoTitle: GenerateTitle<SeoDoc> = ({ doc }) =>
+  `${doc?.title || doc?.name || 'Flow'} | Catálogo Online Oficial`;
+
+const generateSeoDescription: GenerateDescription<SeoDoc> = ({ doc }) =>
+  doc?.description ||
+  doc?.branding?.welcomeMessage ||
+  'Catálogo interactivo PWA con pedidos directos por WhatsApp.';
+
+const generateSeoURL: GenerateURL<SeoDoc> = ({ doc }) =>
+  `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc?.slug || ''}`;
 
 const plugins: Plugin[] = [
   multiTenantPlugin({
@@ -59,13 +76,9 @@ const plugins: Plugin[] = [
   seoPlugin({
     collections: ['products', 'tenants'],
     uploadsCollection: 'media',
-    generateTitle: ({ doc }: any) => `${doc?.title || doc?.name || 'Flow'} | Catálogo Online Oficial`,
-    generateDescription: ({ doc }: any) =>
-      doc?.description ||
-      doc?.branding?.welcomeMessage ||
-      'Catálogo interactivo PWA con pedidos directos por WhatsApp.',
-    generateURL: ({ doc }: any) =>
-      `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc?.slug || ''}`,
+    generateTitle: generateSeoTitle,
+    generateDescription: generateSeoDescription,
+    generateURL: generateSeoURL,
   }),
 ];
 
@@ -173,6 +186,10 @@ export default buildConfig({
       },
     },
   },
+  // Workaround documentado: buildConfig espera el tipo estático de sharp que
+  // usa Payload internamente; con sharp@0.35 el runtime es compatible pero el
+  // tipo difiere. Único `as any` justificado del repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),

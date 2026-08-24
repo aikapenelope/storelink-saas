@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
+import type { Order } from '@/payload-types';
 
 export async function PATCH(
   request: NextRequest,
@@ -52,7 +53,10 @@ export async function PATCH(
       throw error;
     }
 
-    const updateData: any = {};
+    const updateData: {
+      status?: Order['status'];
+      paymentDetails?: Order['paymentDetails'];
+    } = {};
     if (status) {
       updateData.status = status;
     }
