@@ -74,6 +74,11 @@ export interface CheckoutResponse {
   error?: string;
 }
 
+// R9 (plan v2): acota el tamaño máximo del pedido. Con el lookup en bloque
+// (un solo find), limita también el radio de la query y evita carritos
+// gigantes usados como DoS de latencia sin afectar la compra normal.
+const MAX_CHECKOUT_ITEMS = 30;
+
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
     const { tenantSlug, storeName, currency, showVES, customer, items } = request;
@@ -97,6 +102,10 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     if (!items || items.length === 0) {
       return { success: false, error: 'El carrito está vacío' };
+    }
+
+    if (items.length > MAX_CHECKOUT_ITEMS) {
+      return { success: false, error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).` };
     }
 
     if (!customer.name || !customer.phone || !customer.email) {
@@ -138,6 +147,36 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     const verifiedItems: CheckoutItemData[] = [];
 
+    // R9 (plan v2): UN solo roundtrip para todo el carrito — los SKUs se
+    // resuelven en bloque con in[] sobre sku base y variantes (docs/queries:
+    // dot-notation anidada) y depth:0 evita poblar relaciones que no se usan.
+    // limit = skus.length basta: cada producto candidato contiene ≥1 SKU del
+    // carrito, y la cantidad de SKUs ya queda acotada por MAX_CHECKOUT_ITEMS.
+    const skus = Array.from(new Set(items.map((i) => i.sku).filter(Boolean)));
+    const candidatesRes = await payload.find({
+      collection: 'products',
+      where: {
+        and: [
+          { tenant: { equals: tenantId } },
+          {
+            or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }],
+          },
+        ],
+      },
+      limit: Math.max(skus.length, 1),
+      depth: 0,
+      overrideAccess: true,
+    });
+
+    const baseBySku = new Map<string, Product>();
+    const variantOwnerBySku = new Map<string, Product>();
+    for (const doc of candidatesRes.docs as Product[]) {
+      if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
+      for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
+        if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
+      }
+    }
+
     for (const item of items) {
       // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
       const qty = Number(item.quantity);
@@ -152,30 +191,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       // Todo item debe resolver a un producto REAL del tenant (el SKU y el
       // precio los decide el servidor, nunca el cliente). El lookup acepta
       // SKU base o SKU de variante (catálogo con variantes).
-      const dbProductRes = await payload.find({
-        collection: 'products',
-        where: {
-          and: [
-            { tenant: { equals: tenantId } },
-            {
-              or: [
-                { sku: { equals: item.sku } },
-                { 'variants.sku': { equals: item.sku } },
-              ],
-            },
-          ],
-        },
-        limit: 1,
-        overrideAccess: true,
-      });
+      const dbProd = baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku);
 
-      if (dbProductRes.docs.length === 0) {
+      if (!dbProd) {
         // Sin eco del SKU: no revelar al sondeo qué códigos existen en el
         // catálogo del tenant (enumeración).
         return { success: false, error: 'Producto no disponible en el catálogo.' };
       }
-
-      const dbProd = dbProductRes.docs[0] as Product;
 
       // Precio y stock desde el servidor: si el SKU es de una variante, se
       // usan el precio y stock de la variante; si no, los del producto base.
