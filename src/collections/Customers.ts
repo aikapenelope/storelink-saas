@@ -1,8 +1,13 @@
 import type { CollectionConfig } from 'payload';
 import { getUserRole, hasTenantAccess } from '@/lib/utils';
+import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 export const Customers: CollectionConfig = {
   slug: 'customers',
+  hooks: {
+    // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
+    beforeChange: [createTenantWriteGuard()],
+  },
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'phone', 'totalOrders', 'totalSpent', 'lastOrderAt', 'tag'],

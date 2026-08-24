@@ -1,5 +1,6 @@
 import type { CollectionConfig, CollectionAfterChangeHook, Where } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
+import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
@@ -103,6 +104,8 @@ export const Orders: CollectionConfig = {
     defaultColumns: ['orderNumber', 'customer', 'totalAmount', 'status', 'createdAt'],
   },
   hooks: {
+    // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
+    beforeChange: [createTenantWriteGuard()],
     afterChange: [manageOrderInventoryHook],
   },
   access: {
