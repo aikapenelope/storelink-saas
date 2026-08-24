@@ -170,7 +170,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       });
 
       if (dbProductRes.docs.length === 0) {
-        return { success: false, error: `Producto no disponible: ${item.sku}` };
+        // Sin eco del SKU: no revelar al sondeo qué códigos existen en el
+        // catálogo del tenant (enumeración).
+        return { success: false, error: 'Producto no disponible en el catálogo.' };
       }
 
       const dbProd = dbProductRes.docs[0] as Product;
@@ -198,7 +200,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         for (const optionName of item.modifiers) {
           const option = optionList.find((o) => o.name === optionName);
           if (!option) {
-            return { success: false, error: `Opción no disponible: ${optionName}` };
+            return { success: false, error: 'Opción no disponible en el catálogo.' };
           }
           modifiersDelta += Number(option.priceDelta) || 0;
         }
