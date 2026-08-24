@@ -1,5 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { timingSafeEqual } from 'crypto';
 import { buildConfig, type Plugin } from 'payload';
 import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
@@ -162,7 +163,13 @@ export default buildConfig({
     access: {
       run: ({ req }) => {
         const provided = req.headers.get('x-cron-secret');
-        return !!provided && provided === process.env.CRON_SECRET;
+        if (!provided) return false;
+        // Comparación timing-safe (crypto.timingSafeEqual de Node): evita
+        // filtrar el secreto por diferencias medibles de tiempo.
+        const expected = process.env.CRON_SECRET ?? '';
+        const a = Buffer.from(provided);
+        const b = Buffer.from(expected);
+        return a.length === b.length && timingSafeEqual(a, b);
       },
     },
   },
@@ -179,9 +186,19 @@ export default buildConfig({
       max: 10, // Optimal for concurrent RSC (generateMetadata + Page) with Supabase Transaction Pooler (6543)
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 15000,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      // TLS según docs oficiales de Supabase (SSL Enforcement): el modo
+      // recomendado es verify-full. Con SUPABASE_CA_CERT (PEM descargable del
+      // dashboard: Database Settings → SSL Configuration) se verifica la CA;
+      // sin ella se mantiene require (cifrado sin verificación) para no romper
+      // entornos donde la var aún no esté configurada.
+      ssl: process.env.SUPABASE_CA_CERT
+        ? {
+            rejectUnauthorized: true,
+            ca: process.env.SUPABASE_CA_CERT.replace(/\\n/g, '\n'),
+          }
+        : {
+            rejectUnauthorized: false,
+          },
     },
     push: false, // Production: use explicit migrations instead of auto-push
     migrationDir: path.resolve(dirname, 'migrations'),

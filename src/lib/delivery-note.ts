@@ -20,6 +20,11 @@ type SignedUrlClient = Parameters<typeof getSignedUrl>[0];
 // Máximo permitido por firma sigv4 de S3/R2: 7 días (no se puede 30).
 const DELIVERY_NOTE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+// Descarga interactiva admin: la URL se genera fresca por request, así que
+// un TTL corto basta. Los links que viajan al cliente (WhatsApp/email)
+// conservan el TTL por defecto porque deben sobrevivir horas o días.
+export const ADMIN_DOWNLOAD_TTL_SECONDS = 15 * 60;
+
 let client: S3Client | null = null;
 
 function r2Client(): S3Client {

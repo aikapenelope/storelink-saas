@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
-import { getDeliveryNoteUrl } from '@/lib/delivery-note';
+import { getDeliveryNoteUrl, ADMIN_DOWNLOAD_TTL_SECONDS } from '@/lib/delivery-note';
 
 /**
  * Descarga de la Nota de Entrega para USUARIOS AUTENTICADOS (admin).
@@ -41,7 +41,7 @@ export async function GET(
     }
 
     const orderNumber = orderDoc.orderNumber || String(orderDoc.id);
-    const url = await getDeliveryNoteUrl(orderNumber);
+    const url = await getDeliveryNoteUrl(orderNumber, ADMIN_DOWNLOAD_TTL_SECONDS);
     if (!url) {
       return new NextResponse('Nota de entrega no disponible', { status: 404 });
     }
