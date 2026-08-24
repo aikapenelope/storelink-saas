@@ -131,16 +131,19 @@ export async function getSalesSeries(
 export async function getBestSellers(
   payload: Payload,
   tenantId?: number | string | null,
-  limit = 5
+  limit = 5,
+  // M5 (plan v2): ventana acotada a 30 días — el ranking refleja el negocio
+  // RECENTE y el filtro usa orders_tenant_created_idx en lugar de escanear
+  // todo el histórico.
+  days = 30
 ): Promise<BestSeller[]> {
-  const tenantFilter =
-    tenantId != null ? sql`WHERE o.tenant_id = (${tenantId})::int` : sql``;
+  const tenantFilter = tenantId != null ? sql`AND o.tenant_id = (${tenantId})::int` : sql``;
 
   const res = await payload.db.drizzle.execute(sql`
     SELECT i.sku, i.title, SUM(i.quantity)::int AS units, COALESCE(SUM(i.subtotal), 0)::float8 AS revenue
     FROM orders_items i
     JOIN orders o ON o.id = i._parent_id
-    ${tenantFilter}
+    WHERE o.created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${tenantFilter}
     GROUP BY i.sku, i.title
     ORDER BY units DESC
     LIMIT (${limit})::int
