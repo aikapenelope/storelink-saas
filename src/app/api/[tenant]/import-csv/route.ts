@@ -4,6 +4,7 @@ import config from '@/payload.config';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { assertTenantAccess } from '@/lib/utils';
+import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,8 +96,16 @@ export async function POST(
       );
     }
 
-    // 3. Parse CSV rows
+    // Hardening CSV: límites de tamaño/filas antes de procesar (DoS) y
+    // neutralización de fórmulas al almacenar (OWASP CSV injection).
     const rawLines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const limitCheck = validateCsvLimits(csvText, Math.max(0, rawLines.length - 1));
+    if (!limitCheck.ok) {
+      return NextResponse.json(
+        { error: limitCheck.error },
+        { status: 400 }
+      );
+    }
     if (rawLines.length < 2) {
       return NextResponse.json(
         { error: 'El CSV debe tener encabezados y al menos una fila de datos' },
@@ -133,13 +142,15 @@ export async function POST(
 
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
-      const title = cols[titleIdx];
+      // Campos de texto persistidos SIEMPRE neutralizados (anti-fórmulas);
+      // los numéricos se parsean aparte y no pasan por aquí.
+      const title = sanitizeCsvCell(cols[titleIdx]);
       const price = parseFloat(cols[priceIdx]) || 0;
-      const sku = skuIdx !== -1 && cols[skuIdx] ? cols[skuIdx] : `SKU-${Date.now()}-${i}`;
-      const description = descIdx !== -1 ? cols[descIdx] : '';
+      const sku = skuIdx !== -1 && cols[skuIdx] ? sanitizeCsvCell(cols[skuIdx]) : `SKU-${Date.now()}-${i}`;
+      const description = descIdx !== -1 ? sanitizeCsvCell(cols[descIdx]) : '';
       const stockQuantity = stockIdx !== -1 ? parseInt(cols[stockIdx], 10) || 0 : undefined;
-      const rawCategory = catIdx !== -1 && cols[catIdx] ? cols[catIdx].trim() : '';
-      const imageUrl = imgIdx !== -1 && cols[imgIdx] ? cols[imgIdx].trim() : undefined;
+      const rawCategory = catIdx !== -1 && cols[catIdx] ? sanitizeCsvCell(cols[catIdx]) : '';
+      const imageUrl = imgIdx !== -1 && cols[imgIdx] ? sanitizeCsvCell(cols[imgIdx]) : undefined;
 
       if (!title) continue;
 
