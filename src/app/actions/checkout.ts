@@ -339,9 +339,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
       .join('\n');
 
-    const paymentLabel = customer.paymentDetails?.methodKey
+    // F2 (auditoría P0): el fallback es TEXTO LIBRE del cliente — se sanitiza
+    // igual que el resto de campos (fix A5) para que nadie pueda inyectar
+    // líneas falsas ("TOTAL A PAGAR: $0") en el mensaje del comercio.
+    const rawPaymentLabel = customer.paymentDetails?.methodKey
       ? customer.paymentDetails.methodKey.replace('_', ' ').toUpperCase()
       : customer.paymentMethod || 'PAGO ELECTRÓNICO';
+    const paymentLabel = sanitizePlainText(rawPaymentLabel);
 
     // Audit fix A5: todos los datos del cliente van sanitizados — un cliente
     // no puede inyectar líneas falsas ("TOTAL A PAGAR: $0") en el mensaje.
@@ -482,21 +486,35 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
         });
 
       const applyOrderToCustomer = async (cust: Customer): Promise<void> => {
-        const newOrdersCount = (Number(cust.totalOrders) || 0) + 1;
-        const newSpent = (Number(cust.totalSpent) || 0) + total;
-        await payload.update({
+        // F4 (auditoría P0): contadores ATÓMICOS con $inc de bajo nivel — el
+        // mismo patrón del hook de inventario (Orders.ts). Elimina la carrera
+        // read-modify-write entre checkouts concurrentes del mismo teléfono:
+        // dos pedidos simultáneos ya no pierden incrementos.
+        const updated = (await payload.db.updateOne({
           collection: 'customers',
           id: cust.id,
-          overrideAccess: true,
           data: {
             name: customer.name || cust.name,
             email: customer.email || cust.email,
-            totalOrders: newOrdersCount,
-            totalSpent: newSpent,
-            tag: newOrdersCount >= 3 || newSpent >= 50 ? 'vip' : 'frecuente',
             lastOrderAt: now.toISOString(),
+            totalOrders: { $inc: 1 },
+            totalSpent: { $inc: total },
           },
-        });
+        })) as Customer;
+
+        // El tag es etiqueta CRM cosmética (no dinero): se recalcula sobre el
+        // doc YA incrementado y solo se toca si cambia el umbral.
+        const ordersCount = Number(updated?.totalOrders) || 0;
+        const spentTotal = Number(updated?.totalSpent) || 0;
+        const nextTag = ordersCount >= 3 || spentTotal >= 50 ? 'vip' : 'frecuente';
+        if (updated && updated.tag !== nextTag) {
+          await payload.update({
+            collection: 'customers',
+            id: cust.id,
+            overrideAccess: true,
+            data: { tag: nextTag },
+          });
+        }
       };
 
       const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;

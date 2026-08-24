@@ -86,9 +86,15 @@ export const Tenants: CollectionConfig = {
         {
           name: 'resendApiKey',
           type: 'text',
+          // F5 (auditoría P0): write-only — la key BYOK se guarda pero NUNCA
+          // se devuelve por REST/admin (quedaría en cachés/devtools). Los
+          // flujos server-side (jobs con overrideAccess:true) sí la leen.
+          access: {
+            read: () => false,
+          },
           label: 'API Key de Resend Propia del Comercio (Opcional - BYOK)',
           admin: {
-            description: 'Si el comercio coloca su propia clave de Resend, usará su cuenta y su cuota individual. Si se deja vacío, usa la clave global del sistema.',
+            description: 'Se guarda oculta (write-only): pégala para usarla o pégala de nuevo para rotarla. Si el comercio coloca su propia clave de Resend, usará su cuenta y su cuota individual; si se deja vacío, usa la clave global del sistema.',
           },
         },
         {

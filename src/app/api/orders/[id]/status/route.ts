@@ -33,8 +33,10 @@ export async function PATCH(
 
     // Whitelist de estados (evita valores arbitrarios que rompen los selects
     // del dashboard y el flujo de reposición de inventario del hook).
-    // 'ready' se conserva por compatibilidad con pedidos legacy.
-    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'in_delivery', 'delivered', 'cancelled'];
+    // F1 (auditoría P0): 'ready' retirado — ya no existe en el schema
+    // (sustituido por 'in_delivery') y aceptarlo provocaba un 500 en la
+    // validación de Payload tras pasar el whitelist.
+    const ALLOWED_STATUSES = ['pending', 'confirmed', 'preparing', 'in_delivery', 'delivered', 'cancelled'];
     const ALLOWED_PAYMENT_STATUSES = ['pending_verification', 'verified', 'rejected'];
 
     if (status && !ALLOWED_STATUSES.includes(status)) {
