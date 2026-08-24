@@ -1,8 +1,13 @@
 import type { CollectionConfig } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
+import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 export const Media: CollectionConfig = {
   slug: 'media',
+  hooks: {
+    // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
+    beforeChange: [createTenantWriteGuard()],
+  },
   upload: {
     staticDir: 'media',
     imageSizes: [
