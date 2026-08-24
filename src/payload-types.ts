@@ -229,7 +229,7 @@ export type Order = {
   orderNumber: string;
   /** Snapshot de la tasa VES aplicada al pedido (audit fix: conciliación) */
   exchangeRateVES?: number | null;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'preparing' | 'in_delivery' | 'delivered' | 'cancelled';
   deliveryType?: 'delivery' | 'pickup' | null;
   deliveryDetails?: OrderDeliveryDetails | null;
   paymentDetails?: OrderPaymentDetails | null;
