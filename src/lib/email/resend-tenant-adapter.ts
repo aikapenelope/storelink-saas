@@ -62,6 +62,8 @@ export const resendTenantAdapter = (
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(sendEmailOptions),
+        // R3 (plan v2): timeout duro; el job reintenta (3 attempts/backoff).
+        signal: AbortSignal.timeout(10000),
       });
 
       const data = (await res.json()) as ResendResponse;
