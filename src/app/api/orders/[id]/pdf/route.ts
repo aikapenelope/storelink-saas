@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { getDeliveryNoteUrl, ADMIN_DOWNLOAD_TTL_SECONDS } from '@/lib/delivery-note';
+import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 
 /**
  * Descarga de la Nota de Entrega para USUARIOS AUTENTICADOS (admin).
@@ -21,6 +22,16 @@ export async function GET(
     const { user } = await payload.auth({ headers: request.headers });
     if (!user) {
       return new NextResponse('No autorizado', { status: 401 });
+    }
+
+    // R8 (plan v2): anti-abuso por usuario — fail-open si Upstash cae. Cada
+    // descarga genera presign de R2: 30/min por usuario.
+    const rlVerdict = await checkAdminRouteRateLimit('order-pdf', user.id);
+    if (!rlVerdict.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas descargas seguidas. Espera un minuto e inténtalo de nuevo.' },
+        { status: 429 }
+      );
     }
 
     // Patrón oficial Local API (docs/local-api): overrideAccess es true por

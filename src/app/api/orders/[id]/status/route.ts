@@ -3,6 +3,7 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
 import type { Order } from '@/payload-types';
+import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 
 export async function PATCH(
   request: NextRequest,
@@ -15,6 +16,16 @@ export async function PATCH(
 
     if (!user) {
       return NextResponse.json({ error: 'No autorizado. Debes iniciar sesión.' }, { status: 401 });
+    }
+
+    // R8 (plan v2): anti-abuso por usuario — fail-open si Upstash cae. Ruta
+    // de uso frecuente desde el dashboard: 30/min por usuario.
+    const rlVerdict = await checkAdminRouteRateLimit('order-status', user.id);
+    if (!rlVerdict.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas operaciones seguidas. Espera un minuto e inténtalo de nuevo.' },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();
