@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { assertTenantAccess } from '@/lib/utils';
 import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
+import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,17 @@ export async function POST(
       return NextResponse.json(
         { error: 'No autorizado. Debes iniciar sesión como administrador para sincronizar productos.' },
         { status: 401 }
+      );
+    }
+
+    // R8 (plan v2): anti-abuso por usuario autenticado — fail-open si Upstash
+    // cae (decisión del dueño, lib/rate-limit). La importación es la ruta más
+    // pesada: cota estricta de 2/min.
+    const rlVerdict = await checkAdminRouteRateLimit('import-csv', authResult.user.id);
+    if (!rlVerdict.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas importaciones seguidas. Espera un minuto e inténtalo de nuevo.' },
+        { status: 429 }
       );
     }
 
