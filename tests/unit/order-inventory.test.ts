@@ -4,17 +4,16 @@ import {
   findVariantIndexBySku,
   variantRowNumber,
 } from '@/collections/Orders';
+import type { ProductVariant } from '@/payload-types';
 
 /**
  * Tests del fix V-H1: la venta por SKU de variante debe resolver la FILA
  * correcta de products_variants. Helpers puros, sin runtime de Payload.
  */
 
-type Variant = { name?: string; sku?: string | null; stockQuantity?: number | null };
-
-const variants: Variant[] = [
-  { sku: 'TSHIRT-M', stockQuantity: 10 },
-  { sku: 'TSHIRT-L', stockQuantity: 0 },
+const variants: ProductVariant[] = [
+  { name: 'M', sku: 'TSHIRT-M', price: 10, stockQuantity: 10, stockStatus: 'in_stock' },
+  { name: 'L', sku: 'TSHIRT-L', price: 10, stockQuantity: 0, stockStatus: 'in_stock' },
 ];
 
 describe('findVariantIndexBySku', () => {
@@ -35,10 +34,10 @@ describe('findVariantIndexBySku', () => {
   });
 
   it('ignora filas de variante sin SKU y toma la primera coincidencia en duplicados', () => {
-    const conDuplicados: Variant[] = [
-      { sku: null },
-      { sku: 'DUP' },
-      { sku: 'DUP' },
+    const conDuplicados: ProductVariant[] = [
+      { name: 'U', sku: null, price: 10, stockStatus: 'in_stock' },
+      { name: 'A', sku: 'DUP', price: 10, stockStatus: 'in_stock' },
+      { name: 'B', sku: 'DUP', price: 10, stockStatus: 'in_stock' },
     ];
     expect(findVariantIndexBySku(conDuplicados, 'DUP')).toBe(1);
     expect(findVariantIndexBySku(conDuplicados, null)).toBe(-1);
