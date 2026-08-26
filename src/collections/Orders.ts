@@ -1,5 +1,76 @@
-import type { CollectionConfig, CollectionAfterChangeHook, Where } from 'payload';
+import type {
+  CollectionConfig,
+  CollectionAfterChangeHook,
+  Payload,
+  PayloadRequest,
+  Where,
+} from 'payload';
+import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
+import type { Product } from '@/payload-types';
+
+/**
+ * Acceso mínimo tipado al adapter de Postgres (docs/database/postgres#access-
+ * to-drizzle): sesiones de drizzle para ejecutar dentro de la transacción del
+ * request y tableNameMap para resolver el nombre real de la tabla generada
+ * sin hardcodear DDL.
+ */
+interface PostgresAdapterLike {
+  drizzle: { execute: (query: unknown) => Promise<unknown> };
+  sessions: Record<
+    string,
+    { db?: { execute: (query: unknown) => Promise<unknown> } } | undefined
+  >;
+  tableNameMap: Map<string, string>;
+}
+
+export const VARIANTS_TABLE_KEY = 'products_variants';
+
+/** Índice de la variante cuyo SKU coincide; -1 si no hay match. */
+export const findVariantIndexBySku = (
+  variants: Product['variants'] | null | undefined,
+  sku: string | null | undefined,
+): number =>
+  Array.isArray(variants) ? variants.findIndex((v) => v.sku && v.sku === sku) : -1;
+
+/** Fila física en products_variants: la columna _order es 1-based (i+1). */
+export const variantRowNumber = (variantIndex: number): number => variantIndex + 1;
+
+/**
+ * Delta ATÓMICO de stock de una variante: UPDATE de fila sobre
+ * products_variants (`stock_quantity = stock_quantity + delta` server-side),
+ * el mismo espíritu del $inc usado para el producto base. No se usa
+ * payload.update/db.updateOne porque el adapter reemplaza el array completo
+ * (delete+insert) y reintroduciría la carrera read-modify-write entre
+ * pedidos concurrentes de la misma variante. Corre en la transacción del
+ * pedido vía la sesión de drizzle (all-or-nothing junto a la orden).
+ */
+const applyVariantStockDelta = async ({
+  payload,
+  req,
+  productId,
+  variantIndex,
+  delta,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  productId: number | string;
+  variantIndex: number;
+  delta: number;
+}): Promise<void> => {
+  const adapter = payload.db as unknown as PostgresAdapterLike;
+  const txId = req.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
+  const tableName = adapter.tableNameMap.get(VARIANTS_TABLE_KEY);
+  if (!tableName) return;
+
+  await executor.execute(sql`
+    update ${sql.identifier(tableName)}
+    set stock_quantity = stock_quantity + ${delta}
+    where _parent_id = ${productId} and _order = ${variantRowNumber(variantIndex)}
+  `);
+};
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 /**
@@ -56,7 +127,28 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   if (isNewlyCreatedActive || isReactivated) {
     for (const item of doc.items) {
       const prod = await findProduct(item);
-      if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
+      if (!prod) continue;
+
+      // La venta por SKU de variante descuenta la FILA de la variante
+      // (misma semántica que valida processOrder: stock numérico en la
+      // variante manda sobre el base); el stock del producto base solo se
+      // toca cuando la venta NO corresponde a ninguna variante.
+      const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
+      const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
+
+      if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
+        const qtyToDeduct = Number(item.quantity) || 1;
+        await applyVariantStockDelta({
+          payload,
+          req,
+          productId: prod.id,
+          variantIndex,
+          delta: -qtyToDeduct,
+        });
+        continue;
+      }
+
+      if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToDeduct = Number(item.quantity) || 1;
       // Descuento ATÓMICO con el operador $inc nativo de Payload (mismo patrón
@@ -76,7 +168,26 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   } else if (isCancelled) {
     for (const item of doc.items) {
       const prod = await findProduct(item);
-      if (!prod || !prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
+      if (!prod) continue;
+
+      // Reposición simétrica: primero la variante (si la venta fue por
+      // variante), si no el stock base. Mismo criterio que el descuento.
+      const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
+      const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
+
+      if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
+        const qtyToRestore = Number(item.quantity) || 1;
+        await applyVariantStockDelta({
+          payload,
+          req,
+          productId: prod.id,
+          variantIndex,
+          delta: qtyToRestore,
+        });
+        continue;
+      }
+
+      if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToRestore = Number(item.quantity) || 1;
       // Reposición ATÓMICA con $inc (mismo patrón que el descuento): evita la
