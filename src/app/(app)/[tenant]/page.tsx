@@ -150,6 +150,10 @@ export default async function TenantStorefrontPage({
     };
 
     // Fetch products for this tenant
+    // Tope de catálogo: 500 (antes 100, que truncaba tiendas grandes en
+    // silencio). El mapeo a ProductItem liviano ocurre aquí server-side y la
+    // página es ISR, así que el costo extra queda fuera del request del
+    // cliente. Pendiente (backlog): paginación real con hasNextPage.
     const productsResult = await payload.find({
       collection: 'products',
       where: {
@@ -157,7 +161,7 @@ export default async function TenantStorefrontPage({
           equals: doc.id,
         },
       },
-      limit: 100,
+      limit: 500,
     });
 
     if (productsResult.docs.length > 0) {

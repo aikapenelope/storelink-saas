@@ -99,17 +99,27 @@ const trelloDispatchOrder: TaskConfig = {
       pdfUrl: pdfUrl ?? undefined,
     });
 
+    // Un fallo de Trello debe LANZAR: los reintentos configurados (attempts:
+    // 3, backoff 30s) solo corren si el handler lanza (docs/jobs-queue/
+    // tasks.mdx — "throw errors directly for task failures"); retornar output
+    // normal marca la tarea como exitosa y el despacho se pierde en silencio.
+    // Al reintentar no duplica tarjetas: el check de idempotencia de
+    // trelloCardUrl de arriba corta antes de volver a llamar a la API.
+    if (!trelloRes.success) {
+      throw new Error(`Trello dispatch failed: ${trelloRes.error ?? 'sin detalle'}`);
+    }
+
     await payload.update({
       collection: 'orders',
       id: orderId,
       overrideAccess: true,
       req,
       data: {
-        trelloCardUrl: trelloRes?.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined,
+        trelloCardUrl: trelloRes.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined,
       },
     });
 
-    return { output: { skipped: false, cardId: trelloRes?.cardId ?? undefined } };
+    return { output: { skipped: false, cardId: trelloRes.cardId ?? undefined } };
   },
 };
 
