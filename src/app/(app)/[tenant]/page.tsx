@@ -200,7 +200,10 @@ export default async function TenantStorefrontPage({
               }))
             : [],
           images: prod.imageUrl
-            ? [{ url: prod.imageUrl }]
+            ? prod.imageUrl
+                .split(',')
+                .map((u) => ({ url: u.trim() }))
+                .filter((img) => Boolean(img.url))
             : Array.isArray(prod.images) && prod.images.length > 0
             ? prod.images.map((img) => ({
                 // La fila ProductImage solo trae la relación `image`
