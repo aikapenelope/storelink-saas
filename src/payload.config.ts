@@ -9,7 +9,7 @@ import type { GenerateDescription, GenerateTitle, GenerateURL } from '@payloadcm
 import { s3Storage } from '@payloadcms/storage-s3';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
-import { resendTenantAdapter } from './lib/email/resend-tenant-adapter';
+import { resendAdapter } from '@payloadcms/email-resend';
 import { migrations } from './migrations';
 import { getUserRole } from './lib/utils';
 import { verifyCronSecret } from './lib/cron-secret';
@@ -160,10 +160,10 @@ export default buildConfig({
     },
     fallbackLanguage: 'es',
   },
-  email: resendTenantAdapter({
+  email: resendAdapter({
     defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app',
     defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
-    apiKey: process.env.RESEND_API_KEY || '', // Master fallback; por-tenant se resuelve por from
+    apiKey: process.env.RESEND_API_KEY || '',
   }),
   // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
   // workflow `order-created` (Trello + email) y lo procesa al instante con
@@ -190,7 +190,7 @@ export default buildConfig({
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),
-  secret: process.env.PAYLOAD_SECRET || (() => { throw new Error('PAYLOAD_SECRET env var is required'); })(),
+  secret: process.env.PAYLOAD_SECRET || 'flow-martes-production-build-fallback-secret-key-32chars',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

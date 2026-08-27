@@ -48,12 +48,14 @@ export async function getOrderKpis(
   const [totalsRes, todayRes, pendingRes, customersRes] = await Promise.all([
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
-      FROM orders WHERE 1=1 ${t}
+      FROM orders
+      WHERE (status != 'cancelled' OR status IS NULL) ${t}
     `),
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
       FROM orders
-      WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} ${t}
+      WHERE (status != 'cancelled' OR status IS NULL)
+        AND created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} ${t}
     `),
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count
@@ -104,7 +106,8 @@ export async function getSalesSeries(
            COUNT(*)::int AS count,
            COALESCE(SUM(total_amount), 0)::float8 AS total
     FROM orders
-    WHERE created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${t}
+    WHERE (status != 'cancelled' OR status IS NULL)
+      AND created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${t}
     GROUP BY 1
     ORDER BY d ASC
   `);
@@ -143,7 +146,8 @@ export async function getBestSellers(
     SELECT i.sku, i.title, SUM(i.quantity)::int AS units, COALESCE(SUM(i.subtotal), 0)::float8 AS revenue
     FROM orders_items i
     JOIN orders o ON o.id = i._parent_id
-    WHERE o.created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${tenantFilter}
+    WHERE (o.status != 'cancelled' OR o.status IS NULL)
+      AND o.created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${tenantFilter}
     GROUP BY i.sku, i.title
     ORDER BY units DESC
     LIMIT (${limit})::int

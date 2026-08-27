@@ -60,6 +60,10 @@ export default function FlowLandingPage() {
               Ver Video
             </a>
             <a href="#catalogo-demo" className="transition hover:text-[#7C3AED]">Demo Don Luigi</a>
+            <Link href="/templates" className="transition hover:text-[#7C3AED] text-violet-700 font-extrabold flex items-center gap-1">
+              <span>Plantillas (9)</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-violet-100 text-[10px] text-violet-800 uppercase font-black">Nuevo</span>
+            </Link>
             <a href="#control" className="transition hover:text-[#7C3AED]">Cómo funciona</a>
             <a href="#precio" className="transition hover:text-[#7C3AED]">Precios</a>
             <a href="#diagnostico" className="transition hover:text-[#7C3AED]">Diagnóstico</a>
@@ -394,6 +398,127 @@ export default function FlowLandingPage() {
             </div>
           </div>
 
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 3.5 SECCIÓN DE PLANTILLAS Y TEMAS (NUEVO)                                */}
+      {/* ========================================================================= */}
+      <section id="templates" className="relative bg-[#0a0316] py-16 sm:py-20 text-white overflow-hidden border-t border-b border-white/5">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-violet-300 mb-3">
+              Plantillas Listas & A Medida
+            </span>
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
+              Diseños pensados para tu nicho.<br />
+              <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-emerald-400 bg-clip-text text-transparent">
+                O la fabricamos a tu medida.
+              </span>
+            </h2>
+            <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-300 font-medium">
+              Contamos con <strong>9 plantillas oficiales de alta conversión</strong> diseñadas para restaurantes, moda, ferreterías, repuestos, mayoristas y marcas de lujo. Si tienes una referencia en mente, nuestro equipo la replica para ti.
+            </p>
+          </div>
+
+          {/* Theme Showcase Grid */}
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                id: 'food-delivery',
+                name: 'Don Luigi & Food Delivery',
+                badge: 'Gastronomía',
+                emoji: '🍔',
+                desc: 'Smash burgers, pizzas napolitanas, modificadores de combos e ingredientes.',
+              },
+              {
+                id: 'fashion-boutique',
+                name: 'AURA Fashion Studio',
+                badge: 'Moda & Ropa',
+                emoji: '👗',
+                desc: 'Prendas exclusivas, selectores de talla, colores y fotografía editorial.',
+              },
+              {
+                id: 'moto-parts',
+                name: 'El Piloto Moto Repuestos',
+                badge: 'Repuestos & Taller',
+                emoji: '🏍️',
+                desc: 'Búsqueda por modelo de moto, compatibilidad de cilindros, frenos y cascos.',
+              },
+              {
+                id: 'hardware-store',
+                name: 'El Maestro Ferretería',
+                badge: 'Industrial',
+                emoji: '🔧',
+                desc: 'Herramientas de potencia, maquinaria pesada, plomería y cotizaciones rápidas.',
+              },
+              {
+                id: 'b2b-matrix',
+                name: 'Matrix Mayorista B2B',
+                badge: 'B2B & Bultos',
+                emoji: '🏢',
+                desc: 'Precios por volumen, escalonado de bultos y pedidos mayoristas al instante.',
+              },
+              {
+                id: 'editorial',
+                name: 'Maison Alta Gama',
+                badge: 'Lookbook Lujo',
+                emoji: '✨',
+                desc: 'Tipografía serif refinada, narrativa de marca y micro-animaciones inmersivas.',
+              },
+            ].map((theme) => (
+              <div
+                key={theme.id}
+                className="group relative flex flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-5 transition duration-200 hover:border-violet-500/50 hover:bg-white/[0.07]"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-2xl">{theme.emoji}</span>
+                    <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-300 border border-violet-500/30">
+                      {theme.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-violet-300 transition">
+                    {theme.name}
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-300 leading-relaxed font-medium">
+                    {theme.desc}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                  <a
+                    href={`/demo?theme=${theme.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-violet-400 hover:text-violet-300"
+                  >
+                    <span>Ver demo en vivo</span>
+                    <iconify-icon icon="solar:arrow-right-up-linear" width="12" height="12"></iconify-icon>
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA Banner to /templates */}
+          <div className="mt-8 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-950/40 via-[#160b2e] to-black p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h4 className="text-base sm:text-lg font-extrabold text-white">
+                ¿Quieres explorar las 9 plantillas interactivas en pantalla completa?
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Prueba los carritos, cambia de tema con un clic o solicita un diseño a medida para tu empresa.
+              </p>
+            </div>
+            <Link
+              href="/templates"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-violet-600/30 transition hover:brightness-110 shrink-0"
+            >
+              <span>Ver Catálogo de Templates</span>
+              <iconify-icon icon="solar:arrow-right-bold" width="16" height="16"></iconify-icon>
+            </Link>
+          </div>
         </div>
       </section>
 

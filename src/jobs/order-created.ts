@@ -224,6 +224,26 @@ const sendOrderConfirmationEmail: TaskConfig = {
         : undefined,
     });
 
+    // Notificación opcional al comercio para alertar sobre nueva orden recibida
+    if (tenantDoc?.emailConfig?.notificationEmail) {
+      await payload.sendEmail({
+        from: { name: `Flow · ${storeName}`, address: fromEmail },
+        to: tenantDoc.emailConfig.notificationEmail,
+        subject: `🔔 [Nuevo Pedido #${orderNumber}] ${order.customer?.name || 'Cliente'} - $${total.toFixed(2)} USD`,
+        html: emailHtml,
+        attachments: emailPdfUrl
+          ? [
+              {
+                filename: `Nota-Entrega-${orderNumber}.pdf`,
+                path: emailPdfUrl,
+              },
+            ]
+          : undefined,
+      }).catch((notifErr) => {
+        console.warn('Error enviando correo de alerta al comercio:', notifErr);
+      });
+    }
+
     return { output: { skipped: false, sent: true } };
   },
 };

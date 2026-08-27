@@ -13,6 +13,13 @@ export interface DemoOption {
 
 export const DEMO_OPTIONS: DemoOption[] = [
   {
+    id: 'basic-banner',
+    name: 'Plan Básico',
+    shortName: 'Básico',
+    emoji: '🏷️',
+    badge: 'Básico',
+  },
+  {
     id: 'food-delivery',
     name: 'Don Luigi & Burgers',
     shortName: 'Comida',
@@ -22,7 +29,7 @@ export const DEMO_OPTIONS: DemoOption[] = [
   {
     id: 'fashion-boutique',
     name: 'AURA Studio',
-    shortName: 'Ropa',
+    shortName: 'Moda',
     emoji: '👗',
     badge: 'Moda',
   },
@@ -41,11 +48,32 @@ export const DEMO_OPTIONS: DemoOption[] = [
     badge: 'Ferretería',
   },
   {
-    id: 'basic-banner',
-    name: 'Variedades',
-    shortName: 'Básico',
-    emoji: '🏷️',
-    badge: 'Básico',
+    id: 'b2b-matrix',
+    name: 'Matrix B2B',
+    shortName: 'B2B',
+    emoji: '🏢',
+    badge: 'Mayorista',
+  },
+  {
+    id: 'editorial',
+    name: 'Maison Alta Gama',
+    shortName: 'Editorial',
+    emoji: '✨',
+    badge: 'Lookbook',
+  },
+  {
+    id: 'fluid-pwa',
+    name: 'Fluid Smart PWA',
+    shortName: 'Fluid App',
+    emoji: '📱',
+    badge: 'Mobile App',
+  },
+  {
+    id: 'vercel-commerce',
+    name: 'Minimal Dark Tech',
+    shortName: 'Minimal',
+    emoji: '⚡',
+    badge: 'Tech',
   },
 ];
 
@@ -65,20 +93,20 @@ export function DemosMartesSwitcher({
       className="fixed bottom-0 inset-x-0 z-50 bg-slate-950/95 backdrop-blur-xl border-t-2 border-purple-600/70 shadow-[0_-8px_20px_rgba(126,34,206,0.35)] pb-[env(safe-area-inset-bottom,0px)] font-sans"
     >
       {/* Micro header indicator */}
-      <div className="flex items-center justify-between px-3 pt-1 pb-0.5 border-b border-purple-900/30 max-w-lg mx-auto">
+      <div className="flex items-center justify-between px-3 pt-1 pb-0.5 border-b border-purple-900/30 max-w-2xl mx-auto">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
           <span className="text-[9px] font-black uppercase tracking-widest text-purple-300">
-            DEMOS MARTES
+            DEMOS MARTES ({DEMO_OPTIONS.length} PLANTILLAS)
           </span>
         </div>
         <span className="text-[8px] font-mono text-purple-300/70 uppercase">
-          Toca para cambiar tienda
+          Desliza y toca para cambiar plantilla
         </span>
       </div>
 
-      {/* 5-Column Native PWA Tab Grid */}
-      <div className="grid grid-cols-5 gap-1 p-1 max-w-lg mx-auto">
+      {/* Horizontal Scrollable PWA Tab Bar */}
+      <div className="flex items-center gap-1.5 p-1.5 max-w-3xl mx-auto overflow-x-auto no-scrollbar scroll-smooth">
         {DEMO_OPTIONS.map((opt) => {
           const isSelected = opt.id === activeTheme;
           return (
@@ -86,16 +114,16 @@ export function DemosMartesSwitcher({
               key={opt.id}
               type="button"
               onClick={() => onSelectTheme(opt.id)}
-              className={`flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all active:scale-95 ${
+              className={`flex items-center gap-1.5 py-1.5 px-3 rounded-xl transition-all flex-shrink-0 active:scale-95 ${
                 isSelected
                   ? 'bg-purple-600 text-white font-black shadow-md shadow-purple-600/40 ring-1 ring-purple-300'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-slate-800'
               }`}
             >
-              <span className="text-base leading-none mb-0.5">{opt.emoji}</span>
+              <span className="text-sm leading-none">{opt.emoji}</span>
               <span
-                className={`text-[10px] leading-tight truncate max-w-full font-bold ${
-                  isSelected ? 'text-white' : 'text-slate-400'
+                className={`text-[11px] leading-tight font-bold whitespace-nowrap ${
+                  isSelected ? 'text-white' : 'text-slate-300'
                 }`}
               >
                 {opt.shortName}

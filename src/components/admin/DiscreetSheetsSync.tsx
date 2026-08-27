@@ -16,10 +16,26 @@ export function DiscreetSheetsSync() {
     setStatus(null);
 
     try {
-      // Determine active tenant slug from URL or fallback
-      const pathParts = window.location.pathname.split('/');
-      // Default to active store or prompt
-      const tenantSlug = 'don-luigi'; // API auto-detects or falls back
+      // Determine active tenant slug dynamically from session
+      let tenantSlug = '';
+      const meRes = await fetch('/api/users/me');
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        const firstTenant = meData.user?.tenants?.[0]?.tenant;
+        if (typeof firstTenant === 'object' && firstTenant?.slug) {
+          tenantSlug = firstTenant.slug;
+        } else if (firstTenant) {
+          const tRes = await fetch(`/api/tenants/${firstTenant}`);
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            if (tData.slug) tenantSlug = tData.slug;
+          }
+        }
+      }
+
+      if (!tenantSlug) {
+        throw new Error('No se pudo identificar la tienda activa. Por favor recarga el panel.');
+      }
 
       const res = await fetch(`/api/${tenantSlug}/sync-sheets`, {
         method: 'POST',

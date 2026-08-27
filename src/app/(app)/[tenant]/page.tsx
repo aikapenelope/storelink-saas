@@ -221,8 +221,10 @@ export default async function TenantStorefrontPage({
       });
       categories = Array.from(catSet);
     }
-    // Tenant real sin productos: cascarón vacío (no catálogo demo)
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.digest?.startsWith('NEXT_NOT_FOUND') || err?.message === 'NEXT_NOT_FOUND') {
+      throw err;
+    }
     console.error('Error fetching tenant products from Payload:', err);
     notFound();
   }

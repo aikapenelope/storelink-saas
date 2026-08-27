@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, Download, RefreshCw, ExternalLink, ArrowUpDown } from 'lucide-react';
 
 export function OrdersSyncPanel() {
-  const [tenantSlug, setTenantSlug] = useState('aurita');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [exporting, setExporting] = useState(false);
   const [orderCount, setOrderCount] = useState<number | null>(null);
 
@@ -29,7 +29,7 @@ export function OrdersSyncPanel() {
           }
         }
       } catch (e) {
-        // Fallback
+        console.warn('Error detectando tienda para pedidos:', e);
       }
     }
     detectTenant();
@@ -50,6 +50,16 @@ export function OrdersSyncPanel() {
         return;
       }
 
+      // Safe CSV Cell Sanitizer (prevent formula injection)
+      const sanitize = (val: string | number | undefined | null) => {
+        if (val === undefined || val === null) return '""';
+        let str = String(val).trim();
+        if (['=', '+', '-', '@'].some((p) => str.startsWith(p))) {
+          str = `'${str}`;
+        }
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
       // Generate CSV
       const headers = [
         'Numero_Pedido',
@@ -61,7 +71,11 @@ export function OrdersSyncPanel() {
         'Modalidad',
         'Metodo_Pago',
         'Referencia_Pago',
+        'Subtotal_USD',
+        'Tarifa_Delivery_USD',
         'Total_USD',
+        'Tasa_VES',
+        'Total_VES',
         'Moneda',
         'Items_Detalle',
         'Notas',
@@ -75,19 +89,23 @@ export function OrdersSyncPanel() {
           : '';
 
         const row = [
-          `"${o.orderNumber || o.id}"`,
-          `"${o.createdAt ? new Date(o.createdAt).toLocaleString('es-VE') : ''}"`,
-          `"${o.status || 'pending'}"`,
-          `"${(o.customer?.name || '').replace(/"/g, '""')}"`,
-          `"${(o.customer?.phone || '').replace(/"/g, '""')}"`,
-          `"${(o.customer?.address || '').replace(/"/g, '""')}"`,
-          `"${o.deliveryType || 'delivery'}"`,
-          `"${(o.paymentDetails?.methodKey || o.customer?.paymentMethod || '').replace(/"/g, '""')}"`,
-          `"${(o.paymentDetails?.referenceNumber || '').replace(/"/g, '""')}"`,
-          `"${Number(o.totalAmount || o.total || 0).toFixed(2)}"`,
-          `"${o.currency || 'USD'}"`,
-          `"${itemsStr.replace(/"/g, '""')}"`,
-          `"${(o.customer?.notes || '').replace(/"/g, '""')}"`,
+          sanitize(o.orderNumber || o.id),
+          sanitize(o.createdAt ? new Date(o.createdAt).toLocaleString('es-VE') : ''),
+          sanitize(o.status || 'pending'),
+          sanitize(o.customer?.name),
+          sanitize(o.customer?.phone),
+          sanitize(o.customer?.address),
+          sanitize(o.deliveryType || 'delivery'),
+          sanitize(o.paymentDetails?.methodKey || o.customer?.paymentMethod),
+          sanitize(o.paymentDetails?.referenceNumber),
+          sanitize(Number(o.subtotal || o.totalAmount || 0).toFixed(2)),
+          sanitize(Number(o.deliveryFee || 0).toFixed(2)),
+          sanitize(Number(o.totalAmount || o.total || 0).toFixed(2)),
+          sanitize(Number(o.exchangeRateVES || 0).toFixed(2)),
+          sanitize(Number(o.totalVES || 0).toFixed(2)),
+          sanitize(o.currency || 'USD'),
+          sanitize(itemsStr),
+          sanitize(o.customer?.notes),
         ];
         csvRows.push(row.join(','));
       });
@@ -96,7 +114,7 @@ export function OrdersSyncPanel() {
       const downloadUrl = URL.createObjectURL(csvBlob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', `pedidos_${tenantSlug}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `pedidos_${tenantSlug || 'tienda'}_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

@@ -91,6 +91,8 @@ interface CartDrawerProps {
     };
   };
   deliveryConfig?: {
+    fixedPrice?: number | null;
+    estimatedTime?: string | null;
     zones?: Array<{
       id?: string | null;
       name: string;
@@ -166,10 +168,23 @@ export function CartDrawer({
   const pickupSched = pickupConfig?.schedule || 'Lun-Dom 11:30 AM - 10:00 PM';
   const pickupTime = pickupConfig?.estimatedTime || '20-30 min';
 
+  // Default Payment Method Detection based on configured merchant accounts
+  const defaultMethod = pagoMovilConfigurado
+    ? 'pago_movil'
+    : zelleConfigurado
+    ? 'zelle'
+    : binanceConfigurado
+    ? 'binance'
+    : zinliConfigurado
+    ? 'zinli'
+    : banescoConfigurado
+    ? 'banesco_panama'
+    : 'cash';
+
   // Payment Method Selection
   const [paymentMethodKey, setPaymentMethodKey] = useState<
     'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos'
-  >('pago_movil');
+  >(defaultMethod);
 
   // Customer Verification Fields
   const [paymentVerification, setPaymentVerification] = useState({
@@ -199,7 +214,9 @@ export function CartDrawer({
     pdfBase64?: string;
   } | null>(null);
 
-  const total = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+  const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+  const deliveryFee = deliveryType === 'delivery' ? Number(deliveryConfig?.fixedPrice || 0) : 0;
+  const total = itemsSubtotal + deliveryFee;
   const totalVES = total * exchangeRateVES;
 
   const handleCopyText = (text: string, key: string) => {
@@ -218,6 +235,11 @@ export function CartDrawer({
 
     if (!customer.name.trim()) {
       alert('Por favor ingresa tu nombre completo.');
+      return;
+    }
+
+    if (!customer.email.trim() || !customer.email.includes('@')) {
+      alert('Por favor ingresa un correo electrónico válido para recibir tu comprobante y nota de entrega.');
       return;
     }
 
@@ -1413,6 +1435,19 @@ export function CartDrawer({
         {/* Footer Checkout Bar */}
         {!completedOrder && items.length > 0 && (
           <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] sm:pb-4 border-t border-slate-100 bg-slate-50 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
+            {deliveryFee > 0 && (
+              <div className="space-y-1 mb-2.5 pb-2 border-b border-slate-200/80 text-xs">
+                <div className="flex items-center justify-between text-slate-500 font-medium">
+                  <span>Subtotal Productos:</span>
+                  <span className="font-mono text-slate-800 font-bold">{formatPrice(itemsSubtotal, currency)}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-500 font-medium">
+                  <span>Tarifa Fija Delivery:</span>
+                  <span className="font-mono text-emerald-600 font-bold">+{formatPrice(deliveryFee, currency)}</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mb-3">
               <div>
                 <span className="text-xs font-bold text-slate-500 block">Total a Pagar:</span>

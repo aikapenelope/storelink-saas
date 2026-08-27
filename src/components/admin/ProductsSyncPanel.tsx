@@ -5,7 +5,7 @@ import { RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle, ExternalLink, Ar
 
 export function ProductsSyncPanel() {
   const [url, setUrl] = useState('');
-  const [tenantSlug, setTenantSlug] = useState('aurita');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -15,7 +15,7 @@ export function ProductsSyncPanel() {
     errors?: Array<{ line: number; error: string }>;
   } | null>(null);
 
-  // Auto detect current tenant from session / me endpoint or URL
+  // Auto detect current tenant from session / me endpoint
   useEffect(() => {
     async function detectTenant() {
       try {
@@ -27,7 +27,6 @@ export function ProductsSyncPanel() {
             if (typeof firstTenant === 'object' && firstTenant?.slug) {
               setTenantSlug(firstTenant.slug);
             } else if (typeof firstTenant === 'string' || typeof firstTenant === 'number') {
-              // Fetch tenant doc
               const tRes = await fetch(`/api/tenants/${firstTenant}`);
               if (tRes.ok) {
                 const tData = await tRes.json();
@@ -37,7 +36,7 @@ export function ProductsSyncPanel() {
           }
         }
       } catch (e) {
-        // Fallback to aurita
+        console.warn('Error detectando tienda para sincronización:', e);
       }
     }
     detectTenant();
@@ -46,6 +45,10 @@ export function ProductsSyncPanel() {
   const handleSync = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
+    if (!tenantSlug) {
+      alert('No se ha detectado la tienda activa aún. Por favor espera un momento o recarga.');
+      return;
+    }
 
     setLoading(true);
     setResult(null);

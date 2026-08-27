@@ -54,6 +54,10 @@ export const Tenants: CollectionConfig = {
         { label: '👗 Tienda de Ropa & Moda (Boutique Lookbook - Premium)', value: 'fashion-boutique' },
         { label: '🏍️ Repuestos de Moto & Accesorios (Moto Pro - Premium)', value: 'moto-parts' },
         { label: '🔧 Ferretería & Herramientas (Ferretería Industrial - Premium)', value: 'hardware-store' },
+        { label: '🏢 B2B & Distribución Mayorista (Matriz de Pedidos Rápida)', value: 'b2b-matrix' },
+        { label: '✨ Lookbook Editorial & Alta Gama (Elegancia)', value: 'editorial' },
+        { label: '📱 Fluid PWA (Experiencia App Móvil Moderna)', value: 'fluid-pwa' },
+        { label: '⚡ Minimal Dark Tech (Electrónica & Periféricos)', value: 'vercel-commerce' },
       ],
       admin: {
         description: 'Elige si la tienda usa la plantilla del Plan Básico o una de las plantillas Premium especializadas.',
@@ -346,19 +350,37 @@ export const Tenants: CollectionConfig = {
     {
       name: 'deliveryConfig',
       type: 'group',
-      label: 'Zonas y Tarifas de Delivery / Envío',
+      label: 'Configuración de Delivery / Envíos',
       fields: [
+        {
+          name: 'fixedPrice',
+          type: 'number',
+          min: 0,
+          defaultValue: 0,
+          label: 'Tarifa Fija de Delivery ($ USD)',
+          admin: {
+            description: 'Costo fijo de envío que se suma automáticamente al pedido cuando el cliente selecciona Delivery. Si se coloca 0, el delivery no tiene costo adicional.',
+          },
+        },
+        {
+          name: 'estimatedTime',
+          type: 'text',
+          label: 'Tiempo Estimado de Entrega (ej: 30-45 min)',
+          admin: {
+            description: 'Aparece en el checkout y en el mensaje de confirmación.',
+          },
+        },
         {
           name: 'zones',
           type: 'array',
-          label: 'Zonas de Cobertura y Tarifas',
+          label: 'Zonas de Cobertura Informativas (Opcional)',
           labels: {
-            singular: 'Zona de Envío',
-            plural: 'Zonas de Envío',
+            singular: 'Zona de Cobertura',
+            plural: 'Zonas de Cobertura',
           },
           fields: [
             { name: 'name', type: 'text', required: true, label: 'Municipio / Sector (ej: Chacao, Baruta, El Hatillo)' },
-            { name: 'priceDelivery', type: 'number', min: 0, defaultValue: 0, label: 'Tarifa de Delivery ($ USD)' },
+            { name: 'priceDelivery', type: 'number', min: 0, defaultValue: 0, label: 'Tarifa Específica de Zona (opcional, $ USD)' },
             { name: 'estimatedTime', type: 'text', label: 'Tiempo Estimado de Entrega (ej: 35-50 min)' },
           ],
         },
