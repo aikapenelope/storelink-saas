@@ -362,15 +362,84 @@ export default function FlowLandingPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <a href="/demo" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded bg-[#7C3AED] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-violet-600 shadow-sm">
+                <a href="/demo" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-xl bg-[#7C3AED] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-violet-600 shadow-sm active:scale-95">
                   <span>Abrir pantalla completa</span>
                   <iconify-icon icon="solar:arrow-right-up-linear" width="12" height="12"></iconify-icon>
                 </a>
               </div>
             </div>
 
-            {/* Embedded Interactive Iframe */}
-            <div className="relative h-[36rem] sm:h-[46rem] md:h-[52rem] w-full overflow-hidden rounded-b-xl bg-slate-100">
+            {/* Mobile View: High Speed Interactive Showcase Card (No iframe scroll trap) */}
+            <div className="sm:hidden p-4 bg-gradient-to-b from-slate-900 via-slate-950 to-[#0b0517] rounded-b-2xl text-white space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-xl shadow-md">
+                    🍔
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                      Don Luigi Pizzería
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400">PWA E-commerce Ultra Rápido</p>
+                  </div>
+                </div>
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded-full">
+                  EN VIVO
+                </span>
+              </div>
+
+              {/* Sample Product Row Preview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <img
+                      src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=200&q=80"
+                      alt="Burger"
+                      className="w-12 h-12 rounded-lg object-cover bg-slate-800 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-white truncate">Smash Burger Doble Queso</p>
+                      <p className="text-[10px] text-slate-400 font-mono">$8.50 · Bs. 582,25</p>
+                    </div>
+                  </div>
+                  <span className="bg-violet-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg">
+                    + Pedir
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <img
+                      src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=200&q=80"
+                      alt="Pizza"
+                      className="w-12 h-12 rounded-lg object-cover bg-slate-800 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-white truncate">Pizza Napolitana Margherita</p>
+                      <p className="text-[10px] text-slate-400 font-mono">$12.00 · Bs. 822,00</p>
+                    </div>
+                  </div>
+                  <span className="bg-violet-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg">
+                    + Pedir
+                  </span>
+                </div>
+              </div>
+
+              {/* Big High-Converting Mobile Button */}
+              <a
+                href="/demo"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-emerald-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-lg shadow-violet-600/30 active:scale-95 transition"
+              >
+                <span>🚀 Probar Tienda en Vivo (Pantalla Completa)</span>
+                <iconify-icon icon="solar:arrow-right-bold" width="14" height="14"></iconify-icon>
+              </a>
+            </div>
+
+            {/* Desktop View: Embedded Interactive Iframe */}
+            <div className="hidden sm:block relative h-[46rem] md:h-[52rem] w-full overflow-hidden rounded-b-xl bg-slate-100">
               <iframe 
                 id="catalogFrame"
                 src="/demo" 
@@ -385,7 +454,7 @@ export default function FlowLandingPage() {
             <div className="mt-3 grid gap-2 p-1 sm:grid-cols-3 text-white text-xs">
               <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-3 border border-white/10">
                 <iconify-icon icon="solar:cart-check-bold" width="20" height="20" className="text-emerald-400 shrink-0"></iconify-icon>
-                <p className="text-slate-200"><strong>Prueba el carrito:</strong> Agrega hamburguesas o pizzas y mira lo fácil que es el checkout.</p>
+                <p className="text-slate-200"><strong>Prueba el carrito:</strong> Agrega artículos y simula el checkout directo.</p>
               </div>
               <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-3 border border-white/10">
                 <iconify-icon icon="solar:shield-check-bold" width="20" height="20" className="text-violet-400 shrink-0"></iconify-icon>
@@ -402,9 +471,9 @@ export default function FlowLandingPage() {
       </section>
 
       {/* ========================================================================= */}
-      {/* 3.5 SECCIÓN DE PLANTILLAS Y TEMAS (NUEVO)                                */}
+      {/* 3.5 SECCIÓN DE PLANTILLAS Y TEMAS                                         */}
       {/* ========================================================================= */}
-      <section id="templates" className="relative bg-[#0a0316] py-16 sm:py-20 text-white overflow-hidden border-t border-b border-white/5">
+      <section id="templates" className="relative bg-[#0a0316] py-14 sm:py-20 text-white overflow-hidden border-t border-b border-white/5">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 md:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-violet-300 mb-3">
@@ -422,11 +491,11 @@ export default function FlowLandingPage() {
           </div>
 
           {/* Theme Showcase Grid */}
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 sm:mt-10 grid gap-3.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 id: 'food-delivery',
-                name: 'Don Luigi & Food Delivery',
+                name: 'Don Luigi & Burgers',
                 badge: 'Gastronomía',
                 emoji: '🍔',
                 desc: 'Smash burgers, pizzas napolitanas, modificadores de combos e ingredientes.',
@@ -455,30 +524,51 @@ export default function FlowLandingPage() {
               {
                 id: 'b2b-matrix',
                 name: 'Matrix Mayorista B2B',
-                badge: 'B2B & Bultos',
+                badge: 'B2B & Mayorista',
                 emoji: '🏢',
                 desc: 'Precios por volumen, escalonado de bultos y pedidos mayoristas al instante.',
               },
               {
                 id: 'editorial',
-                name: 'Maison Alta Gama',
+                name: 'Maison Lookbook Alta Gama',
                 badge: 'Lookbook Lujo',
                 emoji: '✨',
                 desc: 'Tipografía serif refinada, narrativa de marca y micro-animaciones inmersivas.',
               },
+              {
+                id: 'fluid-pwa',
+                name: 'Fluid Smart PWA',
+                badge: 'Mobile App',
+                emoji: '📱',
+                desc: 'Navegación nativa ultra-fluida, chips de categorías y add-to-cart instantáneo.',
+              },
+              {
+                id: 'vercel-commerce',
+                name: 'Minimal Dark Tech',
+                badge: 'Tech & Gadgets',
+                emoji: '⚡',
+                desc: 'Estética bento dark mode inspirada en Vercel con tags de precio en vivo.',
+              },
+              {
+                id: 'basic-banner',
+                name: 'Plan Básico Express',
+                badge: 'Comercio General',
+                emoji: '🏷️',
+                desc: 'Banner de marca superior, buscador rápido y cuadrícula limpia de productos.',
+              },
             ].map((theme) => (
               <div
                 key={theme.id}
-                className="group relative flex flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-5 transition duration-200 hover:border-violet-500/50 hover:bg-white/[0.07]"
+                className="group relative flex flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:p-5 transition duration-200 hover:border-violet-500/50 hover:bg-white/[0.07]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
                     <span className="text-2xl">{theme.emoji}</span>
-                    <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-300 border border-violet-500/30">
+                    <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-violet-300 border border-violet-500/30">
                       {theme.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-extrabold text-white group-hover:text-violet-300 transition">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white group-hover:text-violet-300 transition">
                     {theme.name}
                   </h3>
                   <p className="mt-1 text-xs text-slate-300 leading-relaxed font-medium">
@@ -486,16 +576,22 @@ export default function FlowLandingPage() {
                   </p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center justify-between">
                   <a
                     href={`/demo?theme=${theme.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-violet-400 hover:text-violet-300"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-violet-400 hover:text-violet-300 active:scale-95"
                   >
                     <span>Ver demo en vivo</span>
                     <iconify-icon icon="solar:arrow-right-up-linear" width="12" height="12"></iconify-icon>
                   </a>
+                  <Link
+                    href="/templates"
+                    className="text-[11px] text-slate-400 hover:text-white transition font-medium"
+                  >
+                    Explorar
+                  </Link>
                 </div>
               </div>
             ))}
@@ -513,7 +609,7 @@ export default function FlowLandingPage() {
             </div>
             <Link
               href="/templates"
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-violet-600/30 transition hover:brightness-110 shrink-0"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-violet-600/30 transition hover:brightness-110 shrink-0 active:scale-95"
             >
               <span>Ver Catálogo de Templates</span>
               <iconify-icon icon="solar:arrow-right-bold" width="16" height="16"></iconify-icon>
