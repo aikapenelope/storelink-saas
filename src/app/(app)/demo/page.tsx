@@ -20,7 +20,7 @@ export default async function DemoPreviewPage({ searchParams }: DemoPageProps) {
     name: 'Demo Flow Store',
     slug: 'demo',
     theme: initialTheme,
-    whatsappPhone: '+584120000000',
+    whatsappPhone: '+584149189169',
     welcomeMessage: 'Vista previa interactiva de plantillas de tienda',
     exchangeRateVES: 68.5,
     showVES: true,
