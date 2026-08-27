@@ -173,6 +173,15 @@ export function DashboardOrdersManager({
       return;
     }
 
+    const sanitize = (val: string | number | undefined | null) => {
+      if (val === undefined || val === null) return '""';
+      let str = String(val).trim();
+      if (['=', '+', '-', '@'].some((p) => str.startsWith(p))) {
+        str = `'${str}`;
+      }
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
     const headers = [
       'Numero_Pedido',
       'Fecha',
@@ -198,18 +207,18 @@ export function DashboardOrdersManager({
         : '';
 
       const row = [
-        `"${o.orderNumber || o.id}"`,
-        `"${o.createdAt ? new Date(o.createdAt).toLocaleString('es-VE') : ''}"`,
-        `"${o.status || 'pending'}"`,
-        `"${(o.customer?.name || o.customerName || '').replace(/"/g, '""')}"`,
-        `"${(o.customer?.phone || '').replace(/"/g, '""')}"`,
-        `"${(o.customer?.address || '').replace(/"/g, '""')}"`,
-        `"${o.deliveryType || 'delivery'}"`,
-        `"${(o.paymentDetails?.methodKey || o.customer?.paymentMethod || '').replace(/"/g, '""')}"`,
-        `"${(o.paymentDetails?.referenceNumber || '').replace(/"/g, '""')}"`,
-        `"${totalUSD.toFixed(2)}"`,
-        `"${totalVESOrder.toFixed(2)}"`,
-        `"${itemsStr.replace(/"/g, '""')}"`,
+        sanitize(o.orderNumber || o.id),
+        sanitize(o.createdAt ? new Date(o.createdAt).toLocaleString('es-VE') : ''),
+        sanitize(o.status || 'pending'),
+        sanitize(o.customer?.name || o.customerName),
+        sanitize(o.customer?.phone),
+        sanitize(o.customer?.address),
+        sanitize(o.deliveryType || 'delivery'),
+        sanitize(o.paymentDetails?.methodKey || o.customer?.paymentMethod),
+        sanitize(o.paymentDetails?.referenceNumber),
+        sanitize(totalUSD.toFixed(2)),
+        sanitize(totalVESOrder.toFixed(2)),
+        sanitize(itemsStr),
       ];
       rows.push(row.join(','));
     });

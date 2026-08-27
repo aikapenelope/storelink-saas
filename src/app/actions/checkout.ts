@@ -249,10 +249,18 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       });
     }
 
-    const total = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
-    if (total <= 0) {
-      return { success: false, error: 'El total del pedido es inválido' };
+    const itemsSubtotal = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
+    if (itemsSubtotal <= 0) {
+      return { success: false, error: 'El total de productos del pedido es inválido' };
     }
+
+    // Tarifa fija de delivery configurada por el comercio en Payload
+    const deliveryFee =
+      customer.deliveryType === 'delivery'
+        ? Number(tenantDoc.deliveryConfig?.fixedPrice || 0)
+        : 0;
+
+    const total = itemsSubtotal + deliveryFee;
 
     // ------------------------------------------------------------------
     // 3. Resolve Exchange Rate — jerarquía del producto:
@@ -312,6 +320,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         paymentMethod: customer.paymentMethod,
         notes: customer.notes,
         currency: currency || 'USD',
+        deliveryType: customer.deliveryType,
+        deliveryFee,
+        subtotal: itemsSubtotal,
         total,
         totalVES,
         exchangeRateVES: vesRate ?? 0,
@@ -367,7 +378,7 @@ ${safeAddress ? `📍 *Dirección:* ${safeAddress}\n` : ''}${safeBuilding ? `�
 ${safeReference ? `🔢 *N° Referencia:* ${safeReference}\n` : ''}${safeNotes ? `📝 *Nota:* ${safeNotes}\n` : ''}
 🛒 *Productos:*
 ${itemsSummary}
-
+${deliveryFee > 0 ? `\n🛵 *Tarifa Delivery:* $${deliveryFee.toFixed(2)} USD` : ''}
 💰 *TOTAL A PAGAR:*
 💵 *$${total.toFixed(2)} USD*
 ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}

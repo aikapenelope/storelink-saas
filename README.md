@@ -7,10 +7,13 @@ Plataforma SaaS multi-inquilino de catálogos y e-commerce orientada a PWA móvi
 ## 🌟 Características Principales
 
 * 🏪 **Multi-Tenant Real:** Cada comerciante tiene su propia tienda PWA en la ruta `https://flow.martes.app/[slug]` (ej: `flow.martes.app/donluigi`).
-* 📱 **PWA Mobile-First:** Experiencia tipo app nativa con píldoras de categorías, buscador en vivo, cajón inferior deslizante (`Vaul`) y modal de producto.
-* 💬 **Checkout Directo a WhatsApp:** Formatea y suma los SKUs, subtotales, datos de entrega del comprador y abre el chat de WhatsApp con un solo clic.
+* 🎨 **9 Plantillas de Tienda & Temas Oficiales:** Soporte nativo para 9 estéticas por nicho (`basic-banner`, `food-delivery`, `fashion-boutique`, `moto-parts`, `hardware-store`, `b2b-matrix`, `editorial`, `fluid-pwa`, `vercel-commerce`), seleccionables al crear o editar el comercio en Payload y explorables en `/templates`.
+* 🛵 **Tarifa Fija de Delivery (Definición del Producto):** El costo de delivery es un **precio fijo** establecido por el comercio en la configuración de Payload (`deliveryConfig.fixedPrice`). Se muestra con transparencia en el catálogo, se suma al subtotal de productos en el carrito, se desglosa en el mensaje estructurado de WhatsApp y se refleja en la Nota de Entrega PDF.
+* 📱 **PWA Mobile-First:** Experiencia tipo app nativa con píldoras de categorías, buscador en vivo, cajón inferior deslizante (`Vaul`), personalizador interactivo de variantes/modificadores y modal de producto.
+* 💬 **Checkout Directo a WhatsApp:** Formatea y suma los SKUs, subtotales, tarifa de delivery fija, datos de entrega del comprador y abre el chat de WhatsApp con un solo clic.
 * 📋 **Despacho Automático a Trello:** Cada pedido crea una tarjeta en tiempo real en el workspace/lista de su comercio (`POST https://api.trello.com/1/cards`), saliendo todos por la misma credencial maestra configurada en Vercel.
-* 📄 **Notas de Entrega en PDF:** Generación instantánea de notas de entrega en PDF con logo del comercio, datos del cliente y desglose de ítems. Acceso protegido por sesión de administrador o token único por pedido.
+* 📄 **Notas de Entrega en PDF:** Generación instantánea de notas de entrega en PDF multi-página con logo del comercio, datos del cliente, desglose de ítems, tarifa de delivery y totales USD/VES. Almacenamiento seguro en Cloudflare R2 con URLs firmadas.
+* 📧 **Adapter de Correo Centralizado:** Integración con Resend a través del adaptador oficial `@payloadcms/email-resend`, centralizado a nivel de plataforma con remitente personalizado por comercio (`fromName = storeName`).
 * 🛡️ **Panel de Administración (Payload CMS 3.x):** Gestión de inventario, stock, precios, subida de fotos a Cloudflare R2, y control de usuarios super-admin / tenant-admin.
 * ☁️ **Infraestructura a Coste $0:**
   * **Vercel:** Hosting y Serverless Functions.
@@ -18,6 +21,16 @@ Plataforma SaaS multi-inquilino de catálogos y e-commerce orientada a PWA móvi
   * **Cloudflare R2:** Almacenamiento de imágenes (10 GB gratis sin costes de transferencia).
 
 > ℹ️ **Nota:** La sincronización automática del catálogo con Meta WhatsApp Business fue retirada del alcance del producto. Los pedidos entran exclusivamente por el checkout de la tienda PWA.
+
+---
+
+## 🛵 Configuración del Delivery (Regla de Negocio)
+
+El delivery en Flow funciona bajo el esquema de **costo fijo por comercio**:
+1. En el panel de administración de Payload (`Tenants` -> `Configuración de Delivery`), el comercio define el campo **Tarifa Fija de Delivery en USD** (`fixedPrice`, ej: `$3.00`) y opcionalmente el **Tiempo Estimado de Entrega** (`estimatedTime`, ej: `30-45 min`).
+2. En el storefront, cuando el cliente selecciona la modalidad **Delivery**, el carrito muestra la tarifa y la suma automáticamente al total a pagar en USD y en Bolívares (VES).
+3. En el checkout, la Server Action valida la tarifa fija del comercio en base de datos para garantizar la integridad financiera de la orden.
+4. El mensaje de WhatsApp y el PDF generado incluyen la línea separada: `🛵 Tarifa Delivery: $X.XX USD`.
 
 ---
 

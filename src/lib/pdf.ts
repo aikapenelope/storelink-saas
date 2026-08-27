@@ -10,6 +10,9 @@ export interface OrderPDFData {
   paymentMethod?: string;
   notes?: string;
   currency: string;
+  deliveryType?: 'delivery' | 'pickup' | string;
+  deliveryFee?: number;
+  subtotal?: number;
   total: number;
   totalVES?: number;
   exchangeRateVES?: number;
@@ -39,6 +42,9 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
     paymentMethod,
     notes,
     currency,
+    deliveryType,
+    deliveryFee = 0,
+    subtotal,
     total,
     totalVES,
     exchangeRateVES,
@@ -50,45 +56,95 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
   const margin = 14;
   const contentWidth = pageWidth - margin * 2; // 182mm
 
-  // ── 1. Top Brand Header Bar ──────────────────────────────────────────
-  // Gradient top accent line (Emerald)
-  doc.setFillColor(16, 185, 129); // #10b981
-  doc.rect(0, 0, pageWidth, 4, 'F');
+  const drawHeader = (isContinuation = false) => {
+    if (!isContinuation) {
+      // Gradient top accent line (Emerald)
+      doc.setFillColor(16, 185, 129); // #10b981
+      doc.rect(0, 0, pageWidth, 4, 'F');
 
-  // Main Header Background (Dark Slate #0f172a)
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 4, pageWidth, 30, 'F');
+      // Main Header Background (Dark Slate #0f172a)
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 4, pageWidth, 30, 'F');
 
-  // Store Name
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text((storeName || 'DON LUIGI & BURGERS').toUpperCase(), margin, 18);
+      // Store Name
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text((storeName || 'TIENDA OFICIAL').toUpperCase(), margin, 18);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(148, 163, 184); // Slate 400
-  doc.text('CATÁLOGO ONLINE & SISTEMA DE GESTIÓN PWA', margin, 24);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(148, 163, 184); // Slate 400
+      doc.text('CATÁLOGO ONLINE & SISTEMA DE GESTIÓN FLOW', margin, 24);
 
-  // Document Badge (Right Header)
-  doc.setFillColor(30, 41, 59); // Slate 800
-  doc.roundedRect(pageWidth - margin - 65, 9, 65, 20, 3, 3, 'F');
-  doc.setDrawColor(51, 65, 85);
-  doc.roundedRect(pageWidth - margin - 65, 9, 65, 20, 3, 3, 'D');
+      // Document Badge (Right Header)
+      doc.setFillColor(30, 41, 59); // Slate 800
+      doc.roundedRect(pageWidth - margin - 65, 9, 65, 20, 3, 3, 'F');
+      doc.setDrawColor(51, 65, 85);
+      doc.roundedRect(pageWidth - margin - 65, 9, 65, 20, 3, 3, 'D');
 
-  doc.setTextColor(52, 211, 153); // Emerald 400
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('COMPROBANTE DE PEDIDO', pageWidth - margin - 61, 15);
+      doc.setTextColor(52, 211, 153); // Emerald 400
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('COMPROBANTE DE PEDIDO', pageWidth - margin - 61, 15);
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10.5);
-  doc.text(`#${orderNumber}`, pageWidth - margin - 61, 22);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10.5);
+      doc.text(`#${orderNumber}`, pageWidth - margin - 61, 22);
 
-  doc.setTextColor(148, 163, 184);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.text(date, pageWidth - margin - 61, 26.5);
+      doc.setTextColor(148, 163, 184);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text(date, pageWidth - margin - 61, 26.5);
+    } else {
+      // Continuation Header Bar
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, pageWidth, 12, 'F');
+      doc.setFillColor(16, 185, 129);
+      doc.rect(0, 12, pageWidth, 1.5, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(`${(storeName || 'TIENDA').toUpperCase()} — PEDIDO #${orderNumber} (Continuación)`, margin, 8);
+
+      doc.setTextColor(148, 163, 184);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text(date, pageWidth - margin, 8, { align: 'right' });
+    }
+  };
+
+  const colW = {
+    sku: 28,
+    desc: 86,
+    qty: 20,
+    price: 24,
+    total: 24,
+  };
+
+  const drawTableHeader = (yPos: number) => {
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.roundedRect(margin, yPos, contentWidth, 8, 2, 2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+
+    let curX = margin;
+    doc.text('SKU / CÓDIGO', curX + 3, yPos + 5.5);
+    curX += colW.sku;
+    doc.text('DESCRIPCIÓN DEL PRODUCTO', curX + 3, yPos + 5.5);
+    curX += colW.desc;
+    doc.text('CANT.', curX + colW.qty / 2, yPos + 5.5, { align: 'center' });
+    curX += colW.qty;
+    doc.text('PRECIO UNIT.', curX + colW.price - 3, yPos + 5.5, { align: 'right' });
+    curX += colW.price;
+    doc.text('IMPORTE', curX + colW.total - 3, yPos + 5.5, { align: 'right' });
+  };
+
+  // ── 1. Page 1 Header ──────────────────────────────────────────────────
+  drawHeader(false);
 
   // ── 2. Client & Order Information Card ────────────────────────────────
   let currentY = 40;
@@ -152,7 +208,8 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
   doc.text('Modalidad:', colLeftX, row3Y);
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'normal');
-  const cleanAddress = customerAddress || 'Retiro en Tienda / Pickup';
+  const modalityLabel = deliveryType === 'delivery' ? '🛵 Delivery a Domicilio' : '🛍️ Retiro en Tienda (Pickup)';
+  const cleanAddress = customerAddress ? `${modalityLabel} — ${customerAddress}` : modalityLabel;
   doc.text(cleanAddress.substring(0, 78), colLeftX + 18, row3Y);
 
   // Row 4: Notes (if present)
@@ -167,40 +224,26 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
 
   // ── 3. Items Table Header ─────────────────────────────────────────────
   currentY = 84;
+  drawTableHeader(currentY);
 
-  const colW = {
-    sku: 28,
-    desc: 86,
-    qty: 20,
-    price: 24,
-    total: 24,
-  };
-
-  doc.setFillColor(15, 23, 42); // Slate 900
-  doc.roundedRect(margin, currentY, contentWidth, 8, 2, 2, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-
-  let curX = margin;
-  doc.text('SKU / CÓDIGO', curX + 3, currentY + 5.5);
-  curX += colW.sku;
-  doc.text('DESCRIPCIÓN DEL PRODUCTO', curX + 3, currentY + 5.5);
-  curX += colW.desc;
-  doc.text('CANT.', curX + colW.qty / 2, currentY + 5.5, { align: 'center' });
-  curX += colW.qty;
-  doc.text('PRECIO UNIT.', curX + colW.price - 3, currentY + 5.5, { align: 'right' });
-  curX += colW.price;
-  doc.text('IMPORTE', curX + colW.total - 3, currentY + 5.5, { align: 'right' });
-
-  // ── 4. Table Rows (Zebra Striping) ────────────────────────────────────
+  // ── 4. Table Rows (Zebra Striping + Multi-Page Overflow) ──────────────
   currentY += 9;
   doc.setFontSize(8.5);
 
   items.forEach((item, index) => {
-    const isEven = index % 2 === 0;
     const rowHeight = 8.5;
+
+    // Check if row exceeds printable page limit
+    if (currentY + rowHeight > 250) {
+      doc.addPage();
+      drawHeader(true);
+      currentY = 18;
+      drawTableHeader(currentY);
+      currentY += 9;
+      doc.setFontSize(8.5);
+    }
+
+    const isEven = index % 2 === 0;
 
     // Zebra fill
     if (!isEven) {
@@ -239,73 +282,103 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
   });
 
   // ── 5. Totals & Multi-Currency Card ───────────────────────────────────
-  currentY += 4;
-  const totalsBoxWidth = 84;
+  // If not enough room for totals card and signature on current page, add new page
+  if (currentY > 215) {
+    doc.addPage();
+    drawHeader(true);
+    currentY = 22;
+  } else {
+    currentY += 4;
+  }
+
+  const totalsBoxWidth = 88;
   const totalsBoxX = margin + contentWidth - totalsBoxWidth;
+  const hasDelivery = deliveryFee > 0;
+  const effectiveSubtotal = subtotal ?? items.reduce((acc, i) => acc + i.quantity * i.price, 0);
+
+  const boxHeight = (hasDelivery ? 6 : 0) + (showVES && totalVES ? 30 : 20);
 
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(totalsBoxX, currentY, totalsBoxWidth, showVES && totalVES ? 28 : 18, 3, 3, 'F');
+  doc.roundedRect(totalsBoxX, currentY, totalsBoxWidth, boxHeight, 3, 3, 'F');
   doc.setDrawColor(203, 213, 225); // Slate 300
-  doc.roundedRect(totalsBoxX, currentY, totalsBoxWidth, showVES && totalVES ? 28 : 18, 3, 3, 'D');
+  doc.roundedRect(totalsBoxX, currentY, totalsBoxWidth, boxHeight, 3, 3, 'D');
+
+  let tY = currentY + 6;
 
   // Subtotal line
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text('Subtotal:', totalsBoxX + 5, currentY + 7);
+  doc.text('Subtotal Productos:', totalsBoxX + 5, tY);
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
-  doc.text(`$${total.toFixed(2)} ${currency}`, totalsBoxX + totalsBoxWidth - 5, currentY + 7, { align: 'right' });
+  doc.text(`$${effectiveSubtotal.toFixed(2)} ${currency}`, totalsBoxX + totalsBoxWidth - 5, tY, { align: 'right' });
+
+  // Delivery line if applicable
+  if (hasDelivery) {
+    tY += 5.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Tarifa de Delivery:', totalsBoxX + 5, tY);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`$${deliveryFee.toFixed(2)} ${currency}`, totalsBoxX + totalsBoxWidth - 5, tY, { align: 'right' });
+  }
+
+  // Divider
+  tY += 3.5;
+  doc.setDrawColor(226, 232, 240);
+  doc.line(totalsBoxX + 4, tY, totalsBoxX + totalsBoxWidth - 4, tY);
+  tY += 5.5;
 
   // Main Total Line
-  doc.setDrawColor(226, 232, 240);
-  doc.line(totalsBoxX + 4, currentY + 10, totalsBoxX + totalsBoxWidth - 4, currentY + 10);
-
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('TOTAL A PAGAR:', totalsBoxX + 5, currentY + 16);
+  doc.text('TOTAL A PAGAR:', totalsBoxX + 5, tY);
   doc.setTextColor(16, 185, 129); // Emerald 600
-  doc.text(`$${total.toFixed(2)} USD`, totalsBoxX + totalsBoxWidth - 5, currentY + 16, { align: 'right' });
+  doc.text(`$${total.toFixed(2)} USD`, totalsBoxX + totalsBoxWidth - 5, tY, { align: 'right' });
 
   // Multi-Currency Bolívares Line
   if (showVES && totalVES) {
+    tY += 6;
     const calcRate = exchangeRateVES || totalVES / total;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(71, 85, 105);
-    doc.text('Equivalente VES:', totalsBoxX + 5, currentY + 22.5);
+    doc.text('Equivalente VES:', totalsBoxX + 5, tY);
     doc.setTextColor(15, 23, 42);
-    doc.text(`Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, totalsBoxX + totalsBoxWidth - 5, currentY + 22.5, { align: 'right' });
+    doc.text(`Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, totalsBoxX + totalsBoxWidth - 5, tY, { align: 'right' });
 
+    tY += 4;
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Tasa Ref: ${calcRate.toFixed(2)} Bs/$`, totalsBoxX + totalsBoxWidth - 5, currentY + 26, { align: 'right' });
+    doc.text(`Tasa Ref: ${calcRate.toFixed(2)} Bs/$`, totalsBoxX + totalsBoxWidth - 5, tY, { align: 'right' });
   }
 
   // ── 6. Signature and Verification Box ────────────────────────────────
-  const bottomY = Math.max(currentY + 36, 230);
+  const bottomY = Math.max(currentY + boxHeight + 4, 232);
 
   // Reception signature line
   doc.setDrawColor(148, 163, 184);
-  doc.line(margin + 10, bottomY + 18, margin + 85, bottomY + 18);
+  doc.line(margin + 10, bottomY + 16, margin + 85, bottomY + 16);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text('Firma y C.I. de quien recibe conforme', margin + 18, bottomY + 23);
+  doc.text('Firma y C.I. de quien recibe conforme', margin + 18, bottomY + 21);
 
   // Legal Notice Box
-  const noticeY = bottomY + 28;
+  const noticeY = bottomY + 25;
   doc.setFillColor(254, 242, 242); // Red 50
-  doc.roundedRect(margin, noticeY, contentWidth, 18, 2, 2, 'F');
+  doc.roundedRect(margin, noticeY, contentWidth, 16, 2, 2, 'F');
   doc.setDrawColor(254, 202, 202); // Red 200
-  doc.roundedRect(margin, noticeY, contentWidth, 18, 2, 2, 'D');
+  doc.roundedRect(margin, noticeY, contentWidth, 16, 2, 2, 'D');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(185, 28, 28); // Red 700
-  doc.text('AVISO DE ENTREGA — DOCUMENTO DE CONTROL INTERNO', margin + 4, noticeY + 5);
+  doc.text('AVISO DE ENTREGA — DOCUMENTO DE CONTROL INTERNO', margin + 4, noticeY + 4.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.8);
@@ -313,13 +386,13 @@ export function generateDeliveryNotePDF(data: OrderPDFData): Uint8Array {
   const legalText =
     'La presente nota de entrega tiene carácter informativo y de respaldo físico de la mercancía despachada. ' +
     'No constituye documento fiscal ni factura tributaria. Por favor envíe su comprobante de pago vía WhatsApp para la validación de la orden.';
-  doc.text(doc.splitTextToSize(legalText, contentWidth - 8), margin + 4, noticeY + 9);
+  doc.text(doc.splitTextToSize(legalText, contentWidth - 8), margin + 4, noticeY + 8.5);
 
   // ── 7. Clean Bottom Footer ────────────────────────────────────────────
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Generado electrónicamente por ${storeName || 'StoreLink'} • ${date}`, pageWidth / 2, 288, { align: 'center' });
+  doc.text(`Generado electrónicamente por ${storeName || 'Flow by Martes'} • ${date}`, pageWidth / 2, 288, { align: 'center' });
 
   const arrayBuffer = doc.output('arraybuffer');
   return new Uint8Array(arrayBuffer);

@@ -39,7 +39,17 @@ export type Tenant = {
   id: number;
   name: string;
   slug: string;
-  theme?: 'basic-banner' | 'food-delivery' | 'fashion-boutique' | 'moto-parts' | 'hardware-store' | null;
+  theme?:
+    | 'basic-banner'
+    | 'food-delivery'
+    | 'fashion-boutique'
+    | 'moto-parts'
+    | 'hardware-store'
+    | 'b2b-matrix'
+    | 'editorial'
+    | 'fluid-pwa'
+    | 'vercel-commerce'
+    | null;
   whatsappPhone: string;
   emailConfig?: {
     enabled?: boolean | null;
@@ -109,6 +119,8 @@ export type Tenant = {
     };
   };
   deliveryConfig?: {
+    fixedPrice?: number | null;
+    estimatedTime?: string | null;
     zones?: DeliveryZone[] | null;
   };
   meta?: {
