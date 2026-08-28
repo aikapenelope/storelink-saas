@@ -62,7 +62,12 @@ export async function AnalyticsView() {
       );
     }
 
-    let defaultTenantSlug = 'aurita';
+    // Super-admin sin tenant propio: usar el primero disponible en la plataforma
+    // como contexto para los widgets (exchange-rate, storefront URL).
+    // Si la plataforma está vacía, tenantSlug queda vacío y los widgets que
+    // requieren un slug activo muestran estado "sin tienda" en lugar de hacer
+    // POST a un slug inexistente (bug anterior: fallback hardcodeado 'aurita').
+    let defaultTenantSlug = '';
     if (!tenantDoc && isSuperAdminUser) {
       const firstTenantRes = await payload.find({ collection: 'tenants', limit: 1 });
       if (firstTenantRes.docs.length > 0) {

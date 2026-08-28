@@ -25,7 +25,10 @@ export const Media: CollectionConfig = {
       },
     ],
     adminThumbnail: 'thumbnail',
-    mimeTypes: ['image/*'],
+    // SVG excluido explícitamente: image/* lo incluye pero SVG puede incrustar
+    // scripts (stored XSS si se sirve desde un dominio sin Content-Type correcto).
+    // Patrón oficial: COLLECTIONS.md §Upload Collection §mimeTypes.
+    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'],
     // Sprint 4: crop:true habilita el recorte manual en el panel admin
     // sin cambios en el schema de BD (solo UI). Patrón oficial COLLECTIONS.md.
     // Sprint 5: focalPoint:true habilita el selector de punto focal en el admin.

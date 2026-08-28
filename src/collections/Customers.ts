@@ -33,6 +33,14 @@ export const Customers: CollectionConfig = {
       label: 'Teléfono / WhatsApp',
       required: true,
       index: true,
+      admin: {
+        // Celda custom: muestra el número + botón de acceso rápido a WhatsApp.
+        // El botón abre wa.me con el nombre del cliente pre-cargado en el mensaje.
+        // Patrón oficial: COLLECTIONS.md §Custom Cell Components.
+        components: {
+          Cell: '@/components/admin/CustomerWhatsAppCell#CustomerWhatsAppCell',
+        },
+      },
     },
     {
       name: 'email',
