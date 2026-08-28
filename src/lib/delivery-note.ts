@@ -71,6 +71,11 @@ export async function getDeliveryNoteUrl(
   orderNumber: string,
   expiresInSeconds = DELIVERY_NOTE_TTL_SECONDS
 ): Promise<string | null> {
+  if (process.env.R2_PUBLIC_URL) {
+    const baseUrl = process.env.R2_PUBLIC_URL.replace(/\/$/, '');
+    return `${baseUrl}/${keyFor(orderNumber)}`;
+  }
+
   try {
     // AWS SDK v3 separa la clase base Client por copia de @aws-sdk/types
     // (campos privados), así que TS no ve asignable S3Client a Client aunque

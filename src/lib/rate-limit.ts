@@ -34,7 +34,7 @@ function getCheckoutLimiter(): Ratelimit | null {
 
   limiter = new Ratelimit({
     redis: new Redis({ url, token }),
-    limiter: Ratelimit.fixedWindow(parseRateLimitMax(process.env.RATE_LIMIT_CHECKOUT_PER_MIN), '60 s'),
+    limiter: Ratelimit.slidingWindow(parseRateLimitMax(process.env.RATE_LIMIT_CHECKOUT_PER_MIN), '60 s'),
     prefix: 'storelink:checkout',
   });
   return limiter;
@@ -63,13 +63,14 @@ export async function checkCheckoutRateLimit(identifier: string): Promise<RateLi
  * checkout — contador compartido en Upstash entre instancias efímeras y
  * FAIL-OPEN decidido con el dueño. Cotas POR USUARIO autenticado (calibradas
  * provisionales; NV4 = plan Vercel efectivo pendiente de confirmar):
- * import-csv 2/min · sync-sheets 4/min · orders status|pdf 30/min.
+ * import-csv 2/min · sync-sheets 4/min · orders status|pdf 30/min · exchange-rate 10/min.
  */
 export const ADMIN_ROUTE_LIMITS = {
   'import-csv': 2,
   'sync-sheets': 4,
   'order-status': 30,
   'order-pdf': 30,
+  'exchange-rate': 10,
 } as const;
 
 export type AdminRouteKey = keyof typeof ADMIN_ROUTE_LIMITS;
@@ -97,7 +98,7 @@ function getAdminLimiter(route: AdminRouteKey): Ratelimit | null {
   const rl = redis
     ? new Ratelimit({
         redis,
-        limiter: Ratelimit.fixedWindow(ADMIN_ROUTE_LIMITS[route], '60 s'),
+        limiter: Ratelimit.slidingWindow(ADMIN_ROUTE_LIMITS[route], '60 s'),
         prefix: `storelink:${route}`,
       })
     : null;

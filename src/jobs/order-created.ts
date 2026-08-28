@@ -39,7 +39,7 @@ const trelloDispatchOrder: TaskConfig = {
 
     // Idempotencia: si la tarjeta ya se creó (p.ej. retry tras fallo de
     // update), no se duplica en Trello.
-    if (order.trelloCardUrl) {
+    if (order.trelloCardUrl && order.trelloCardUrl !== '__pending__') {
       const cardId = order.trelloCardUrl.split('/c/')[1] ?? undefined;
       return { output: { skipped: true, cardId } };
     }
@@ -64,6 +64,17 @@ const trelloDispatchOrder: TaskConfig = {
     if (!isTrelloEnabled || !apiKey || !token || !listId) {
       return { output: { skipped: true } };
     }
+
+    // Sentinel lock: marca estado intermedio para evitar carreras si hay reintentos inmediatos
+    await payload.update({
+      collection: 'orders',
+      id: orderId,
+      overrideAccess: true,
+      req,
+      data: {
+        trelloCardUrl: '__pending__',
+      },
+    });
 
     const orderNumber = order.orderNumber || String(order.id);
     // URL firmada (R2) de la nota, válida 30 días desde el despacho
@@ -103,8 +114,6 @@ const trelloDispatchOrder: TaskConfig = {
     // 3, backoff 30s) solo corren si el handler lanza (docs/jobs-queue/
     // tasks.mdx — "throw errors directly for task failures"); retornar output
     // normal marca la tarea como exitosa y el despacho se pierde en silencio.
-    // Al reintentar no duplica tarjetas: el check de idempotencia de
-    // trelloCardUrl de arriba corta antes de volver a llamar a la API.
     if (!trelloRes.success) {
       throw new Error(`Trello dispatch failed: ${trelloRes.error ?? 'sin detalle'}`);
     }
@@ -147,6 +156,11 @@ const sendOrderConfirmationEmail: TaskConfig = {
       throw new Error(`Order ${orderId} not found`);
     }
 
+    // Idempotencia: si el correo ya fue enviado exitosamente al cliente, no duplicar en reintentos
+    if (order.emailConfirmationSent) {
+      return { output: { skipped: true, sent: false } };
+    }
+
     const tenantId = typeof order.tenant === 'object' ? order.tenant?.id : order.tenant;
     const tenantDoc = tenantId
       ? ((await payload.findByID({
@@ -157,14 +171,10 @@ const sendOrderConfirmationEmail: TaskConfig = {
         }).catch(() => null)) as Tenant | null)
       : null;
 
-    // Email oficial de Payload (adapter resend único): el remitente se
-    // identifica con el NOMBRE de la tienda y su fromEmail (verificado en la
-    // cuenta Resend master); el envío va por payload.sendEmail, nunca con
-    // SDK directo. Sin correo del cliente → se omite.
-    const fromEmail =
-      tenantDoc?.emailConfig?.fromEmail ||
-      process.env.RESEND_FROM_EMAIL ||
-      'pedidos@flow.martes.app';
+    // Email oficial de Payload (adapter resend único con dominio autenticado):
+    // El remitente se identifica con el NOMBRE de la tienda y la dirección verificada.
+    // El replyTo va al correo de notificación del comercio.
+    const fromAddress = process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app';
     const customerEmail = order.customer?.email;
 
     if (!customerEmail) {
@@ -173,6 +183,8 @@ const sendOrderConfirmationEmail: TaskConfig = {
 
     const orderNumber = order.orderNumber || String(order.id);
     const storeName = tenantDoc?.name || 'Flow Store';
+    const fromDisplay = `${storeName} <${fromAddress}>`;
+    const replyTo = tenantDoc?.emailConfig?.notificationEmail || tenantDoc?.emailConfig?.fromEmail || fromAddress;
     const total = Number(order.totalAmount) || 0;
     // Tasa VES del snapshot del pedido (manual del tenant); sin ella no se muestra Bs
     const exchangeRateVES = Number(order.exchangeRateVES) || 0;
@@ -209,25 +221,43 @@ const sendOrderConfirmationEmail: TaskConfig = {
     // adjunta DESDE la URL (Resend la descarga) — sin regenerar el PDF.
     const emailPdfUrl = await getDeliveryNoteUrl(orderNumber);
 
-    await payload.sendEmail({
-      from: { name: storeName, address: fromEmail },
-      to: customerEmail,
-      subject: emailSubject,
-      html: emailHtml,
-      attachments: emailPdfUrl
-        ? [
-            {
-              filename: `Nota-Entrega-${orderNumber}.pdf`,
-              path: emailPdfUrl,
-            },
-          ]
-        : undefined,
-    });
+    try {
+      await payload.sendEmail({
+        from: fromDisplay,
+        replyTo,
+        to: customerEmail,
+        subject: emailSubject,
+        html: emailHtml,
+        attachments: emailPdfUrl
+          ? [
+              {
+                filename: `Nota-Entrega-${orderNumber}.pdf`,
+                path: emailPdfUrl,
+              },
+            ]
+          : undefined,
+      });
+
+      // Actualizar flag de idempotencia en la orden tras envío exitoso
+      await payload.update({
+        collection: 'orders',
+        id: orderId,
+        overrideAccess: true,
+        req,
+        data: {
+          emailConfirmationSent: true,
+        },
+      });
+    } catch (emailErr) {
+      console.error(`Error enviando correo de confirmación para pedido #${orderNumber}:`, emailErr);
+      throw new Error(`Email dispatch failed: ${emailErr instanceof Error ? emailErr.message : 'Error desconocido'}`);
+    }
 
     // Notificación opcional al comercio para alertar sobre nueva orden recibida
     if (tenantDoc?.emailConfig?.notificationEmail) {
       await payload.sendEmail({
-        from: { name: `Flow · ${storeName}`, address: fromEmail },
+        from: `Flow · ${storeName} <${fromAddress}>`,
+        replyTo: customerEmail,
         to: tenantDoc.emailConfig.notificationEmail,
         subject: `🔔 [Nuevo Pedido #${orderNumber}] ${order.customer?.name || 'Cliente'} - $${total.toFixed(2)} USD`,
         html: emailHtml,

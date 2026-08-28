@@ -3,6 +3,7 @@ import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { assertTenantAccess } from '@/lib/utils';
+import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 
 export async function POST(
   request: NextRequest,
@@ -15,6 +16,14 @@ export async function POST(
 
     if (!user) {
       return NextResponse.json({ error: 'No autorizado. Debes iniciar sesión.' }, { status: 401 });
+    }
+
+    const rlVerdict = await checkAdminRouteRateLimit('exchange-rate', user.id);
+    if (!rlVerdict.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas actualizaciones seguidas. Espera un momento antes de volver a intentar.' },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();

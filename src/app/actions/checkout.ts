@@ -11,6 +11,7 @@ import type { Tenant, Product, Customer } from '@/payload-types';
 import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
+import { randomInt } from 'crypto';
 
 export interface CheckoutCustomerData {
   name: string;
@@ -274,11 +275,10 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const now = new Date();
     let orderNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
+      const randomSuffix = randomInt(100000, 1000000);
       const candidate = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
         .toString()
-        .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(
-        100000 + Math.random() * 900000
-      )}`;
+        .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${randomSuffix}`;
       const clash = await payload.find({
         collection: 'orders',
         where: { orderNumber: { equals: candidate } },
@@ -361,7 +361,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // Audit fix A5: todos los datos del cliente van sanitizados — un cliente
     // no puede inyectar líneas falsas ("TOTAL A PAGAR: $0") en el mensaje.
     const safeName = sanitizePlainText(customer.name);
-    const safePhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const safePhone = cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
     const safeNotes = sanitizePlainText(customer.notes);
     const safeAddress = sanitizePlainText(customer.address);
     const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);
@@ -423,7 +424,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
           paymentDetails: customer.paymentDetails || undefined,
           customer: {
             name: customer.name,
-            phone: customer.phone,
+            phone: safePhone || customer.phone,
             email: customer.email || '',
             address: customer.address || '',
             paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
@@ -456,8 +457,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
 
         after(async () => {
           try {
-            const jobsPayload = await getPayload({ config });
-            await jobsPayload.jobs.runByID({ id: job.id });
+            await payload.jobs.runByID({ id: job.id });
           } catch (runErr) {
             console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
           }

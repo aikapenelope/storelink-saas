@@ -137,7 +137,12 @@ export default buildConfig({
   graphQL: {
     disable: true,
   },
-  maxDepth: 5,
+  maxDepth: 3,
+  upload: {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5 MB max por imagen
+    },
+  },
   admin: {
     user: Users.slug,
     components: {
@@ -190,7 +195,13 @@ export default buildConfig({
   sharp: sharp as any,
   collections: [Tenants, Users, Categories, Products, Orders, Customers, Media],
   editor: lexicalEditor(),
-  secret: process.env.PAYLOAD_SECRET || 'flow-martes-production-build-fallback-secret-key-32chars',
+  secret: (() => {
+    const secret = process.env.PAYLOAD_SECRET;
+    if (!secret && process.env.VERCEL) {
+      throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on Vercel deployments.');
+    }
+    return secret || 'flow-martes-build-secret-key-32chars-min';
+  })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

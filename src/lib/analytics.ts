@@ -39,31 +39,44 @@ function tenantClause(tenantId?: number | string | null) {
 
 const num = (v: unknown): number => Number(v) || 0;
 
+function getTableNames(payload: Payload) {
+  const adapter = payload.db as unknown as { tableNameMap?: Map<string, string> };
+  const orders = adapter.tableNameMap?.get('orders') || 'orders';
+  const customers = adapter.tableNameMap?.get('customers') || 'customers';
+  const items = adapter.tableNameMap?.get('orders_items') || 'orders_items';
+  return {
+    ordersTable: sql.identifier(orders),
+    customersTable: sql.identifier(customers),
+    itemsTable: sql.identifier(items),
+  };
+}
+
 export async function getOrderKpis(
   payload: Payload,
   tenantId?: number | string | null
 ): Promise<OrderKpis> {
   const t = tenantClause(tenantId);
+  const { ordersTable, customersTable } = getTableNames(payload);
 
   const [totalsRes, todayRes, pendingRes, customersRes] = await Promise.all([
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
-      FROM orders
+      FROM ${ordersTable}
       WHERE (status != 'cancelled' OR status IS NULL) ${t}
     `),
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
-      FROM orders
+      FROM ${ordersTable}
       WHERE (status != 'cancelled' OR status IS NULL)
         AND created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} ${t}
     `),
     payload.db.drizzle.execute(sql`
       SELECT COUNT(*)::int AS count
-      FROM orders
+      FROM ${ordersTable}
       WHERE (status IN ('pending', 'preparing', 'in_delivery') OR status IS NULL) ${t}
     `),
     payload.db.drizzle.execute(sql`
-      SELECT COUNT(*)::int AS count FROM customers WHERE 1=1 ${t}
+      SELECT COUNT(*)::int AS count FROM ${customersTable} WHERE 1=1 ${t}
     `),
   ]);
 
@@ -100,12 +113,13 @@ export async function getSalesSeries(
   days = 7
 ): Promise<SalesDay[]> {
   const t = tenantClause(tenantId);
+  const { ordersTable } = getTableNames(payload);
 
   const res = await payload.db.drizzle.execute(sql`
     SELECT to_char((created_at AT TIME ZONE ${TZ})::date, 'YYYY-MM-DD') AS d,
            COUNT(*)::int AS count,
            COALESCE(SUM(total_amount), 0)::float8 AS total
-    FROM orders
+    FROM ${ordersTable}
     WHERE (status != 'cancelled' OR status IS NULL)
       AND created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${t}
     GROUP BY 1
@@ -135,17 +149,15 @@ export async function getBestSellers(
   payload: Payload,
   tenantId?: number | string | null,
   limit = 5,
-  // M5 (plan v2): ventana acotada a 30 días — el ranking refleja el negocio
-  // RECENTE y el filtro usa orders_tenant_created_idx en lugar de escanear
-  // todo el histórico.
   days = 30
 ): Promise<BestSeller[]> {
   const tenantFilter = tenantId != null ? sql`AND o.tenant_id = (${tenantId})::int` : sql``;
+  const { ordersTable, itemsTable } = getTableNames(payload);
 
   const res = await payload.db.drizzle.execute(sql`
     SELECT i.sku, i.title, SUM(i.quantity)::int AS units, COALESCE(SUM(i.subtotal), 0)::float8 AS revenue
-    FROM orders_items i
-    JOIN orders o ON o.id = i._parent_id
+    FROM ${itemsTable} i
+    JOIN ${ordersTable} o ON o.id = i._parent_id
     WHERE (o.status != 'cancelled' OR o.status IS NULL)
       AND o.created_at >= (now() AT TIME ZONE ${TZ})::date::timestamp AT TIME ZONE ${TZ} - make_interval(days => (${days})::int) ${tenantFilter}
     GROUP BY i.sku, i.title

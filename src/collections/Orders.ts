@@ -5,6 +5,7 @@ import type {
   PayloadRequest,
   Where,
 } from 'payload';
+import { APIError } from 'payload';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
 import type { Product } from '@/payload-types';
@@ -25,6 +26,7 @@ interface PostgresAdapterLike {
 }
 
 export const VARIANTS_TABLE_KEY = 'products_variants';
+export const PRODUCTS_TABLE_KEY = 'products';
 
 /** Índice de la variante cuyo SKU coincide; -1 si no hay match. */
 export const findVariantIndexBySku = (
@@ -37,13 +39,10 @@ export const findVariantIndexBySku = (
 export const variantRowNumber = (variantIndex: number): number => variantIndex + 1;
 
 /**
- * Delta ATÓMICO de stock de una variante: UPDATE de fila sobre
- * products_variants (`stock_quantity = stock_quantity + delta` server-side),
- * el mismo espíritu del $inc usado para el producto base. No se usa
- * payload.update/db.updateOne porque el adapter reemplaza el array completo
- * (delete+insert) y reintroduciría la carrera read-modify-write entre
- * pedidos concurrentes de la misma variante. Corre en la transacción del
- * pedido vía la sesión de drizzle (all-or-nothing junto a la orden).
+ * Delta ATÓMICO de stock de una variante con validación condicional server-side.
+ * UPDATE de fila sobre products_variants (`stock_quantity = stock_quantity + delta`).
+ * Si delta < 0 y checkStock === true, la cláusula WHERE exige stock suficiente y RETURNING _order
+ * verifica si la fila fue actualizada en la transacción de Postgres.
  */
 const applyVariantStockDelta = async ({
   payload,
@@ -51,32 +50,92 @@ const applyVariantStockDelta = async ({
   productId,
   variantIndex,
   delta,
+  checkStock,
 }: {
   payload: Payload;
   req: PayloadRequest;
   productId: number | string;
   variantIndex: number;
   delta: number;
-}): Promise<void> => {
+  checkStock?: boolean;
+}): Promise<boolean> => {
   const adapter = payload.db as unknown as PostgresAdapterLike;
   const txId = req.transactionID ? await req.transactionID : undefined;
   const executor =
     (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
-  const tableName = adapter.tableNameMap.get(VARIANTS_TABLE_KEY);
-  if (!tableName) return;
+  const tableName = adapter.tableNameMap.get(VARIANTS_TABLE_KEY) || 'products_variants';
+
+  if (checkStock && delta < 0) {
+    const requiredQty = -delta;
+    const res = (await executor.execute(sql`
+      update ${sql.identifier(tableName)}
+      set stock_quantity = stock_quantity + ${delta}
+      where _parent_id = ${productId}
+        and _order = ${variantRowNumber(variantIndex)}
+        and (stock_quantity is null or stock_quantity >= ${requiredQty})
+      returning _order
+    `)) as { rows?: unknown[] };
+    return Boolean(res.rows && res.rows.length > 0);
+  }
 
   await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set stock_quantity = stock_quantity + ${delta}
     where _parent_id = ${productId} and _order = ${variantRowNumber(variantIndex)}
   `);
+  return true;
+};
+
+/**
+ * Delta ATÓMICO de stock de producto base con validación condicional.
+ * Si delta < 0 y checkStock === true, la cláusula WHERE exige stock_quantity >= requiredQty
+ * a nivel de motor SQL (bloqueo exclusivo de fila). Si 0 filas se actualizan, retorna false.
+ */
+const applyBaseProductStockDelta = async ({
+  payload,
+  req,
+  productId,
+  delta,
+  checkStock,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  productId: number | string;
+  delta: number;
+  checkStock?: boolean;
+}): Promise<boolean> => {
+  const adapter = payload.db as unknown as PostgresAdapterLike;
+  const txId = req.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
+  const tableName = adapter.tableNameMap.get(PRODUCTS_TABLE_KEY) || 'products';
+
+  if (checkStock && delta < 0) {
+    const requiredQty = -delta;
+    const res = (await executor.execute(sql`
+      update ${sql.identifier(tableName)}
+      set stock_quantity = stock_quantity + ${delta}
+      where id = ${productId}
+        and (track_stock is not true or stock_quantity is null or stock_quantity >= ${requiredQty})
+      returning id
+    `)) as { rows?: unknown[] };
+    return Boolean(res.rows && res.rows.length > 0);
+  }
+
+  await executor.execute(sql`
+    update ${sql.identifier(tableName)}
+    set stock_quantity = stock_quantity + ${delta},
+        stock_status = case when ${delta} > 0 then 'in_stock' else stock_status end
+    where id = ${productId}
+  `);
+  return true;
 };
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
  * Se ejecuta automáticamente ante cualquier canal de creación o actualización de pedidos:
- * - Creación de pedido / Activación: resta la cantidad solicitada del stock de los productos.
+ * - Creación de pedido / Activación: resta la cantidad solicitada del stock de los productos de forma atómica.
  * - Cancelación de pedido: repone automáticamente el stock a los productos correspondientes.
  */
 const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
@@ -130,48 +189,50 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       if (!prod) continue;
 
       // La venta por SKU de variante descuenta la FILA de la variante
-      // (misma semántica que valida processOrder: stock numérico en la
-      // variante manda sobre el base); el stock del producto base solo se
-      // toca cuando la venta NO corresponde a ninguna variante.
       const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
       const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
 
       if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
         const qtyToDeduct = Number(item.quantity) || 1;
-        await applyVariantStockDelta({
+        const success = await applyVariantStockDelta({
           payload,
           req,
           productId: prod.id,
           variantIndex,
           delta: -qtyToDeduct,
+          checkStock: true,
         });
+        if (!success) {
+          throw new APIError(
+            `Stock insuficiente para "${matchedVariant.name || prod.title}". No quedan unidades disponibles.`,
+            400,
+          );
+        }
         continue;
       }
 
       if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToDeduct = Number(item.quantity) || 1;
-      // Descuento ATÓMICO con el operador $inc nativo de Payload (mismo patrón
-      // del plugin oficial @payloadcms/plugin-ecommerce, confirmOrder.ts):
-      // se traduce a SQL `stock_quantity + (-qty)` server-side. La validación
-      // previa de stock en checkout (processOrder) es la que rechaza la venta;
-      // aquí Math.max(0,...) vía min:0 del campo evita negativos residuales.
-      await payload.db.updateOne({
-        collection: 'products',
-        id: prod.id,
-        data: {
-          stockQuantity: { $inc: -qtyToDeduct },
-        },
+      const success = await applyBaseProductStockDelta({
+        payload,
         req,
+        productId: prod.id,
+        delta: -qtyToDeduct,
+        checkStock: true,
       });
+      if (!success) {
+        throw new APIError(
+          `Stock insuficiente para "${prod.title}". No quedan unidades disponibles.`,
+          400,
+        );
+      }
     }
   } else if (isCancelled) {
     for (const item of doc.items) {
       const prod = await findProduct(item);
       if (!prod) continue;
 
-      // Reposición simétrica: primero la variante (si la venta fue por
-      // variante), si no el stock base. Mismo criterio que el descuento.
       const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
       const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
 
@@ -190,17 +251,11 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToRestore = Number(item.quantity) || 1;
-      // Reposición ATÓMICA con $inc (mismo patrón que el descuento): evita la
-      // ventana TOCTOU del read-modify-write entre cancelaciones concurrentes.
-      // db.updateOne es de bajo nivel (sin hooks), igual que el descuento.
-      await payload.db.updateOne({
-        collection: 'products',
-        id: prod.id,
-        data: {
-          stockQuantity: { $inc: qtyToRestore },
-          stockStatus: 'in_stock',
-        },
+      await applyBaseProductStockDelta({
+        payload,
         req,
+        productId: prod.id,
+        delta: qtyToRestore,
       });
     }
   }
@@ -418,6 +473,16 @@ export const Orders: CollectionConfig = {
       label: 'Enlace a la Tarjeta de Trello',
       admin: {
         readOnly: true,
+      },
+    },
+    {
+      name: 'emailConfirmationSent',
+      type: 'checkbox',
+      label: 'Confirmación por Correo Enviada',
+      defaultValue: false,
+      admin: {
+        readOnly: true,
+        description: 'Indica si el correo de confirmación fue enviado exitosamente al cliente para evitar duplicados en reintentos.',
       },
     },
   ],
