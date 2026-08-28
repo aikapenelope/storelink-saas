@@ -65,7 +65,14 @@ export const resendTenantAdapter = (
     defaultFromName: args.defaultFromName,
     name: 'resend-tenant',
     sendEmail: async (message) => {
-      const fromAddress = typeof message.from === 'string' ? message.from : message.from?.address;
+      // Extraer solo el email de un string con formato "Name <email@domain.com>".
+      // Payload y los jobs pasan `from` como esa cadena completa; si la pasamos
+      // tal cual al lookup, la query busca el nombre+email completo y nunca
+      // matchea con emailConfig.fromEmail (que almacena solo la dirección).
+      const rawFrom = typeof message.from === 'string' ? message.from : message.from?.address;
+      const fromAddress = rawFrom
+        ? (rawFrom.match(/<([^>]+)>/)?.[1] ?? rawFrom).trim()
+        : undefined;
 
       // Sprint 3: lookup con cache — 0 queries a BD cuando el cache está caliente
       const apiKey = fromAddress
