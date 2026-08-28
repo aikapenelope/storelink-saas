@@ -5,31 +5,11 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 // assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
-import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
+import { sanitizeCsvCell, validateCsvLimits, parseCSVLine } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
-import type { Product } from '@/payload-types';
+import type { Category, Product } from '@/payload-types';
 
 export const dynamic = 'force-dynamic';
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-  return result;
-}
 
 export async function POST(
   request: NextRequest,
@@ -147,18 +127,18 @@ export async function POST(
     let updatedCount = 0;
     const errors: Array<{ line: number; error: string }> = [];
 
-    // Cache categories to avoid duplicate finds/creates in loop
-    const categoryCache = new Map<string, number>();
-
     // Pre-cargar productos existentes del tenant para eliminar N+1 queries.
     // user + overrideAccess: false: el plugin multi-tenant añade el constraint
     // de tenencia; el where explícito es defensa en profundidad adicional.
+    // Límite 5000 > MAX_CSV_ROWS (5000), así que el pre-fetch cubre siempre
+    // el 100% del catálogo existente. Sin él, productos #1001+ no se
+    // encontrarían en el Map y se crearían duplicados.
     const existingProductsRes = await payload.find({
       collection: 'products',
       where: {
         tenant: { equals: tenantId },
       },
-      limit: 1000,
+      limit: 5000,
       depth: 0,
       user: authResult.user,
       overrideAccess: false,
@@ -169,6 +149,23 @@ export async function POST(
       if (prod.sku) {
         productBySku.set(prod.sku, prod);
       }
+    }
+
+    // Pre-cargar categorías existentes del tenant en un Map (cero queries
+    // por fila para categorías ya vistas). Antes: 1 query secuencial por cada
+    // categoría nueva encontrada. Con pre-load: el categoryCache se inicializa
+    // con todos los slugs del tenant → solo crea las que realmente son nuevas.
+    const existingCatsRes = await payload.find({
+      collection: 'categories',
+      where: { tenant: { equals: tenantId } },
+      limit: 500,
+      depth: 0,
+      user: authResult.user,
+      overrideAccess: false,
+    });
+    const categoryCache = new Map<string, number>();
+    for (const cat of existingCatsRes.docs as Category[]) {
+      if (cat.slug) categoryCache.set(cat.slug, cat.id);
     }
 
     for (let i = 1; i < rawLines.length; i++) {
