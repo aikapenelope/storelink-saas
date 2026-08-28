@@ -273,10 +273,11 @@ export async function POST(
       }
     }
 
-    // Instantly invalidate Vercel CDN cache for this merchant's storefront
+    // Invalidar solo el storefront del tenant activo.
+    // Sprint 3: revalidatePath('/') eliminado — invalidaba el cache de TODOS
+    // los tenants de la plataforma en cada importación de catálogo.
     try {
       revalidatePath(`/${tenantSlug}`);
-      revalidatePath('/');
     } catch {
       // Non-blocking in dev
     }

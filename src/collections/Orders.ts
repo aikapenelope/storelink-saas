@@ -137,13 +137,30 @@ const applyBaseProductStockDelta = async ({
  * Se ejecuta automáticamente ante cualquier canal de creación o actualización de pedidos:
  * - Creación de pedido / Activación: resta la cantidad solicitada del stock de los productos de forma atómica.
  * - Cancelación de pedido: repone automáticamente el stock a los productos correspondientes.
+ *
+ * Sprint 3 (H4) — dos mejoras de performance:
+ * 1. Context guard `skipInventoryHook`: actualizaciones internas del job (trelloCardUrl,
+ *    emailConfirmationSent) no deben disparar el hook. Sin esta guard, cada pedido
+ *    procesado ejecuta el hook 2–3 veces extra con N queries innecesarias.
+ *    Patrón oficial: HOOKS.md §Context — "use context flags to prevent hook loops".
+ * 2. Batch fetch de productos: se reemplaza el findProduct() por item (N queries
+ *    secuenciales) por un único payload.find con sku:{ in: skus } antes del loop.
+ *    Mismo patrón que checkout.ts (verifyAndPriceItems). Para items sin SKU
+ *    (datos legacy) se mantiene un fallback individual.
  */
 const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   doc,
   previousDoc,
   operation,
   req,
+  context,
 }) => {
+  // Sprint 3 — guard de context: si el update proviene del job (Trello/email),
+  // saltamos el hook completo. El job pasa context.skipInventoryHook = true
+  // en sus actualizaciones parciales para evitar N queries innecesarias.
+  // Patrón: HOOKS.md §Context.
+  if (context?.skipInventoryHook) return doc;
+
   // Audit fix A1: el hook participa en la transacción del request vía `req`
   // (patrón oficial: https://payloadcms.com/docs/database/transactions).
   // Si cualquier paso falla, Payload revierte pedido Y descuento de stock
@@ -165,12 +182,52 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // 2. Pedido cancelado -> Reponer inventario
   const isCancelled = previousStatus && previousStatus !== 'cancelled' && currentStatus === 'cancelled';
 
-  const findProduct = async (item: { sku?: string | null; title?: string | null }) => {
-    if (!item.title && !item.sku) return null;
+  // Si no hay transición de inventario relevante, salimos sin tocar la BD.
+  if (!isNewlyCreatedActive && !isReactivated && !isCancelled) return doc;
+
+  // Sprint 3 — batch fetch: UN solo payload.find para todos los SKUs del pedido,
+  // igual que checkout.ts §verifyAndPriceItems. Evita N queries secuenciales.
+  const skus = (doc.items as Array<{ sku?: string | null }>)
+    .map((i) => i.sku)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+
+  const batchRes = skus.length > 0
+    ? await payload.find({
+        collection: 'products',
+        where: {
+          and: [
+            ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+            { or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }] },
+          ],
+        },
+        limit: Math.max(skus.length, 1),
+        depth: 0,
+        overrideAccess: true,
+        req,
+      })
+    : { docs: [] as Product[] };
+
+  // Mapas para lookup O(1) por SKU base y SKU de variante.
+  const baseBySku = new Map<string, Product>();
+  const variantOwnerBySku = new Map<string, Product>();
+  for (const p of batchRes.docs as Product[]) {
+    if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
+    for (const v of Array.isArray(p.variants) ? p.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
+    }
+  }
+
+  // Lookup O(1) para items con SKU; fallback individual por título (legacy).
+  const getProduct = async (item: { sku?: string | null; title?: string | null }): Promise<Product | null> => {
+    if (item.sku) {
+      return baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku) ?? null;
+    }
+    if (!item.title) return null;
+    // Fallback: título sin SKU — una query individual (caso legacy infrecuente)
     const whereQuery: Where = {
       and: [
         ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
-        item.sku ? { sku: { equals: item.sku } } : { title: { equals: item.title } },
+        { title: { equals: item.title } },
       ],
     };
     const productRes = await payload.find({
@@ -180,12 +237,12 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       overrideAccess: true,
       req,
     });
-    return productRes.docs[0] ?? null;
+    return (productRes.docs[0] as Product) ?? null;
   };
 
   if (isNewlyCreatedActive || isReactivated) {
     for (const item of doc.items) {
-      const prod = await findProduct(item);
+      const prod = await getProduct(item);
       if (!prod) continue;
 
       // La venta por SKU de variante descuenta la FILA de la variante
@@ -230,7 +287,7 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
     }
   } else if (isCancelled) {
     for (const item of doc.items) {
-      const prod = await findProduct(item);
+      const prod = await getProduct(item);
       if (!prod) continue;
 
       const variantIndex = findVariantIndexBySku(prod.variants, item.sku);

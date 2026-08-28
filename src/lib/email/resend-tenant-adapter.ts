@@ -11,6 +11,12 @@ type Address = { name?: string; address?: string };
  * manda `from: { name: storeName, address: fromEmail }` y el adapter localiza
  * al tenant por ese fromEmail. El mapeo a la API de Resend replica el del
  * adapter oficial @payloadcms/email-resend (única diferencia: la clave).
+ *
+ * Sprint 3 (M1): cache en memoria por fromAddress con TTL de 5 minutos.
+ * Sin cache, cada email (cliente + comercio + reintentos del job) hacía
+ * 1 query a la BD para resolver la API key. Con cache: 0 queries en caliente.
+ * El módulo-level Map persiste entre invocaciones dentro de la misma instancia
+ * serverless (patrón singleton ya usado en exchange-rate.ts y rate-limit.ts).
  */
 type ResendTenantAdapterArgs = {
   defaultFromAddress: string;
@@ -19,6 +25,37 @@ type ResendTenantAdapterArgs = {
 };
 
 type ResendResponse = { id: string } | { message: string; name: string; statusCode: number };
+
+/** Cache en módulo: from address → { key, expiresAt }. TTL 5 minutos. */
+const tenantKeyCache = new Map<string, { key: string; expiresAt: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Resuelve la API key del tenant por fromEmail, con cache de 5 min. */
+async function resolveApiKey(fromAddress: string, payload: Payload, masterKey: string): Promise<string> {
+  const now = Date.now();
+  const cached = tenantKeyCache.get(fromAddress);
+  if (cached && cached.expiresAt > now) return cached.key;
+
+  try {
+    const tenants = await payload.find({
+      collection: 'tenants',
+      where: { 'emailConfig.fromEmail': { equals: fromAddress } },
+      limit: 1,
+      overrideAccess: true,
+      // Seleccionar solo el campo necesario para minimizar payload de la query
+      select: { emailConfig: { resendApiKey: true } } as never,
+    });
+    const tenantKey = (tenants.docs[0] as { emailConfig?: { resendApiKey?: string } } | undefined)
+      ?.emailConfig?.resendApiKey;
+    const resolvedKey = tenantKey || masterKey;
+    tenantKeyCache.set(fromAddress, { key: resolvedKey, expiresAt: now + CACHE_TTL_MS });
+    return resolvedKey;
+  } catch (err) {
+    console.warn('resend-tenant: no se pudo resolver tenant, se usa la clave master:', err);
+    // No cachear los errores — el próximo intento volverá a intentar la query
+    return masterKey;
+  }
+}
 
 export const resendTenantAdapter = (
   args: ResendTenantAdapterArgs
@@ -30,24 +67,10 @@ export const resendTenantAdapter = (
     sendEmail: async (message) => {
       const fromAddress = typeof message.from === 'string' ? message.from : message.from?.address;
 
-      let apiKey = args.apiKey;
-      if (fromAddress) {
-        try {
-          const tenants = await payload.find({
-            collection: 'tenants',
-            where: { 'emailConfig.fromEmail': { equals: fromAddress } },
-            limit: 1,
-            overrideAccess: true,
-          });
-          const tenantKey = (tenants.docs[0] as { emailConfig?: { resendApiKey?: string } } | undefined)
-            ?.emailConfig?.resendApiKey;
-          if (tenantKey) {
-            apiKey = tenantKey;
-          }
-        } catch (err) {
-          console.warn('resend-tenant: no se pudo resolver tenant, se usa la clave master:', err);
-        }
-      }
+      // Sprint 3: lookup con cache — 0 queries a BD cuando el cache está caliente
+      const apiKey = fromAddress
+        ? await resolveApiKey(fromAddress, payload, args.apiKey)
+        : args.apiKey;
 
       const sendEmailOptions = mapPayloadEmailToResendEmail(
         message,

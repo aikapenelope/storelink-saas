@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
+import type { Product } from '@/payload-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -199,6 +200,21 @@ export async function POST(
     // Cache categories to avoid duplicate finds/creates in loop
     const categoryCache = new Map<string, number>();
 
+    // Sprint 3 (H5) — pre-cargar productos del tenant antes del loop para
+    // eliminar N+1 queries. Mismo patrón ya aplicado en import-csv/route.ts
+    // (PR #48). Para una hoja de 200 filas: de 200 queries individuales a 1.
+    const existingProductsRes = await payload.find({
+      collection: 'products',
+      where: { tenant: { equals: tenantId } },
+      limit: 1000,
+      depth: 0,
+      overrideAccess: true,
+    });
+    const productBySku = new Map<string, Product>();
+    for (const prod of existingProductsRes.docs as Product[]) {
+      if (prod.sku) productBySku.set(prod.sku, prod);
+    }
+
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
       // Campos de texto persistidos SIEMPRE neutralizados (anti-fórmulas);
@@ -252,23 +268,14 @@ export async function POST(
           }
         }
 
-        const existing = await payload.find({
-          collection: 'products',
-          where: {
-            and: [
-              { tenant: { equals: tenantId } },
-              { sku: { equals: sku } },
-            ],
-          },
-          limit: 1,
-          user: authResult.user,
-          overrideAccess: false,
-        });
+        // Lookup O(1) en el Map precargado — sin query individual por fila.
+        // La autorización ya se aplicó en el prefetch (tenant scoped).
+        const existingProd = productBySku.get(sku);
 
-        if (existing.docs.length > 0) {
-          await payload.update({
+        if (existingProd) {
+          const updated = await payload.update({
             collection: 'products',
-            id: existing.docs[0].id,
+            id: existingProd.id,
             data: {
               title,
               price,
@@ -282,9 +289,10 @@ export async function POST(
             user: authResult.user,
             overrideAccess: false,
           });
+          productBySku.set(sku, updated as Product);
           updatedCount++;
         } else {
-          await payload.create({
+          const created = await payload.create({
             collection: 'products',
             data: {
               title,
@@ -301,6 +309,7 @@ export async function POST(
             user: authResult.user,
             overrideAccess: false,
           });
+          productBySku.set(sku, created as Product);
           createdCount++;
         }
       } catch (err: unknown) {
@@ -309,10 +318,11 @@ export async function POST(
       }
     }
 
-    // Instantly invalidate Vercel CDN cache for this merchant's storefront
+    // Invalidar solo el storefront del tenant activo.
+    // Sprint 3: revalidatePath('/') eliminado — invalidaba el cache de TODOS
+    // los tenants de la plataforma en cada sincronización de hoja.
     try {
       revalidatePath(`/${tenantSlug}`);
-      revalidatePath('/');
     } catch {
       // Non-blocking in dev
     }

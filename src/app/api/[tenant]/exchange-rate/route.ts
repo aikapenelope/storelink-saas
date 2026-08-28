@@ -88,9 +88,9 @@ export async function POST(
     try {
       revalidatePath(`/${tenantSlug}`);
       revalidatePath('/admin/analytics');
-      revalidatePath('/admin');
-      // Invalida la tasa cacheada del storefront (ISR)
-      revalidateTag('rate');
+      // Sprint 3: revalidatePath('/admin') eliminado — invalida todo el admin
+      // panel de Payload cuando solo necesitamos las analíticas del tenant.
+      revalidateTag('rate'); // Invalida la tasa cacheada del storefront (ISR)
     } catch {
       // Ignored in edge cases
     }

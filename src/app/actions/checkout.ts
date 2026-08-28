@@ -644,11 +644,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     // ------------------------------------------------------------------
-    // 9. Revalidate Next.js Cache Deterministically
+    // 9. Revalidate Next.js Cache — solo el storefront del tenant activo.
+    // Sprint 3: revalidatePath('/') eliminado — con 20+ comercios activos
+    // invalidar la root en cada venta forzaba rerender de todos los storefronts.
     // ------------------------------------------------------------------
     try {
       revalidatePath(`/${tenantSlug}`);
-      revalidatePath('/');
     } catch {
       // Non-blocking in dev
     }
