@@ -53,8 +53,6 @@ export async function POST(
       return NextResponse.json({ error: 'No tienes permiso para modificar esta tienda.' }, { status: 403 });
     }
 
-    const currentBranding = tenant.branding || {};
-
     // Cota superior de la tasa (evita Infinity / tasas absurdas que rompen
     // la serialización JSON y los totales de pedidos futuros)
     const rawRate = exchangeRateVES;
@@ -67,18 +65,16 @@ export async function POST(
       newRate = rateNum;
     }
 
-    // overrideAccess: true es intencional aquí: Tenants.update está restringido
-    // a super-admin en el schema (los tenant-admins no pueden modificar todos
-    // los campos de su tenant). La ruta hace su propia autorización vía
-    // assertTenantAccess + el lookup con overrideAccess:false de arriba.
-    // Pendiente (Sprint 4): añadir field-level access en branding.exchangeRateVES
-    // para hasTenantAccess y migrar este update a overrideAccess: false.
+    // overrideAccess: true es intencional — Tenants.update es super-admin only;
+    // la ruta autoriza vía assertTenantAccess + lookup overrideAccess:false.
+    // Sprint 4: se elimina el spread { ...currentBranding, exchangeRateVES }.
+    // Payload 3 hace deep merge en grupos — solo se actualiza el campo incluido
+    // en data, atómico y sin race condition entre updates concurrentes en branding.
     await payload.update({
       collection: 'tenants',
       id: tenant.id,
       data: {
         branding: {
-          ...currentBranding,
           exchangeRateVES: newRate,
         },
       },
