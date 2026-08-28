@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { headers } from 'next/headers';
 import { Store, ExternalLink, BarChart3 } from 'lucide-react';
 import { isSuperAdmin, getUserTenantIds } from '@/lib/utils';

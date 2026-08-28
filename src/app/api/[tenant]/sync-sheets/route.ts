@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { assertTenantAccess } from '@/lib/utils';
+// assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
+// Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 
@@ -57,11 +58,15 @@ export async function POST(
       );
     }
 
-    // 1. Find tenant
+    // 1. Find tenant — Sprint 2: user + overrideAccess: false elimina el check
+    // manual assertTenantAccess. Payload aplica el constraint multi-tenant
+    // automáticamente; si el tenant no es del usuario → resultado vacío → 404.
     const tenantResult = await payload.find({
       collection: 'tenants',
       where: { slug: { equals: tenantSlug } },
       limit: 1,
+      user: authResult.user,
+      overrideAccess: false,
     });
 
     if (tenantResult.docs.length === 0) {
@@ -72,16 +77,6 @@ export async function POST(
     }
 
     const tenantId = tenantResult.docs[0].id;
-
-    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3) con el guard
-    // compartido: super-admin o tenant asignado (los IDs ya vienen en el
-    // objeto/JWT del usuario; no hace falta reconsultar users).
-    if (!assertTenantAccess(authResult.user, tenantId)) {
-      return NextResponse.json(
-        { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
-        { status: 403 }
-      );
-    }
 
     const body = await request.json().catch(() => ({}));
     let sheetUrl = body.url || body.sheetsUrl;
@@ -234,6 +229,8 @@ export async function POST(
                 ],
               },
               limit: 1,
+              user: authResult.user,
+              overrideAccess: false,
             });
             if (existingCat.docs.length > 0) {
               categoryId = existingCat.docs[0].id;
@@ -246,6 +243,8 @@ export async function POST(
                   slug: catSlug,
                   tenant: tenantId,
                 },
+                user: authResult.user,
+                overrideAccess: false,
               });
               categoryId = newCat.id;
               categoryCache.set(catSlug, categoryId);
@@ -262,6 +261,8 @@ export async function POST(
             ],
           },
           limit: 1,
+          user: authResult.user,
+          overrideAccess: false,
         });
 
         if (existing.docs.length > 0) {
@@ -278,6 +279,8 @@ export async function POST(
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
+            user: authResult.user,
+            overrideAccess: false,
           });
           updatedCount++;
         } else {
@@ -295,6 +298,8 @@ export async function POST(
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
+            user: authResult.user,
+            overrideAccess: false,
           });
           createdCount++;
         }

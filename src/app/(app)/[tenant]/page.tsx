@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { unstable_cache } from 'next/cache';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import type { Tenant } from '@/payload-types';

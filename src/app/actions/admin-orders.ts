@@ -1,7 +1,7 @@
 'use server';
 
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { headers } from 'next/headers';
 import type { Order } from '@/payload-types';
 
