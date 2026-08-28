@@ -23,6 +23,7 @@ import { Orders } from './collections/Orders';
 import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
 import { orderJobs } from './jobs/order-created';
+import { catalogImportJobs } from './jobs/catalog-import';
 import type { Product, Tenant } from './payload-types';
 
 const filename = fileURLToPath(import.meta.url);
@@ -192,7 +193,7 @@ export default buildConfig({
     // exitosos; los fallidos (hasError) persisten y los purga el endpoint
     // /api/admin/cleanup-jobs vía runner externo.
     deleteJobOnComplete: true,
-    tasks: orderJobs.tasks,
+    tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
     workflows: orderJobs.workflows,
     access: {
       // Secreto del runner verificado timing-safe (helper compartido con

@@ -16,6 +16,7 @@ import { Orders } from '../src/collections/Orders';
 import { Customers } from '../src/collections/Customers';
 import { Media } from '../src/collections/Media';
 import { orderJobs } from '../src/jobs/order-created';
+import { catalogImportJobs } from '../src/jobs/catalog-import';
 import { migrations } from '../src/migrations';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -80,7 +81,7 @@ export function buildMigrationParityConfig(connectionString: string) {
     // Sin adapter de email: modo oficial de Payload para entornos sin email
     // (payload.sendEmail solo registra warning — cero red en tests).
     jobs: {
-      tasks: orderJobs.tasks,
+      tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
       workflows: orderJobs.workflows,
       deleteJobOnComplete: false,
       access: { run: () => true },

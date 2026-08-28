@@ -14,7 +14,7 @@ import {
 import { notFound } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 import { getTenantBySlug } from '@/lib/tenants';
-import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { DEFAULT_PRODUCT_IMAGE_URL, RESERVED_TENANT_SLUGS } from '@/lib/constants';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -30,25 +30,13 @@ const getRateVES = unstable_cache(
   { revalidate: 120, tags: ['rate'] }
 );
 
-const RESERVED_SLUGS = new Set([  'favicon.ico',
-  'robots.txt',
-  'sitemap.xml',
-  'apple-touch-icon.png',
-  'apple-touch-icon-precomposed.png',
-  'manifest.json',
-  'admin',
-  'api',
-  // Ruta estática de la página demo visual (nunca un tenant real)
-  'demo',
-]);
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ tenant: string }>;
 }): Promise<Metadata> {
   const { tenant: tenantSlug } = await params;
-  if (RESERVED_SLUGS.has(tenantSlug)) {
+  if (RESERVED_TENANT_SLUGS.has(tenantSlug)) {
     return { title: 'Not Found' };
   }
 
@@ -108,7 +96,7 @@ export default async function TenantStorefrontPage({
 }) {
   const { tenant: tenantSlug } = await params;
 
-  if (RESERVED_SLUGS.has(tenantSlug)) {
+  if (RESERVED_TENANT_SLUGS.has(tenantSlug)) {
     notFound();
   }
 

@@ -68,16 +68,18 @@ export function ProductsSyncPanel() {
           message: data.error || 'Error al sincronizar con Google Sheets',
         });
       } else {
+        // La sincronización ahora corre en background (Jobs Queue oficial,
+        // ver src/jobs/catalog-import.ts) — la respuesta ya no trae conteos
+        // exactos al instante. Se espera un poco más antes de recargar para
+        // darle tiempo al job a terminar en el caso feliz (catálogos chicos
+        // y medianos procesan en segundos).
         setResult({
           success: true,
-          message: `¡Sincronización exitosa! ${data.created || 0} creados, ${data.updated || 0} actualizados.`,
-          created: data.created,
-          updated: data.updated,
-          errors: data.errors,
+          message: data.message || 'Sincronización en cola. Se reflejará en el catálogo en unos segundos.',
         });
         setTimeout(() => {
           window.location.reload();
-        }, 1500);
+        }, 4000);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error de conexión con el servidor';

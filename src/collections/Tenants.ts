@@ -1,5 +1,6 @@
 import type { CollectionConfig, TextFieldSingleValidation } from 'payload';
 import { getUserRole, getUserTenantIds, hasTenantAccess } from '@/lib/utils';
+import { RESERVED_TENANT_SLUGS } from '@/lib/constants';
 
 /**
  * F1 (auditoría BYOK 2026-08-29): resend-tenant-adapter.ts resuelve la clave
@@ -31,6 +32,24 @@ const validateUniqueFromEmail: TextFieldSingleValidation = async (value, { req, 
   if (conflict.docs.length > 0) {
     const otherName = (conflict.docs[0] as { name?: string }).name || 'otro comercio';
     return `Este correo remitente ya está en uso por "${otherName}". Cada comercio debe usar un correo remitente distinto (resend-tenant-adapter.ts resuelve la clave BYOK por este campo).`;
+  }
+  return true;
+};
+
+/**
+ * Hallazgo de la auditoría de aprovisionamiento (2026-08-29): `slug` solo
+ * tenía `unique: true`, sin chequeo contra rutas estáticas reales de
+ * `src/app/(app)/` (admin, api, demo, templates, ...). Next.js siempre
+ * prioriza una ruta literal sobre el segmento dinámico `[tenant]`, así que
+ * un tenant con uno de esos slugs quedaba con su tienda inalcanzable para
+ * siempre, sin ningún error visible en el admin. RESERVED_TENANT_SLUGS
+ * (src/lib/constants.ts) es la única fuente de verdad, compartida con
+ * `[tenant]/page.tsx`.
+ */
+const validateSlugNotReserved: TextFieldSingleValidation = (value) => {
+  const trimmed = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (trimmed && RESERVED_TENANT_SLUGS.has(trimmed)) {
+    return `"${trimmed}" es una ruta reservada del sistema (colisiona con una página real de la app) y no puede usarse como slug de tienda. Elige otro identificador.`;
   }
   return true;
 };
@@ -81,8 +100,9 @@ export const Tenants: CollectionConfig = {
       index: true,
       label: 'Identificador / Ruta de la Tienda (ej: aura-modaaa)',
       admin: {
-        description: 'La URL pública de la tienda se creará de inmediato en: https://flow.martes.app/[slug]',
+        description: 'La URL pública de la tienda se creará de inmediato en: https://flow.martes.app/[slug]. No puede ser una palabra reservada del sistema (admin, api, demo, templates...).',
       },
+      validate: validateSlugNotReserved,
     },
     {
       name: 'theme',
