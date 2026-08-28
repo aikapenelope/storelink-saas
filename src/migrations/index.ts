@@ -9,6 +9,7 @@ import * as migration_20260822_3_security_and_performance_optimizations from './
 import * as migration_20260824_products_sku_index from './20260824_products_sku_index';
 import * as migration_20260824_2_customers_tenant_phone_unique from './20260824_2_customers_tenant_phone_unique';
 import * as migration_20260827_email_idempotency_and_category_slug_unique from './20260827_email_idempotency_and_category_slug_unique';
+import * as migration_20260828_add_tenant_delivery_config_columns from './20260828_add_tenant_delivery_config_columns';
 
 export const migrations = [
   {
@@ -65,5 +66,12 @@ export const migrations = [
     up: migration_20260827_email_idempotency_and_category_slug_unique.up,
     down: migration_20260827_email_idempotency_and_category_slug_unique.down,
     name: '20260827_email_idempotency_and_category_slug_unique',
+  },
+  {
+    // P0 HOTFIX: schema drift — delivery_config_fixed_price y
+    // delivery_config_estimated_time inexistentes en producción.
+    up: migration_20260828_add_tenant_delivery_config_columns.up,
+    down: migration_20260828_add_tenant_delivery_config_columns.down,
+    name: '20260828_add_tenant_delivery_config_columns',
   },
 ];
