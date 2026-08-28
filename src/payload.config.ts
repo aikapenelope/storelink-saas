@@ -9,7 +9,7 @@ import type { GenerateDescription, GenerateTitle, GenerateURL } from '@payloadcm
 import { s3Storage } from '@payloadcms/storage-s3';
 import { es } from '@payloadcms/translations/languages/es';
 import { en } from '@payloadcms/translations/languages/en';
-import { resendAdapter } from '@payloadcms/email-resend';
+import { resendTenantAdapter } from './lib/email/resend-tenant-adapter';
 import { migrations } from './migrations';
 import { getUserRole } from './lib/utils';
 import { verifyCronSecret } from './lib/cron-secret';
@@ -165,7 +165,13 @@ export default buildConfig({
     },
     fallbackLanguage: 'es',
   },
-  email: resendAdapter({
+  // Sprint 1 (C2): se sustituye el resendAdapter oficial por resendTenantAdapter
+  // (src/lib/email/resend-tenant-adapter.ts). El adapter custom implementa la
+  // interfaz EmailAdapter de Payload y añade soporte BYOK: cada tenant que
+  // configure su propia clave Resend en emailConfig.resendApiKey usará esa
+  // clave; si no la configura, se usa RESEND_API_KEY como fallback global.
+  // Sin este cambio, el campo resendApiKey se guardaba en BD pero nunca se leía.
+  email: resendTenantAdapter({
     defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app',
     defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
     apiKey: process.env.RESEND_API_KEY || '',
