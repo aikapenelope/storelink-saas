@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle, ExternalLink, ArrowRight } from 'lucide-react';
+import { RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
 
 export function ProductsSyncPanel() {
   const [url, setUrl] = useState('');
@@ -79,10 +79,11 @@ export function ProductsSyncPanel() {
           window.location.reload();
         }, 1500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error de conexión con el servidor';
       setResult({
         success: false,
-        message: err.message || 'Error de conexión con el servidor',
+        message: msg,
       });
     } finally {
       setLoading(false);

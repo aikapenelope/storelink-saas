@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, Layers, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ShoppingBag, Search, Plus, Minus } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -150,7 +152,7 @@ export function ThemeB2BMatrix({
               const priceVES = showVES ? product.price * exchangeRate : 0;
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               return (
                 <div
@@ -158,12 +160,18 @@ export function ThemeB2BMatrix({
                   className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs flex flex-col gap-3"
                 >
                   <div className="flex items-start gap-3">
-                    <img
-                      src={imageUrl}
-                      alt={product.title}
+                    <div
                       onClick={() => onOpenProductModal(product)}
-                      className="w-16 h-16 rounded-xl object-cover bg-slate-100 flex-shrink-0 cursor-pointer"
-                    />
+                      className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer"
+                    >
+                      <Image
+                        src={imageUrl}
+                        alt={product.title}
+                        fill
+                        sizes="64px"
+                        className="object-cover"
+                      />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="font-mono font-bold text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
@@ -274,7 +282,7 @@ export function ThemeB2BMatrix({
                     const priceVES = showVES ? product.price * exchangeRate : 0;
                     const imageUrl =
                       product.images?.[0]?.url ||
-                      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                      DEFAULT_PRODUCT_IMAGE_URL;
 
                     return (
                       <tr key={product.id} className="hover:bg-blue-50/30 transition">
@@ -286,11 +294,15 @@ export function ThemeB2BMatrix({
                             onClick={() => onOpenProductModal(product)}
                             className="cursor-pointer group flex items-center gap-3"
                           >
-                            <img
-                              src={imageUrl}
-                              alt={product.title}
-                              className="w-10 h-10 rounded-lg object-cover bg-slate-100 flex-shrink-0"
-                            />
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+                              <Image
+                                src={imageUrl}
+                                alt={product.title}
+                                fill
+                                sizes="40px"
+                                className="object-cover"
+                              />
+                            </div>
                             <div>
                               <p className="font-bold text-slate-900 group-hover:text-blue-600 transition">
                                 {product.title}

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { THEME_METAS } from '@/data/theme-presets';
 
 declare global {
@@ -268,12 +269,13 @@ export default function FlowLandingPage() {
           {/* DASHBOARD REAL — captura del panel de control (producto real)             */}
           {/* ========================================================================= */}
           <div className="relative z-20 mt-10 sm:mt-12 w-full max-w-5xl">
-            <div className="overflow-hidden rounded-2xl border border-neutral-800 shadow-2xl shadow-black/90">
-              <img
+            <div className="overflow-hidden rounded-2xl border border-neutral-800 shadow-2xl shadow-black/90 relative aspect-[16/10] w-full">
+              <Image
                 src="/dashboard.png"
                 alt="Panel de control de Flow by Martes: ventas, pedidos y clientes en tiempo real"
-                className="h-auto w-full"
-                loading="lazy"
+                fill
+                sizes="(max-width: 1024px) 100vw, 1024px"
+                className="object-cover"
               />
             </div>
             <p className="mt-3 text-center text-[11px] sm:text-xs font-semibold text-white/90">
@@ -371,10 +373,12 @@ export default function FlowLandingPage() {
                 >
                   {/* Preview Image */}
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-950">
-                    <img
+                    <Image
                       src={theme.previewImage}
                       alt={theme.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out opacity-90 group-hover:opacity-100"
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out opacity-90 group-hover:opacity-100"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent"></div>
 

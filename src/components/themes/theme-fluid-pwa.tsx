@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Image from 'next/image';
 import { ShoppingBag, Search, Plus, Minus, Info, Sparkles } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -146,7 +148,7 @@ export function ThemeFluidPWA({
               const priceVES = showVES ? product.price * exchangeRate : 0;
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               return (
                 <div
@@ -158,10 +160,12 @@ export function ThemeFluidPWA({
                     onClick={() => onOpenProductModal(product)}
                     className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
                   >
-                    <img
+                    <Image
                       src={imageUrl}
                       alt={product.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      fill
+                      sizes="(max-width: 640px) 96px, 112px"
+                      className="object-cover group-hover:scale-105 transition duration-300"
                     />
                     <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
                       <Info className="w-5 h-5 text-white drop-shadow" />

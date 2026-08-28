@@ -3,7 +3,7 @@
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { uploadDeliveryNotePdf, getDeliveryNoteUrl } from '@/lib/delivery-note';
-import { getPayload } from 'payload';
+import { getPayload, type Payload } from 'payload';
 import config from '@/payload.config';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
@@ -12,6 +12,7 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { randomInt } from 'crypto';
+import { sql } from '@payloadcms/db-postgres/drizzle';
 
 export interface CheckoutCustomerData {
   name: string;
@@ -80,14 +81,355 @@ export interface CheckoutResponse {
 // gigantes usados como DoS de latencia sin afectar la compra normal.
 const MAX_CHECKOUT_ITEMS = 30;
 
+/**
+ * Validación runtime estricta en la frontera del Server Action
+ */
+function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: false; error: string } {
+  const { tenantSlug, customer, items } = request;
+
+  if (!tenantSlug || typeof tenantSlug !== 'string' || tenantSlug.trim().length === 0) {
+    return { ok: false, error: 'Identificador de tienda inválido' };
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return { ok: false, error: 'El carrito está vacío' };
+  }
+
+  if (items.length > MAX_CHECKOUT_ITEMS) {
+    return { ok: false, error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).` };
+  }
+
+  if (!customer || typeof customer !== 'object') {
+    return { ok: false, error: 'Datos del cliente incompletos' };
+  }
+
+  const name = customer.name?.trim();
+  const phone = customer.phone?.trim();
+  const email = customer.email?.trim();
+
+  if (!name || !phone || !email) {
+    return { ok: false, error: 'Por favor completa el nombre, teléfono y correo de contacto' };
+  }
+
+  // Validación básica de formato de correo
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return { ok: false, error: 'Por favor introduce un correo electrónico válido' };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Verificación de precios, variantes, modificadores y stock desde la base de datos (server-side).
+ * Patrón oficial adaptado de defaultProductsValidation en @payloadcms/plugin-ecommerce.
+ */
+async function verifyAndPriceItems({
+  payload,
+  tenantId,
+  rawItems,
+}: {
+  payload: Payload;
+  tenantId: number | string;
+  rawItems: CheckoutItemData[];
+}): Promise<{ ok: true; verifiedItems: CheckoutItemData[]; itemsSubtotal: number } | { ok: false; error: string }> {
+  const skus = Array.from(new Set(rawItems.map((i) => i.sku).filter(Boolean)));
+  const candidatesRes = await payload.find({
+    collection: 'products',
+    where: {
+      and: [
+        { tenant: { equals: tenantId } },
+        {
+          or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }],
+        },
+      ],
+    },
+    limit: Math.max(skus.length, 1),
+    depth: 0,
+    overrideAccess: true,
+  });
+
+  const baseBySku = new Map<string, Product>();
+  const variantOwnerBySku = new Map<string, Product>();
+  for (const doc of candidatesRes.docs as Product[]) {
+    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
+    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
+    }
+  }
+
+  const verifiedItems: CheckoutItemData[] = [];
+
+  for (const item of rawItems) {
+    const qty = Number(item.quantity);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
+      return { ok: false, error: 'Cantidad inválida en el carrito' };
+    }
+
+    if (!item.sku) {
+      return { ok: false, error: 'Producto no disponible' };
+    }
+
+    const dbProd = baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku);
+    if (!dbProd) {
+      return { ok: false, error: 'Producto no disponible en el catálogo.' };
+    }
+
+    let basePrice = Number(dbProd.price) || 0;
+    let stockAvailable: number | null =
+      dbProd.trackStock && typeof dbProd.stockQuantity === 'number' ? dbProd.stockQuantity : null;
+    const matchedVariant = Array.isArray(dbProd.variants)
+      ? dbProd.variants.find((v) => v.sku === item.sku)
+      : undefined;
+    if (matchedVariant) {
+      if (typeof matchedVariant.price === 'number') basePrice = matchedVariant.price;
+      if (typeof matchedVariant.stockQuantity === 'number') stockAvailable = matchedVariant.stockQuantity;
+    }
+
+    let modifiersDelta = 0;
+    if (item.modifiers && item.modifiers.length > 0) {
+      const optionList = Array.isArray(dbProd.modifiers)
+        ? dbProd.modifiers.flatMap((g) => (Array.isArray(g.options) ? g.options : []))
+        : [];
+      for (const optionName of item.modifiers) {
+        const option = optionList.find((o) => o.name === optionName);
+        if (!option) {
+          return { ok: false, error: 'Opción no disponible en el catálogo.' };
+        }
+        modifiersDelta += Number(option.priceDelta) || 0;
+      }
+    }
+
+    const finalPrice = basePrice + modifiersDelta;
+
+    if (stockAvailable !== null && stockAvailable < qty) {
+      return {
+        ok: false,
+        error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
+      };
+    }
+
+    verifiedItems.push({
+      sku: item.sku,
+      title: item.title || dbProd.title,
+      quantity: qty,
+      price: finalPrice,
+    });
+  }
+
+  const itemsSubtotal = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
+  if (itemsSubtotal <= 0) {
+    return { ok: false, error: 'El total de productos del pedido es inválido' };
+  }
+
+  return { ok: true, verifiedItems, itemsSubtotal };
+}
+
+/**
+ * Generador robusto de número de pedido único con control de colisiones
+ */
+async function generateUniqueOrderNumber(payload: Payload): Promise<string | null> {
+  const now = new Date();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const randomSuffix = randomInt(100000, 1000000);
+    const candidate = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
+      .toString()
+      .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${randomSuffix}`;
+    const clash = await payload.find({
+      collection: 'orders',
+      where: { orderNumber: { equals: candidate } },
+      limit: 1,
+      overrideAccess: true,
+    });
+    if (clash.docs.length === 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Construcción y sanitización del mensaje de WhatsApp estructurado
+ */
+function buildWhatsappMessagePayload({
+  tenantDoc,
+  storeName,
+  orderNumber,
+  customer,
+  verifiedItems,
+  deliveryFee,
+  total,
+  totalVES,
+  vesRate,
+  showVESEffective,
+  pdfUrl,
+}: {
+  tenantDoc: Tenant;
+  storeName?: string;
+  orderNumber: string;
+  customer: CheckoutCustomerData;
+  verifiedItems: CheckoutItemData[];
+  deliveryFee: number;
+  total: number;
+  totalVES: number;
+  vesRate: number | null;
+  showVESEffective: boolean;
+  pdfUrl?: string;
+}): { whatsappUrl: string; safePhone: string; safeEmail: string } {
+  const targetPhone = tenantDoc.whatsappPhone || '';
+  const cleanTargetPhone = targetPhone.replace(/\D/g, '');
+
+  const itemsSummary = verifiedItems
+    .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
+    .join('\n');
+
+  const rawPaymentLabel = customer.paymentDetails?.methodKey
+    ? customer.paymentDetails.methodKey.replace('_', ' ').toUpperCase()
+    : customer.paymentMethod || 'PAGO ELECTRÓNICO';
+  const paymentLabel = sanitizePlainText(rawPaymentLabel);
+
+  const safeName = sanitizePlainText(customer.name);
+  const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+  const safePhone = cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
+  const rawEmail = customer.email ? customer.email.trim().toLowerCase() : '';
+  const safeEmail = sanitizePlainText(rawEmail);
+  const safeNotes = sanitizePlainText(customer.notes);
+  const safeAddress = sanitizePlainText(customer.address);
+  const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);
+  const safeMunicipality = sanitizePlainText(customer.deliveryDetails?.municipality);
+  const safeReference = sanitizePlainText(customer.paymentDetails?.referenceNumber);
+
+  const whatsappMessage = `👋 *¡Nuevo Pedido #${orderNumber}!*
+🏪 *Comercio:* ${tenantDoc?.name || storeName}
+
+👤 *Cliente:* ${safeName}
+📱 *Teléfono:* ${safePhone}
+${safeEmail ? `📧 *Correo:* ${safeEmail}\n` : ''}🛵 *Modalidad:* ${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}
+${safeAddress ? `📍 *Dirección:* ${safeAddress}\n` : ''}${safeBuilding ? `🏢 *Edif/Casa:* ${safeBuilding}\n` : ''}${safeMunicipality ? `🗺️ *Municipio:* ${safeMunicipality}\n` : ''}💳 *Método de Pago:* ${paymentLabel}
+${safeReference ? `🔢 *N° Referencia:* ${safeReference}\n` : ''}${safeNotes ? `📝 *Nota:* ${safeNotes}\n` : ''}
+🛒 *Productos:*
+${itemsSummary}
+${deliveryFee > 0 ? `\n🛵 *Tarifa Delivery:* $${deliveryFee.toFixed(2)} USD` : ''}
+💰 *TOTAL A PAGAR:*
+💵 *$${total.toFixed(2)} USD*
+${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
+📄 ${pdfUrl ? `*Nota de Entrega PDF:* ${pdfUrl}` : '_He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._'}`;
+
+  const whatsappUrl = `https://wa.me/${cleanTargetPhone.startsWith('58') ? cleanTargetPhone : `58${cleanTargetPhone}`}?text=${encodeURIComponent(
+    whatsappMessage
+  )}`;
+
+  return { whatsappUrl, safePhone, safeEmail };
+}
+
+/**
+ * Upsert atómico de cliente en CRM con PostgreSQL SQL vía Drizzle (cero MongoDB shims).
+ * Evita condiciones de carrera read-modify-write y garantiza persistencia transaccional.
+ */
+async function upsertCustomerCrm({
+  payload,
+  tenantId,
+  customer,
+  safePhone,
+  safeEmail,
+  total,
+  now,
+}: {
+  payload: Payload;
+  tenantId: number;
+  customer: CheckoutCustomerData;
+  safePhone: string;
+  safeEmail: string;
+  total: number;
+  now: Date;
+}): Promise<void> {
+  try {
+    const cleanPhone = safePhone.trim();
+
+    const findCustomerByTenantPhone = () =>
+      payload.find({
+        collection: 'customers',
+        where: {
+          and: [
+            { tenant: { equals: tenantId } },
+            { phone: { equals: cleanPhone } },
+          ],
+        },
+        limit: 1,
+        overrideAccess: true,
+      });
+
+    const applyOrderToCustomerSql = async (cust: Customer): Promise<void> => {
+      const adapter = payload.db as unknown as {
+        drizzle: { execute: (query: unknown) => Promise<unknown> };
+        tableNameMap?: Map<string, string>;
+      };
+      const tableName = adapter.tableNameMap?.get?.('customers') || 'customers';
+
+      const res = (await adapter.drizzle.execute(sql`
+        update ${sql.identifier(tableName)}
+        set name = coalesce(${customer.name || null}, name),
+            email = coalesce(${safeEmail || null}, email),
+            last_order_at = ${now.toISOString()},
+            total_orders = coalesce(total_orders, 0) + 1,
+            total_spent = coalesce(total_spent, 0) + ${total}
+        where id = ${cust.id}
+        returning total_orders, total_spent, tag
+      `)) as { rows?: Array<{ total_orders?: number; total_spent?: number; tag?: string }> };
+
+      const updatedRow = res?.rows?.[0];
+      const ordersCount = Number(updatedRow?.total_orders) || 0;
+      const spentTotal = Number(updatedRow?.total_spent) || 0;
+      const nextTag = ordersCount >= 3 || spentTotal >= 50 ? 'vip' : 'frecuente';
+
+      if (updatedRow && updatedRow.tag !== nextTag) {
+        await payload.update({
+          collection: 'customers',
+          id: cust.id,
+          overrideAccess: true,
+          data: { tag: nextTag },
+        });
+      }
+    };
+
+    const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
+
+    if (existingCust) {
+      await applyOrderToCustomerSql(existingCust);
+    } else {
+      try {
+        await payload.create({
+          collection: 'customers',
+          overrideAccess: true,
+          data: {
+            name: customer.name,
+            phone: cleanPhone,
+            email: safeEmail || '',
+            tenant: tenantId,
+            totalOrders: 1,
+            totalSpent: total,
+            tag: 'nuevo',
+            lastOrderAt: now.toISOString(),
+          },
+        });
+      } catch (createErr) {
+        // Carrera concurrente: índice único compuesto customers_tenant_phone_unique
+        const winner = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
+        if (!winner) throw createErr;
+        await applyOrderToCustomerSql(winner);
+      }
+    }
+  } catch (crmErr) {
+    console.warn('CRM upsert warning:', crmErr);
+  }
+}
+
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
   try {
     const { tenantSlug, storeName, currency, showVES, customer, items } = request;
 
     // ------------------------------------------------------------------
-    // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP.
-    // Antes de tocar BD/Trello/R2/Resend: cada spam que llegue aquí no debe
-    // costar nada más que una validación HMAC local y un comando Redis.
+    // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP
     // ------------------------------------------------------------------
     const hdrs = await headers();
     const guard = await evaluateCheckoutGuards({
@@ -101,20 +443,16 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       return { success: false, error: guard.error };
     }
 
-    if (!items || items.length === 0) {
-      return { success: false, error: 'El carrito está vacío' };
-    }
-
-    if (items.length > MAX_CHECKOUT_ITEMS) {
-      return { success: false, error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).` };
-    }
-
-    if (!customer.name || !customer.phone || !customer.email) {
-      return { success: false, error: 'Por favor completa el nombre, teléfono y correo de contacto' };
+    // ------------------------------------------------------------------
+    // 1. Boundary Input Validation (Zod-like schema enforcement)
+    // ------------------------------------------------------------------
+    const validation = validateCheckoutInput(request);
+    if (!validation.ok) {
+      return { success: false, error: validation.error };
     }
 
     // ------------------------------------------------------------------
-    // 1. Initialize Payload Local API and Fetch Tenant (Official Pattern)
+    // 2. Fetch Tenant (Official Pattern)
     // ------------------------------------------------------------------
     const payload = await getPayload({ config });
 
@@ -128,132 +466,28 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const tenantDoc = tenantResult?.docs?.[0] as Tenant | undefined;
     const tenantId = tenantDoc?.id;
 
-    // Tienda inexistente → no existe (404 en el storefront; aquí se rechaza)
     if (!tenantId || !tenantDoc) {
       return { success: false, error: 'Tienda no encontrada' };
     }
 
-    // Regla de negocio: el checkout es por WhatsApp — sin whatsappPhone la
-    // tienda no tiene canal de contacto y no recibe pedidos.
     if (!tenantDoc.whatsappPhone) {
       return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
     }
 
     // ------------------------------------------------------------------
-    // 2. Server-Side Price & Stock Verification (Fraud Prevention)
-    // Patrón oficial adaptado de `defaultProductsValidation` del plugin
-    // oficial @payloadcms/plugin-ecommerce (packages/plugin-ecommerce/
-    // src/utilities/defaultProductsValidation.ts): precio requerido desde
-    // la BD, stock suficiente, y rechazo de productos no verificados.
+    // 3. Server-Side Price & Stock Verification (Fraud Prevention)
     // ------------------------------------------------------------------
-    const verifiedItems: CheckoutItemData[] = [];
-
-    // R9 (plan v2): UN solo roundtrip para todo el carrito — los SKUs se
-    // resuelven en bloque con in[] sobre sku base y variantes (docs/queries:
-    // dot-notation anidada) y depth:0 evita poblar relaciones que no se usan.
-    // limit = skus.length basta: cada producto candidato contiene ≥1 SKU del
-    // carrito, y la cantidad de SKUs ya queda acotada por MAX_CHECKOUT_ITEMS.
-    const skus = Array.from(new Set(items.map((i) => i.sku).filter(Boolean)));
-    const candidatesRes = await payload.find({
-      collection: 'products',
-      where: {
-        and: [
-          { tenant: { equals: tenantId } },
-          {
-            or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }],
-          },
-        ],
-      },
-      limit: Math.max(skus.length, 1),
-      depth: 0,
-      overrideAccess: true,
+    const verifyResult = await verifyAndPriceItems({
+      payload,
+      tenantId,
+      rawItems: items,
     });
 
-    const baseBySku = new Map<string, Product>();
-    const variantOwnerBySku = new Map<string, Product>();
-    for (const doc of candidatesRes.docs as Product[]) {
-      if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
-      for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
-        if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
-      }
+    if (!verifyResult.ok) {
+      return { success: false, error: verifyResult.error };
     }
 
-    for (const item of items) {
-      // Cantidad: entero positivo acotado (evita -5 → $inc: +5 y abuso)
-      const qty = Number(item.quantity);
-      if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
-        return { success: false, error: 'Cantidad inválida en el carrito' };
-      }
-
-      if (!item.sku) {
-        return { success: false, error: 'Producto no disponible' };
-      }
-
-      // Todo item debe resolver a un producto REAL del tenant (el SKU y el
-      // precio los decide el servidor, nunca el cliente). El lookup acepta
-      // SKU base o SKU de variante (catálogo con variantes).
-      const dbProd = baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku);
-
-      if (!dbProd) {
-        // Sin eco del SKU: no revelar al sondeo qué códigos existen en el
-        // catálogo del tenant (enumeración).
-        return { success: false, error: 'Producto no disponible en el catálogo.' };
-      }
-
-      // Precio y stock desde el servidor: si el SKU es de una variante, se
-      // usan el precio y stock de la variante; si no, los del producto base.
-      let basePrice = Number(dbProd.price) || 0;
-      let stockAvailable: number | null =
-        dbProd.trackStock && typeof dbProd.stockQuantity === 'number' ? dbProd.stockQuantity : null;
-      const matchedVariant = Array.isArray(dbProd.variants)
-        ? dbProd.variants.find((v) => v.sku === item.sku)
-        : undefined;
-      if (matchedVariant) {
-        if (typeof matchedVariant.price === 'number') basePrice = matchedVariant.price;
-        if (typeof matchedVariant.stockQuantity === 'number') stockAvailable = matchedVariant.stockQuantity;
-      }
-
-      // Modificadores: el servidor resuelve los deltas por nombre de opción
-      // (nunca se confía en el precio que envía el cliente).
-      let modifiersDelta = 0;
-      if (item.modifiers && item.modifiers.length > 0) {
-        const optionList = Array.isArray(dbProd.modifiers)
-          ? dbProd.modifiers.flatMap((g) => (Array.isArray(g.options) ? g.options : []))
-          : [];
-        for (const optionName of item.modifiers) {
-          const option = optionList.find((o) => o.name === optionName);
-          if (!option) {
-            return { success: false, error: 'Opción no disponible en el catálogo.' };
-          }
-          modifiersDelta += Number(option.priceDelta) || 0;
-        }
-      }
-
-      const finalPrice = basePrice + modifiersDelta;
-
-      // Validación de stock previa a la venta (el descuento atómico $inc lo
-      // aplica el hook de inventario dentro de la transacción del pedido)
-      if (stockAvailable !== null && stockAvailable < qty) {
-        return {
-          success: false,
-          error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
-        };
-      }
-
-      verifiedItems.push({
-        sku: item.sku,
-        // El título con personalizaciones lo genera el cliente (solo display;
-        // se escapa al renderizar en email/PDF/WhatsApp)
-        title: item.title || dbProd.title,
-        quantity: qty,
-        price: finalPrice,
-      });
-    }
-
-    const itemsSubtotal = verifiedItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
-    if (itemsSubtotal <= 0) {
-      return { success: false, error: 'El total de productos del pedido es inválido' };
-    }
+    const { verifiedItems, itemsSubtotal } = verifyResult;
 
     // Tarifa fija de delivery configurada por el comercio en Payload
     const deliveryFee =
@@ -264,36 +498,18 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const total = itemsSubtotal + deliveryFee;
 
     // ------------------------------------------------------------------
-    // 3. Resolve Exchange Rate — jerarquía del producto:
-    //    manual del tenant (desde Analíticas) > Binance P2P en vivo >
-    //    dólar paralelo (dolarapi) > ninguna (no se muestra Bs).
+    // 4. Resolve Exchange Rate & Generate Order Number
     // ------------------------------------------------------------------
     const { rate: vesRate } = await resolveExchangeRateVES(tenantDoc);
     const showVESEffective = showVES === false ? false : vesRate !== null;
     const totalVES = vesRate ? total * vesRate : 0;
 
-    const now = new Date();
-    let orderNumber = '';
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const randomSuffix = randomInt(100000, 1000000);
-      const candidate = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
-        .toString()
-        .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${randomSuffix}`;
-      const clash = await payload.find({
-        collection: 'orders',
-        where: { orderNumber: { equals: candidate } },
-        limit: 1,
-        overrideAccess: true,
-      });
-      if (clash.docs.length === 0) {
-        orderNumber = candidate;
-        break;
-      }
-    }
+    const orderNumber = await generateUniqueOrderNumber(payload);
     if (!orderNumber) {
       return { success: false, error: 'No se pudo generar un número de pedido único. Intenta de nuevo.' };
     }
 
+    const now = new Date();
     const dateFormatted = now.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
@@ -303,9 +519,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     // ------------------------------------------------------------------
-    // 4. Generate Official Delivery Note PDF (in-memory) + subir a R2.
-    // El PDF se genera UNA vez por pedido y queda en R2; las descargas usan
-    // URLs firmadas (presigned) — sin endpoint de Next ni regeneración.
+    // 5. Generate Official Delivery Note PDF & Upload to R2
     // ------------------------------------------------------------------
     let pdfBase64: string | undefined = undefined;
     let pdfUrl: string | undefined = undefined;
@@ -340,77 +554,25 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     }
 
     // ------------------------------------------------------------------
-    // 5. Build Structured WhatsApp Message
+    // 6. Build Structured WhatsApp Message & Sanitize Customer Data
     // ------------------------------------------------------------------
-    // El WhatsApp es siempre el del tenant (validado arriba); sin fallbacks.
-    const targetPhone = tenantDoc.whatsappPhone;
-    const cleanPhone = targetPhone.replace(/\D/g, '');
-
-    const itemsSummary = verifiedItems
-      .map((item) => `• ${item.quantity}x ${sanitizePlainText(item.title)} ($${(item.quantity * item.price).toFixed(2)})`)
-      .join('\n');
-
-    // F2 (auditoría P0): el fallback es TEXTO LIBRE del cliente — se sanitiza
-    // igual que el resto de campos (fix A5) para que nadie pueda inyectar
-    // líneas falsas ("TOTAL A PAGAR: $0") en el mensaje del comercio.
-    const rawPaymentLabel = customer.paymentDetails?.methodKey
-      ? customer.paymentDetails.methodKey.replace('_', ' ').toUpperCase()
-      : customer.paymentMethod || 'PAGO ELECTRÓNICO';
-    const paymentLabel = sanitizePlainText(rawPaymentLabel);
-
-    // Audit fix A5: todos los datos del cliente van sanitizados — un cliente
-    // no puede inyectar líneas falsas ("TOTAL A PAGAR: $0") en el mensaje.
-    const safeName = sanitizePlainText(customer.name);
-    const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
-    const safePhone = cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
-    const safeNotes = sanitizePlainText(customer.notes);
-    const safeAddress = sanitizePlainText(customer.address);
-    const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);
-    const safeMunicipality = sanitizePlainText(customer.deliveryDetails?.municipality);
-    const safeReference = sanitizePlainText(customer.paymentDetails?.referenceNumber);
-
-    const whatsappMessage = `👋 *¡Nuevo Pedido #${orderNumber}!*
-🏪 *Comercio:* ${tenantDoc?.name || storeName}
-
-👤 *Cliente:* ${safeName}
-📱 *Teléfono:* ${safePhone}
-${customer.email ? `📧 *Correo:* ${sanitizePlainText(customer.email)}\n` : ''}🛵 *Modalidad:* ${customer.deliveryType === 'pickup' ? 'Retiro en Tienda (Pickup)' : 'Delivery'}
-${safeAddress ? `📍 *Dirección:* ${safeAddress}\n` : ''}${safeBuilding ? `🏢 *Edif/Casa:* ${safeBuilding}\n` : ''}${safeMunicipality ? `🗺️ *Municipio:* ${safeMunicipality}\n` : ''}💳 *Método de Pago:* ${paymentLabel}
-${safeReference ? `🔢 *N° Referencia:* ${safeReference}\n` : ''}${safeNotes ? `📝 *Nota:* ${safeNotes}\n` : ''}
-🛒 *Productos:*
-${itemsSummary}
-${deliveryFee > 0 ? `\n🛵 *Tarifa Delivery:* $${deliveryFee.toFixed(2)} USD` : ''}
-💰 *TOTAL A PAGAR:*
-💵 *$${total.toFixed(2)} USD*
-${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (Tasa: ${(vesRate ?? 0).toFixed(2)} Bs/$)\n` : ''}
-📄 ${pdfUrl ? `*Nota de Entrega PDF:* ${pdfUrl}` : '_He generado mi Nota de Entrega en PDF. Por favor confirma la recepción._'}`;
-
-    const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${encodeURIComponent(
-      whatsappMessage
-    )}`;
+    const { whatsappUrl, safePhone, safeEmail } = buildWhatsappMessagePayload({
+      tenantDoc,
+      storeName,
+      orderNumber,
+      customer,
+      verifiedItems,
+      deliveryFee,
+      total,
+      totalVES,
+      vesRate,
+      showVESEffective,
+      pdfUrl,
+    });
 
     // ------------------------------------------------------------------
-    // 6. Dispatch Trello + Email — ASÍNCRONO vía Jobs Queue oficial de
-    // Payload (https://payloadcms.com/docs/jobs-queue/overview): el workflow
-    // `order-created` (src/jobs/order-created.ts) crea la tarjeta de Trello y
-    // envía el correo con el PDF, con reintentos y sin bloquear el checkout.
-    // El job se procesa AL INSTANTE (runByID dentro de after()) justo después
-    // de responder al cliente; un runner externo (GitHub Actions →
-    // /api/jobs/run, con CRON_SECRET) sirve de red de seguridad para
-    // reintentos y fallos. Sin crons de Vercel (Hobby no los permite).
+    // 7. Persist Order in Orders Collection & Enqueue Async Job
     // ------------------------------------------------------------------
-
-    // ------------------------------------------------------------------
-    // 8. Persist Order in Orders Collection
-    // ------------------------------------------------------------------
-    // El pedido se persiste PRIMERO y su fallo se propaga al cliente
-    // (success:false): devolver éxito sin pedido dejaría al cliente en
-    // WhatsApp sin orden registrada, sin inventario y sin despacho
-    // (Trello/email). El CRM va después como best-effort.
-    if (!tenantId) {
-      return { success: false, error: 'Tienda no encontrada' };
-    }
-
     try {
       const orderDoc = await payload.create({
         collection: 'orders',
@@ -425,7 +587,7 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
           customer: {
             name: customer.name,
             phone: safePhone || customer.phone,
-            email: customer.email || '',
+            email: safeEmail || '',
             address: customer.address || '',
             paymentMethod: customer.paymentMethod || 'Efectivo / Transferencia',
             notes: customer.notes || '',
@@ -439,16 +601,11 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
           })),
           totalAmount: total,
           currency: currency || 'USD',
-          // Snapshot de la tasa aplicada — conciliación exacta por pedido
           exchangeRateVES: vesRate ?? undefined,
         },
       });
 
-      // Despacho asíncrono (Jobs Queue): Trello + email con PDF. El job se
-      // encola (durabilidad + reintentos) y se procesa AL INSTANTE vía
-      // runByID dentro de after(): corre justo después de responder al
-      // cliente, sin esperar a ningún cron. Si falla, queda en la cola y el
-      // runner externo (/api/jobs/run) lo reintenta.
+      // Despacho asíncrono vía Jobs Queue oficial
       try {
         const job = await payload.jobs.queue({
           workflow: 'order-created',
@@ -463,7 +620,6 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
           }
         });
       } catch (queueErr) {
-        // Visible en logs: un fallo aquí pierde Trello+email del pedido
         console.error('Jobs queue error:', queueErr);
       }
     } catch (orderErr) {
@@ -475,95 +631,20 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
     }
 
     // ------------------------------------------------------------------
-    // 9. Upsert Customer in CRM Collection & Tagging
+    // 8. Upsert Customer in CRM Collection (Atomic Postgres SQL)
     // ------------------------------------------------------------------
-    // Best-effort y DESPUÉS del pedido: los totales del CRM (totalOrders /
-    // totalSpent) solo cuentan pedidos realmente persistidos en BD; un fallo
-    // de CRM nunca bloquea la venta ya registrada.
-    try {
-      const cleanPhone = customer.phone.trim();
-
-      const findCustomerByTenantPhone = () =>
-        payload.find({
-          collection: 'customers',
-          where: {
-            and: [
-              { tenant: { equals: tenantId } },
-              { phone: { equals: cleanPhone } },
-            ],
-          },
-          limit: 1,
-          overrideAccess: true,
-        });
-
-      const applyOrderToCustomer = async (cust: Customer): Promise<void> => {
-        // F4 (auditoría P0): contadores ATÓMICOS con $inc de bajo nivel — el
-        // mismo patrón del hook de inventario (Orders.ts). Elimina la carrera
-        // read-modify-write entre checkouts concurrentes del mismo teléfono:
-        // dos pedidos simultáneos ya no pierden incrementos.
-        const updated = (await payload.db.updateOne({
-          collection: 'customers',
-          id: cust.id,
-          data: {
-            name: customer.name || cust.name,
-            email: customer.email || cust.email,
-            lastOrderAt: now.toISOString(),
-            totalOrders: { $inc: 1 },
-            totalSpent: { $inc: total },
-          },
-        })) as Customer;
-
-        // El tag es etiqueta CRM cosmética (no dinero): se recalcula sobre el
-        // doc YA incrementado y solo se toca si cambia el umbral.
-        const ordersCount = Number(updated?.totalOrders) || 0;
-        const spentTotal = Number(updated?.totalSpent) || 0;
-        const nextTag = ordersCount >= 3 || spentTotal >= 50 ? 'vip' : 'frecuente';
-        if (updated && updated.tag !== nextTag) {
-          await payload.update({
-            collection: 'customers',
-            id: cust.id,
-            overrideAccess: true,
-            data: { tag: nextTag },
-          });
-        }
-      };
-
-      const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
-
-      if (existingCust) {
-        await applyOrderToCustomer(existingCust);
-      } else {
-        try {
-          await payload.create({
-            collection: 'customers',
-            overrideAccess: true,
-            data: {
-              name: customer.name,
-              phone: cleanPhone,
-              email: customer.email || '',
-              tenant: tenantId,
-              totalOrders: 1,
-              totalSpent: total,
-              tag: 'nuevo',
-              lastOrderAt: now.toISOString(),
-            },
-          });
-        } catch (createErr) {
-          // Carrera con otro checkout simultáneo: el índice único compuesto
-          // customers_tenant_phone_unique (migración 20260824_2) rechazó el
-          // insert porque otro request creó al cliente entre el find y el
-          // create. Reintento como update sobre el registro ganador.
-          const winner = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
-          if (!winner) throw createErr;
-          await applyOrderToCustomer(winner);
-        }
-      }
-    } catch (crmErr) {
-      console.warn('CRM upsert warning:', crmErr);
-    }
+    await upsertCustomerCrm({
+      payload,
+      tenantId,
+      customer,
+      safePhone,
+      safeEmail,
+      total,
+      now,
+    });
 
     // ------------------------------------------------------------------
-    // 10. Revalidate Next.js Cache Deterministically
+    // 9. Revalidate Next.js Cache Deterministically
     // ------------------------------------------------------------------
     try {
       revalidatePath(`/${tenantSlug}`);
@@ -577,12 +658,10 @@ ${showVESEffective ? `🇻🇪 *Bs. ${totalVES.toLocaleString('es-VE', { minimum
       orderNumber,
       whatsappUrl,
       pdfBase64,
-      // URL firmada (R2) de la Nota de Entrega, válida 7 días (máx sigv4)
       pdfUrl,
-      // El email ahora se envía de forma asíncrona vía Jobs Queue
       emailSent: false,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Unhandled processOrder error:', err);
     return {
       success: false,

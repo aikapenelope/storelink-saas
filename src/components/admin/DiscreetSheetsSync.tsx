@@ -54,8 +54,9 @@ export function DiscreetSheetsSync() {
         });
         setTimeout(() => window.location.reload(), 1500);
       }
-    } catch (err: any) {
-      setStatus({ type: 'error', msg: err.message || 'Error de red' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error de red';
+      setStatus({ type: 'error', msg });
     } finally {
       setLoading(false);
     }

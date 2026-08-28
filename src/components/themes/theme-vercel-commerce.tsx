@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, ArrowRight, Sparkles, Plus } from 'lucide-react';
+import Image from 'next/image';
+import { ShoppingBag, Search, ArrowRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -12,7 +14,7 @@ interface ThemeProps {
   cartAmount: number;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
-  onAddToCart: (product: ProductItem, quantity: number) => void;
+  onAddToCart?: (product: ProductItem, quantity: number) => void;
 }
 
 export function ThemeVercelCommerce({
@@ -23,7 +25,6 @@ export function ThemeVercelCommerce({
   cartAmount,
   onOpenCart,
   onOpenProductModal,
-  onAddToCart,
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -149,7 +150,7 @@ export function ThemeVercelCommerce({
               const priceVES = showVES ? product.price * exchangeRate : 0;
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               return (
                 <div
@@ -159,9 +160,11 @@ export function ThemeVercelCommerce({
                 >
                   {/* Image Container */}
                   <div className="relative aspect-square w-full bg-neutral-900 overflow-hidden">
-                    <img
+                    <Image
                       src={imageUrl}
                       alt={product.title}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
 

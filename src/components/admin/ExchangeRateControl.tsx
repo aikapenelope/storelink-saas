@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { DollarSign, RefreshCw, Check, ArrowRight, Zap, ShieldCheck } from 'lucide-react';
+import { DollarSign, Zap, ShieldCheck } from 'lucide-react';
 
 interface ExchangeRateControlProps {
   tenantSlug: string;
@@ -55,9 +55,10 @@ export function ExchangeRateControl({
 
       // Clear status message after 4s
       setTimeout(() => setStatusMessage(null), 4000);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'No se pudo guardar';
       setStatusMessage({
-        text: `Error: ${err.message || 'No se pudo guardar'}`,
+        text: `Error: ${msg}`,
         type: 'error',
       });
     } finally {

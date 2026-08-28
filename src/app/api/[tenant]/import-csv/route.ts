@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { assertTenantAccess } from '@/lib/utils';
 import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
+import type { Product } from '@/payload-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,6 +153,24 @@ export async function POST(
     // Cache categories to avoid duplicate finds/creates in loop
     const categoryCache = new Map<string, number>();
 
+    // Pre-cargar productos existentes del tenant para eliminar N+1 queries (Audit Fix P10)
+    const existingProductsRes = await payload.find({
+      collection: 'products',
+      where: {
+        tenant: { equals: tenantId },
+      },
+      limit: 1000,
+      depth: 0,
+      overrideAccess: true,
+    });
+
+    const productBySku = new Map<string, Product>();
+    for (const prod of existingProductsRes.docs as Product[]) {
+      if (prod.sku) {
+        productBySku.set(prod.sku, prod);
+      }
+    }
+
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
       // Campos de texto persistidos SIEMPRE neutralizados (anti-fórmulas);
@@ -201,22 +220,13 @@ export async function POST(
           }
         }
 
-        // Check if product with this SKU already exists for this tenant
-        const existing = await payload.find({
-          collection: 'products',
-          where: {
-            and: [
-              { tenant: { equals: tenantId } },
-              { sku: { equals: sku } },
-            ],
-          },
-          limit: 1,
-        });
+        // Búsqueda O(1) en memoria en lugar de query individual por fila
+        const existing = productBySku.get(sku);
 
-        if (existing.docs.length > 0) {
-          await payload.update({
+        if (existing) {
+          const updated = await payload.update({
             collection: 'products',
-            id: existing.docs[0].id,
+            id: existing.id,
             data: {
               title,
               price,
@@ -228,9 +238,10 @@ export async function POST(
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
           });
+          productBySku.set(sku, updated as Product);
           updatedCount++;
         } else {
-          await payload.create({
+          const created = await payload.create({
             collection: 'products',
             data: {
               title,
@@ -245,10 +256,12 @@ export async function POST(
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
           });
+          productBySku.set(sku, created as Product);
           createdCount++;
         }
-      } catch (err: any) {
-        errors.push({ line: i + 1, error: err.message || 'Error al procesar fila' });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Error al procesar fila';
+        errors.push({ line: i + 1, error: msg });
       }
     }
 
@@ -256,7 +269,7 @@ export async function POST(
     try {
       revalidatePath(`/${tenantSlug}`);
       revalidatePath('/');
-    } catch (revalidateErr) {
+    } catch {
       // Non-blocking in dev
     }
 
@@ -268,7 +281,7 @@ export async function POST(
       totalProcessed: createdCount + updatedCount,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
       { error: 'Error interno del servidor durante la importación' },
       { status: 500 }

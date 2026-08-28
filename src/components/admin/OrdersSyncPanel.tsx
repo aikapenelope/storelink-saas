@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, Download, RefreshCw, ExternalLink, ArrowUpDown } from 'lucide-react';
+import { FileSpreadsheet, Download, RefreshCw, ExternalLink } from 'lucide-react';
+import type { Order } from '@/payload-types';
 
 export function OrdersSyncPanel() {
   const [tenantSlug, setTenantSlug] = useState('');
@@ -83,10 +84,18 @@ export function OrdersSyncPanel() {
 
       const csvRows = [headers.join(',')];
 
-      docs.forEach((o: any) => {
+      (docs as Order[]).forEach((o) => {
         const itemsStr = Array.isArray(o.items)
-          ? o.items.map((i: any) => `${i.quantity}x ${i.title} ($${i.price})`).join(' | ')
+          ? o.items.map((i) => `${i.quantity}x ${i.title} ($${i.price})`).join(' | ')
           : '';
+
+        const totalAmount = Number(o.totalAmount || 0);
+        const rateVES = Number(o.exchangeRateVES || 0);
+        const totalVES = rateVES > 0 ? totalAmount * rateVES : 0;
+        const subtotal = Array.isArray(o.items) && o.items.length > 0
+          ? o.items.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0)
+          : totalAmount;
+        const deliveryFee = Math.max(0, totalAmount - subtotal);
 
         const row = [
           sanitize(o.orderNumber || o.id),
@@ -96,13 +105,13 @@ export function OrdersSyncPanel() {
           sanitize(o.customer?.phone),
           sanitize(o.customer?.address),
           sanitize(o.deliveryType || 'delivery'),
-          sanitize(o.paymentDetails?.methodKey || o.customer?.paymentMethod),
+          sanitize(o.paymentDetails?.methodKey),
           sanitize(o.paymentDetails?.referenceNumber),
-          sanitize(Number(o.subtotal || o.totalAmount || 0).toFixed(2)),
-          sanitize(Number(o.deliveryFee || 0).toFixed(2)),
-          sanitize(Number(o.totalAmount || o.total || 0).toFixed(2)),
-          sanitize(Number(o.exchangeRateVES || 0).toFixed(2)),
-          sanitize(Number(o.totalVES || 0).toFixed(2)),
+          sanitize(subtotal.toFixed(2)),
+          sanitize(deliveryFee.toFixed(2)),
+          sanitize(totalAmount.toFixed(2)),
+          sanitize(rateVES.toFixed(2)),
+          sanitize(totalVES.toFixed(2)),
           sanitize(o.currency || 'USD'),
           sanitize(itemsStr),
           sanitize(o.customer?.notes),
@@ -118,8 +127,9 @@ export function OrdersSyncPanel() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err: any) {
-      alert(`Error al exportar: ${err.message || 'Error desconocido'}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(`Error al exportar: ${msg}`);
     } finally {
       setExporting(false);
     }

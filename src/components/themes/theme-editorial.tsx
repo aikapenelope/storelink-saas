@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Sparkles, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ShoppingBag, Search } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -12,7 +14,7 @@ interface ThemeProps {
   cartAmount: number;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
-  onAddToCart: (product: ProductItem, quantity: number) => void;
+  onAddToCart?: (product: ProductItem, quantity: number) => void;
 }
 
 export function ThemeEditorial({
@@ -23,7 +25,6 @@ export function ThemeEditorial({
   cartAmount,
   onOpenCart,
   onOpenProductModal,
-  onAddToCart,
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,7 +134,7 @@ export function ThemeEditorial({
               const priceVES = showVES ? product.price * exchangeRate : 0;
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               return (
                 <div
@@ -143,9 +144,11 @@ export function ThemeEditorial({
                 >
                   {/* Image 4:5 Portrait */}
                   <div className="relative aspect-[4/5] bg-[#ece5dd] rounded-xl overflow-hidden shadow-xs">
-                    <img
+                    <Image
                       src={imageUrl}
                       alt={product.title}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
                     {product.featured && (

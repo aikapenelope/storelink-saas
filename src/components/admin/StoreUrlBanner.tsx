@@ -1,8 +1,11 @@
 import React from 'react';
+import Link from 'next/link';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
 import { Store, ExternalLink, BarChart3 } from 'lucide-react';
+import { isSuperAdmin, getUserTenantIds } from '@/lib/utils';
+import type { User, Tenant } from '@/payload-types';
 
 export async function StoreUrlBanner() {
   try {
@@ -12,35 +15,35 @@ export async function StoreUrlBanner() {
 
     if (!user) return null;
 
-    const isSuperAdmin = (user as any).role === 'super-admin';
+    const typedUser = user as User;
+    const isSuperAdminUser = isSuperAdmin(typedUser);
+    const tenantIds = getUserTenantIds(typedUser);
     let tenantSlug: string | null = null;
     let tenantName = 'Mi Tienda';
 
-    if ((user as any)?.tenants && Array.isArray((user as any).tenants) && (user as any).tenants.length > 0) {
-      const firstTenantRef = (user as any).tenants[0].tenant;
-      const t = typeof firstTenantRef === 'object' && firstTenantRef !== null ? firstTenantRef : null;
-      if (t) {
-        tenantSlug = t.slug || null;
-        tenantName = t.name || tenantName;
-      } else if (firstTenantRef) {
-        const doc = await payload.findByID({ collection: 'tenants', id: firstTenantRef }).catch(() => null);
-        if (doc) {
-          tenantSlug = doc.slug || null;
-          tenantName = doc.name || tenantName;
-        }
+    if (tenantIds.length > 0) {
+      const doc = (await payload.findByID({
+        collection: 'tenants',
+        id: tenantIds[0] as number,
+      }).catch(() => null)) as Tenant | null;
+
+      if (doc) {
+        tenantSlug = doc.slug || null;
+        tenantName = doc.name || tenantName;
       }
     }
 
-    if (!tenantSlug && isSuperAdmin) {
+    if (!tenantSlug && isSuperAdminUser) {
       const allTenants = await payload.find({ collection: 'tenants', limit: 1 });
       if (allTenants.docs.length > 0) {
-        tenantSlug = allTenants.docs[0].slug;
-        tenantName = allTenants.docs[0].name;
+        const first = allTenants.docs[0] as Tenant;
+        tenantSlug = first.slug || null;
+        tenantName = first.name || tenantName;
       }
     }
 
     if (!tenantSlug) {
-      if (isSuperAdmin) {
+      if (isSuperAdminUser) {
         return (
           <div className="w-full my-4 p-4 bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4 font-sans text-zinc-100 shadow-xl rounded-none isolate box-border">
             <div className="flex items-center gap-3 min-w-0">
@@ -89,13 +92,13 @@ export async function StoreUrlBanner() {
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
-          <a
+          <Link
             href="/admin/analytics"
             className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold border border-zinc-700 transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider shrink-0 leading-none"
           >
             <BarChart3 className="w-3.5 h-3.5 text-zinc-400" />
             <span>Dashboard</span>
-          </a>
+          </Link>
           <a
             href={storeUrl}
             target="_blank"
@@ -108,7 +111,7 @@ export async function StoreUrlBanner() {
         </div>
       </div>
     );
-  } catch (error) {
+  } catch {
     return null;
   }
 }

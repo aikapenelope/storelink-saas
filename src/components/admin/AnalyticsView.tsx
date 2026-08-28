@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 import { headers } from 'next/headers';
@@ -10,7 +11,8 @@ import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-
 import { getOrderKpis, getSalesSeries, getBestSellers } from '@/lib/analytics';
 import { fetchOrdersPage } from '@/app/actions/admin-orders';
 import { isSuperAdmin, getUserTenantIds } from '@/lib/utils';
-import type { Tenant } from '@/payload-types';
+import type { Tenant, User, Order, Customer, Product } from '@/payload-types';
+import type { Where } from 'payload';
 import {
   Wallet,
   ShoppingCart,
@@ -37,22 +39,14 @@ export async function AnalyticsView() {
   }
 
   try {
+    const typedUser = user as User;
     const isSuperAdminUser = isSuperAdmin(user);
     const tenantIds = getUserTenantIds(user);
-    let tenantId: number | string | null = tenantIds.length > 0 ? tenantIds[0] : null;
+    const tenantId: number | string | null = tenantIds.length > 0 ? tenantIds[0] : null;
     let tenantDoc: Tenant | null = null;
 
     if (tenantId) {
       tenantDoc = (await payload.findByID({ collection: 'tenants', id: tenantId as number }).catch(() => null)) as Tenant | null;
-    }
-
-    // If Super Admin and no specific tenant, allow viewing the first store as platform overview
-    if (!tenantDoc && isSuperAdminUser) {
-      const allTenants = await payload.find({ collection: 'tenants', limit: 1 });
-      if (allTenants.docs.length > 0) {
-        tenantDoc = allTenants.docs[0] as Tenant;
-        tenantId = tenantDoc.id;
-      }
     }
 
     if (!isSuperAdminUser && !tenantDoc) {
@@ -68,11 +62,19 @@ export async function AnalyticsView() {
       );
     }
 
-    const tenantSlug = tenantDoc?.slug || 'aurita';
-    const tenantName = tenantDoc?.name || (isSuperAdminUser ? 'Plataforma Global' : 'Mi Tienda');
+    let defaultTenantSlug = 'aurita';
+    if (!tenantDoc && isSuperAdminUser) {
+      const firstTenantRes = await payload.find({ collection: 'tenants', limit: 1 });
+      if (firstTenantRes.docs.length > 0) {
+        defaultTenantSlug = firstTenantRes.docs[0].slug;
+      }
+    }
+
+    const tenantSlug = tenantDoc?.slug || defaultTenantSlug;
+    const tenantName = tenantDoc?.name || (isSuperAdminUser ? 'Plataforma Global (Todas las Tiendas)' : 'Mi Tienda');
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
     const storeUrl = `${siteUrl}/${tenantSlug}`;
-    const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
+    const userName = typedUser.email ? typedUser.email.split('@')[0] : 'Comerciante';
 
     // Fetch live market exchange rates (solo informativo para el widget)
     const liveRates = await getAllLiveExchangeRates();
@@ -83,7 +85,7 @@ export async function AnalyticsView() {
     // dólar paralelo > ninguna (sin Bs)
     const { rate: rateVES, source: rateSource } = await resolveExchangeRateVES(tenantDoc);
 
-    const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
+    const tenantFilter: Where | undefined = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
     // Pedidos: primera página (25) para la lista en vivo; el resto se pide
     // bajo demanda (paginación real). KPIs, serie y más vendidos vienen de
@@ -125,10 +127,10 @@ export async function AnalyticsView() {
         getBestSellers(payload, tenantId, 5),
       ]);
 
-    const orders = (ordersRes.docs || []) as any[];
-    const customers = (customersRes.docs || []) as any[];
-    const products = (productsRes.docs || []) as any[];
-    const lowStockProducts = (lowStockRes.docs || []) as any[];
+    const orders = (ordersRes.docs || []) as Order[];
+    const customers = (customersRes.docs || []) as Customer[];
+    const products = (productsRes.docs || []) as Product[];
+    const lowStockProducts = (lowStockRes.docs || []) as Product[];
 
     // 1. Financial Metrics (agregadas en SQL)
     const totalOrders = kpis.orderCount;
@@ -205,36 +207,36 @@ export async function AnalyticsView() {
             </div>
 
             <nav className="order-3 flex w-full overflow-x-auto border border-zinc-800 bg-zinc-950 p-0.5 lg:order-none lg:mx-auto lg:w-auto rounded-none">
-              <a
+              <Link
                 href="/admin/analytics"
                 className="shrink-0 px-3.5 py-1 text-xs font-bold transition bg-white text-black shadow-sm rounded-none uppercase tracking-wider"
               >
                 Dashboard
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/admin/collections/orders"
                 className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Pedidos
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/admin/collections/products"
                 className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Productos
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/admin/collections/customers"
                 className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Clientes CRM
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/admin"
                 className="shrink-0 px-3.5 py-1 text-xs font-medium transition text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none uppercase tracking-wider"
               >
                 Colecciones
-              </a>
+              </Link>
             </nav>
 
             <div className="flex items-center gap-2.5">
@@ -302,20 +304,20 @@ export async function AnalyticsView() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <a
+                <Link
                   href="/admin/collections/products/create"
                   className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider font-mono"
                 >
                   <Plus className="w-3.5 h-3.5 shrink-0" />
                   <span>+ Agregar Producto</span>
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/admin/collections/orders"
                   className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-bold transition inline-flex items-center gap-1.5 rounded-none uppercase tracking-wider font-mono"
                 >
                   <ClipboardList className="w-3.5 h-3.5 shrink-0" />
                   <span>Ver en Payload</span>
-                </a>
+                </Link>
                 {tenantSlug ? (
                   <a
                     href={storeUrl}
@@ -485,12 +487,12 @@ export async function AnalyticsView() {
                   </p>
                   <h2 className="text-base font-bold text-white">Ventas y pedidos</h2>
                 </div>
-                <a
+                <Link
                   href="/admin/collections/orders"
                   className="text-xs text-zinc-400 transition hover:text-white font-mono"
                 >
                   Ver reporte →
-                </a>
+                </Link>
               </div>
 
               <div className="flex h-48 items-end gap-2 border-b border-l border-zinc-800 px-2 pb-0 pt-4 sm:gap-4">
@@ -539,9 +541,9 @@ export async function AnalyticsView() {
                   </p>
                   <h2 className="text-base font-bold text-white">Más vendidos</h2>
                 </div>
-                <a href="/admin/collections/products" className="text-xs text-zinc-400 transition hover:text-white font-mono">
+                <Link href="/admin/collections/products" className="text-xs text-zinc-400 transition hover:text-white font-mono">
                   Ver catálogo →
-                </a>
+                </Link>
               </div>
 
               <div className="space-y-3">
@@ -583,9 +585,9 @@ export async function AnalyticsView() {
                   </p>
                   <h2 className="text-base font-bold text-white">Clientes frecuentes</h2>
                 </div>
-                <a href="/admin/collections/customers" className="text-xs text-zinc-400 transition hover:text-white font-mono">
+                <Link href="/admin/collections/customers" className="text-xs text-zinc-400 transition hover:text-white font-mono">
                   Abrir CRM →
-                </a>
+                </Link>
               </div>
 
               <div className="space-y-1">
@@ -650,10 +652,11 @@ export async function AnalyticsView() {
         </main>
       </div>
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Error desconocido';
     return (
       <div className="p-8 text-center text-zinc-400 bg-black min-h-screen font-sans">
-        <p>Error cargando analíticas: {error.message}</p>
+        <p>Error cargando analíticas: {msg}</p>
       </div>
     );
   }

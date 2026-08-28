@@ -8,6 +8,7 @@ import type {
 import { APIError } from 'payload';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
+import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import type { Product } from '@/payload-types';
 
 /**
@@ -130,7 +131,6 @@ const applyBaseProductStockDelta = async ({
   `);
   return true;
 };
-import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
 /**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
