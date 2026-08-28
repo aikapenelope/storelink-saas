@@ -10,6 +10,7 @@ import * as migration_20260824_products_sku_index from './20260824_products_sku_
 import * as migration_20260824_2_customers_tenant_phone_unique from './20260824_2_customers_tenant_phone_unique';
 import * as migration_20260827_email_idempotency_and_category_slug_unique from './20260827_email_idempotency_and_category_slug_unique';
 import * as migration_20260828_add_tenant_delivery_config_columns from './20260828_add_tenant_delivery_config_columns';
+import * as migration_20260829_add_trello_byok_and_list_id_fix from './20260829_add_trello_byok_and_list_id_fix';
 
 export const migrations = [
   {
@@ -73,5 +74,10 @@ export const migrations = [
     up: migration_20260828_add_tenant_delivery_config_columns.up,
     down: migration_20260828_add_tenant_delivery_config_columns.down,
     name: '20260828_add_tenant_delivery_config_columns',
+  },
+  {
+    up: migration_20260829_add_trello_byok_and_list_id_fix.up,
+    down: migration_20260829_add_trello_byok_and_list_id_fix.down,
+    name: '20260829_add_trello_byok_and_list_id_fix',
   },
 ];

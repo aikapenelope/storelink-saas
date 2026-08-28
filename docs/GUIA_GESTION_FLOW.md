@@ -63,6 +63,8 @@ El sistema usa **una sola credencial maestra de Trello** (ya configurada en las 
 
 > ⚠️ Sin `listId` configurado, el pedido NO se despacha a Trello (no cae en tableros de otros comercios). El resto del flujo (WhatsApp, PDF, correo, CRM) funciona normal.
 
+**Opcional — Trello propio del comercio (BYOK):** si el comercio prefiere usar su propia cuenta de Trello en vez de la credencial maestra global (aísla su despacho de pedidos de cualquier incidente con la cuenta maestra), puede pegar su **API Key** y **Token** propios en el mismo grupo "Espacio de Trabajo Trello". Ambos campos se guardan ocultos (write-only) y deben venir de la misma cuenta; si se deja alguno vacío, se usa la credencial maestra global como respaldo.
+
 #### Paso 5: (Opcional) Resend propio del comercio (BYOK Email)
 - **Resend (Email):** Pega la API Key del cliente solo si desea que los correos salgan desde su propio dominio y cuota. Si se deja vacío, usa la clave global del sistema.
 

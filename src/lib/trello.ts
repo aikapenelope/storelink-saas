@@ -1,3 +1,31 @@
+export interface TrelloCredentialSource {
+  apiKey?: string | null;
+  token?: string | null;
+}
+
+/**
+ * Resuelve qué par de credenciales de Trello usar para un pedido: BYOK del
+ * tenant (mismo patrón que resend-tenant-adapter.ts para Resend) si trae
+ * AMBOS `apiKey` y `token` propios, o el par completo de la cuenta maestra
+ * global (Vercel) en caso contrario.
+ *
+ * "Ambos o ninguno" es intencional: un BYOK parcial (solo uno de los dos
+ * campos) se descarta por completo en vez de mezclar una credencial del
+ * tenant con la otra de la cuenta maestra — evita un estado híbrido que
+ * Trello rechazaría de todas formas con un 401, pero sin la claridad de
+ * saber si el fallback fue total.
+ */
+export function resolveTrelloCredentials(
+  tenantConfig: TrelloCredentialSource | null | undefined,
+  master: { apiKey?: string | null; token?: string | null }
+): { apiKey: string; token: string } {
+  const hasByokPair = Boolean(tenantConfig?.apiKey && tenantConfig?.token);
+  return {
+    apiKey: (hasByokPair ? tenantConfig?.apiKey : master.apiKey) || '',
+    token: (hasByokPair ? tenantConfig?.token : master.token) || '',
+  };
+}
+
 export interface TrelloOrderPayload {
   apiKey?: string;
   token?: string;
