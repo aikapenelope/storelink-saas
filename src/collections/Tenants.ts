@@ -1,5 +1,39 @@
-import type { CollectionConfig } from 'payload';
+import type { CollectionConfig, TextFieldSingleValidation } from 'payload';
 import { getUserRole, getUserTenantIds, hasTenantAccess } from '@/lib/utils';
+
+/**
+ * F1 (auditoría BYOK 2026-08-29): resend-tenant-adapter.ts resuelve la clave
+ * de Resend por `emailConfig.fromEmail`, NO por `tenant.id`. Sin esta
+ * validación, dos tenants con el mismo fromEmail hacían que el adapter le
+ * prestara silenciosamente la clave de Resend de un tenant a otro. La
+ * migración 20260830_tenants_from_email_unique.ts es la garantía real a
+ * nivel de BD (defensa en profundidad contra condiciones de carrera entre
+ * dos guardados simultáneos); este validate solo da el error amigable en
+ * el admin antes de llegar a esa restricción.
+ */
+const validateUniqueFromEmail: TextFieldSingleValidation = async (value, { req, id }) => {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed) return true;
+
+  const conflict = await req.payload.find({
+    collection: 'tenants',
+    where: {
+      and: [
+        { 'emailConfig.fromEmail': { equals: trimmed } },
+        ...(id ? [{ id: { not_equals: id } }] : []),
+      ],
+    },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  });
+
+  if (conflict.docs.length > 0) {
+    const otherName = (conflict.docs[0] as { name?: string }).name || 'otro comercio';
+    return `Este correo remitente ya está en uso por "${otherName}". Cada comercio debe usar un correo remitente distinto (resend-tenant-adapter.ts resuelve la clave BYOK por este campo).`;
+  }
+  return true;
+};
 
 export const Tenants: CollectionConfig = {
   slug: 'tenants',
@@ -112,9 +146,11 @@ export const Tenants: CollectionConfig = {
           name: 'fromEmail',
           type: 'text',
           label: 'Correo Remitente Personalizado (ej: pedidos@mitienda.com)',
+          index: true,
           admin: {
-            description: 'Debe estar verificado en la cuenta de Resend utilizada.',
+            description: 'Debe estar verificado en la cuenta de Resend utilizada. Debe ser único: ningún otro comercio puede usar el mismo correo remitente.',
           },
+          validate: validateUniqueFromEmail,
         },
         {
           name: 'notificationEmail',

@@ -1,6 +1,7 @@
 import type { EmailAdapter, Payload } from 'payload';
+import { APIError } from 'payload';
 
-type Address = { name?: string; address?: string };
+export type Address = { name?: string; address?: string };
 
 /**
  * Adapter de email oficial (interfaz EmailAdapter de Payload:
@@ -9,8 +10,15 @@ type Address = { name?: string; address?: string };
  * resendApiKey); si no la tiene, se usa la clave master (RESEND_API_KEY).
  * La resolución es por el `from` (address) de cada envío: el job de checkout
  * manda `from: { name: storeName, address: fromEmail }` y el adapter localiza
- * al tenant por ese fromEmail. El mapeo a la API de Resend replica el del
- * adapter oficial @payloadcms/email-resend (única diferencia: la clave).
+ * al tenant por ese fromEmail. `emailConfig.fromEmail` es único a nivel de BD
+ * (migración 20260830_tenants_from_email_unique.ts + validate en Tenants.ts)
+ * — sin esa restricción, dos tenants con el mismo fromEmail se prestarían
+ * silenciosamente la clave de Resend entre sí (F1, auditoría BYOK 2026-08-29).
+ *
+ * El mapeo a la API de Resend se verificó línea por línea contra el código
+ * REAL instalado de @payloadcms/email-resend@3.88.0 (no solo contra su
+ * firma pública) — ver mapAddresses más abajo para la única divergencia de
+ * comportamiento que tenía este adapter y ya se corrigió.
  *
  * Sprint 3 (M1): cache en memoria por fromAddress con TTL de 5 minutos.
  * Sin cache, cada email (cliente + comercio + reintentos del job) hacía
@@ -18,10 +26,20 @@ type Address = { name?: string; address?: string };
  * El módulo-level Map persiste entre invocaciones dentro de la misma instancia
  * serverless (patrón singleton ya usado en exchange-rate.ts y rate-limit.ts).
  */
-type ResendTenantAdapterArgs = {
+export type ResendTenantAdapterArgs = {
   defaultFromAddress: string;
   defaultFromName: string;
   apiKey: string;
+  /**
+   * P2 (auditoría BYOK 2026-08-29): mismo safety net que ya trae el adapter
+   * oficial @payloadcms/email-resend (`overrideRecipientAddress`). Si se
+   * define, TODO correo (de cualquier tenant) se redirige a esta dirección
+   * — pensado para Vercel Preview/staging, para no mandar confirmaciones
+   * reales a clientes si algún día se prueba un checkout completo ahí.
+   * Configurar solo vía RESEND_OVERRIDE_RECIPIENT en entornos no-productivos;
+   * NUNCA en producción (ver src/payload.config.ts).
+   */
+  overrideRecipientAddress?: string;
 };
 
 type ResendResponse = { id: string } | { message: string; name: string; statusCode: number };
@@ -31,7 +49,7 @@ const tenantKeyCache = new Map<string, { key: string; expiresAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Resuelve la API key del tenant por fromEmail, con cache de 5 min. */
-async function resolveApiKey(fromAddress: string, payload: Payload, masterKey: string): Promise<string> {
+export async function resolveApiKey(fromAddress: string, payload: Payload, masterKey: string): Promise<string> {
   const now = Date.now();
   const cached = tenantKeyCache.get(fromAddress);
   if (cached && cached.expiresAt > now) return cached.key;
@@ -79,8 +97,14 @@ export const resendTenantAdapter = (
         ? await resolveApiKey(fromAddress, payload, args.apiKey)
         : args.apiKey;
 
+      // P2: mismo patrón que el adapter oficial — override total del
+      // destinatario en entornos no-productivos (ver ResendTenantAdapterArgs).
+      const modifiedMessage = args.overrideRecipientAddress
+        ? { ...message, to: args.overrideRecipientAddress }
+        : message;
+
       const sendEmailOptions = mapPayloadEmailToResendEmail(
-        message,
+        modifiedMessage,
         args.defaultFromName,
         args.defaultFromAddress
       );
@@ -101,12 +125,25 @@ export const resendTenantAdapter = (
         return data;
       }
       const statusCode = data.statusCode || res.status;
-      throw new Error(`Error sending email: ${statusCode}`);
+      // P3 (auditoría BYOK 2026-08-29): alineado con el adapter oficial —
+      // incluye name/message de Resend en el error. Antes solo se veía el
+      // status code en los logs de Vercel, sin el detalle real del fallo
+      // (ej. "validation_error - Invalid `from` field"). También se usa
+      // APIError (como el resto del repo, ver Orders.ts) en vez de Error
+      // plano, para que el status HTTP real de Resend viaje con el error.
+      let formattedError = `Error sending email: ${statusCode}`;
+      if (data.name && data.message) {
+        formattedError += ` ${data.name} - ${data.message}`;
+      }
+      throw new APIError(formattedError, statusCode);
     },
   });
 
-function mapPayloadEmailToResendEmail(
-  message: { from?: Address | string; to?: Address | Address[] | string; subject?: string; html?: unknown; text?: unknown; cc?: Address | Address[] | string; bcc?: Address | Address[] | string; replyTo?: Address | Address[] | string; attachments?: unknown[]; headers?: unknown },
+/** Forma real de nodemailer (de la que Payload extiende SendEmailOptions): un destinatario, uno solo, o una mezcla de strings y objetos Address. */
+type AddressOrAddresses = Address | (Address | string)[] | string;
+
+export function mapPayloadEmailToResendEmail(
+  message: { from?: Address | string; to?: AddressOrAddresses; subject?: string; html?: unknown; text?: unknown; cc?: AddressOrAddresses; bcc?: AddressOrAddresses; replyTo?: AddressOrAddresses; attachments?: unknown[]; headers?: unknown },
   defaultFromName: string,
   defaultFromAddress: string
 ) {
@@ -124,7 +161,13 @@ function mapPayloadEmailToResendEmail(
   };
 }
 
-function mapFromAddress(
+/**
+ * Divergencia INTENCIONAL del adapter oficial: éste usa `address.name` tal
+ * cual (podría renderizar "undefined <email>" si el remitente no trae
+ * nombre). Aquí se cae a `defaultFromName` en ese caso — mejora deliberada,
+ * no un bug, y por eso NO se "alinea" con el oficial en este punto.
+ */
+export function mapFromAddress(
   address: Address | string | undefined,
   defaultFromName: string,
   defaultFromAddress: string
@@ -138,7 +181,20 @@ function mapFromAddress(
   return `${address.name ?? defaultFromName} <${address.address}>`;
 }
 
-function mapAddresses(addresses?: Address | Address[] | string): string {
+/**
+ * P2 (auditoría BYOK 2026-08-29): alineado con el mapAddresses REAL del
+ * adapter oficial instalado (@payloadcms/email-resend/dist/index.js) —
+ * devuelve un ARRAY de strings para arrays/objetos Address, nunca un string
+ * unido con comas. Antes de este fix, un `to`/`cc`/`bcc` con múltiples
+ * destinatarios (array) se mandaba a Resend como "a@x.com, b@x.com" (string)
+ * en vez de ["a@x.com", "b@x.com"] (array) — el comentario original de este
+ * archivo afirmaba que el mapeo "replica el del adapter oficial", pero esa
+ * afirmación era incorrecta en este punto. Hoy la app solo manda strings
+ * simples (nunca arrays) en `to`/`cc`/`bcc`, así que el fix no cambia
+ * comportamiento observable todavía, pero cierra la divergencia antes de
+ * que algún día se necesite mandar a múltiples destinatarios.
+ */
+export function mapAddresses(addresses?: AddressOrAddresses): string | string[] {
   if (!addresses) {
     return '';
   }
@@ -146,12 +202,12 @@ function mapAddresses(addresses?: Address | Address[] | string): string {
     return addresses;
   }
   if (Array.isArray(addresses)) {
-    return addresses.map((a) => (typeof a === 'string' ? a : a.address)).join(', ');
+    return addresses.map((a) => (typeof a === 'string' ? a : a.address ?? ''));
   }
-  return addresses.address ?? '';
+  return [addresses.address ?? ''];
 }
 
-function mapAttachments(attachments?: unknown[]): unknown[] {
+export function mapAttachments(attachments?: unknown[]): unknown[] {
   if (!attachments) {
     return [];
   }
@@ -177,7 +233,7 @@ function mapAttachments(attachments?: unknown[]): unknown[] {
   });
 }
 
-function mapHeaders(headers?: unknown): Record<string, string> | undefined {
+export function mapHeaders(headers?: unknown): Record<string, string> | undefined {
   if (!headers) {
     return undefined;
   }
