@@ -10,7 +10,8 @@ import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-
 import { getOrderKpis, getSalesSeries, getBestSellers } from '@/lib/analytics';
 import { fetchOrdersPage } from '@/app/actions/admin-orders';
 import { isSuperAdmin, getUserTenantIds } from '@/lib/utils';
-import type { Tenant } from '@/payload-types';
+import type { Tenant, User } from '@/payload-types';
+import type { Where } from 'payload';
 import {
   Wallet,
   ShoppingCart,
@@ -37,6 +38,7 @@ export async function AnalyticsView() {
   }
 
   try {
+    const typedUser = user as User;
     const isSuperAdminUser = isSuperAdmin(user);
     const tenantIds = getUserTenantIds(user);
     let tenantId: number | string | null = tenantIds.length > 0 ? tenantIds[0] : null;
@@ -44,15 +46,6 @@ export async function AnalyticsView() {
 
     if (tenantId) {
       tenantDoc = (await payload.findByID({ collection: 'tenants', id: tenantId as number }).catch(() => null)) as Tenant | null;
-    }
-
-    // If Super Admin and no specific tenant, allow viewing the first store as platform overview
-    if (!tenantDoc && isSuperAdminUser) {
-      const allTenants = await payload.find({ collection: 'tenants', limit: 1 });
-      if (allTenants.docs.length > 0) {
-        tenantDoc = allTenants.docs[0] as Tenant;
-        tenantId = tenantDoc.id;
-      }
     }
 
     if (!isSuperAdminUser && !tenantDoc) {
@@ -68,11 +61,19 @@ export async function AnalyticsView() {
       );
     }
 
-    const tenantSlug = tenantDoc?.slug || 'aurita';
-    const tenantName = tenantDoc?.name || (isSuperAdminUser ? 'Plataforma Global' : 'Mi Tienda');
+    let defaultTenantSlug = 'aurita';
+    if (!tenantDoc && isSuperAdminUser) {
+      const firstTenantRes = await payload.find({ collection: 'tenants', limit: 1 });
+      if (firstTenantRes.docs.length > 0) {
+        defaultTenantSlug = firstTenantRes.docs[0].slug;
+      }
+    }
+
+    const tenantSlug = tenantDoc?.slug || defaultTenantSlug;
+    const tenantName = tenantDoc?.name || (isSuperAdminUser ? 'Plataforma Global (Todas las Tiendas)' : 'Mi Tienda');
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
     const storeUrl = `${siteUrl}/${tenantSlug}`;
-    const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
+    const userName = typedUser.name || (typedUser.email ? typedUser.email.split('@')[0] : 'Comerciante');
 
     // Fetch live market exchange rates (solo informativo para el widget)
     const liveRates = await getAllLiveExchangeRates();
@@ -83,7 +84,7 @@ export async function AnalyticsView() {
     // dólar paralelo > ninguna (sin Bs)
     const { rate: rateVES, source: rateSource } = await resolveExchangeRateVES(tenantDoc);
 
-    const tenantFilter: any = tenantId ? { tenant: { equals: tenantId } } : undefined;
+    const tenantFilter: Where | undefined = tenantId ? { tenant: { equals: tenantId } } : undefined;
 
     // Pedidos: primera página (25) para la lista en vivo; el resto se pide
     // bajo demanda (paginación real). KPIs, serie y más vendidos vienen de
