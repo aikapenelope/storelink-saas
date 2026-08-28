@@ -361,7 +361,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // Audit fix A5: todos los datos del cliente van sanitizados — un cliente
     // no puede inyectar líneas falsas ("TOTAL A PAGAR: $0") en el mensaje.
     const safeName = sanitizePlainText(customer.name);
-    const safePhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const safePhone = cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
     const safeNotes = sanitizePlainText(customer.notes);
     const safeAddress = sanitizePlainText(customer.address);
     const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);

@@ -44,17 +44,6 @@ const trelloDispatchOrder: TaskConfig = {
       return { output: { skipped: true, cardId } };
     }
 
-    // Sentinel lock: marca estado intermedio para evitar carreras si hay reintentos inmediatos
-    await payload.update({
-      collection: 'orders',
-      id: orderId,
-      overrideAccess: true,
-      req,
-      data: {
-        trelloCardUrl: '__pending__',
-      },
-    });
-
     const tenantId = typeof order.tenant === 'object' ? order.tenant?.id : order.tenant;
     const tenantDoc = tenantId
       ? ((await payload.findByID({
@@ -75,6 +64,17 @@ const trelloDispatchOrder: TaskConfig = {
     if (!isTrelloEnabled || !apiKey || !token || !listId) {
       return { output: { skipped: true } };
     }
+
+    // Sentinel lock: marca estado intermedio para evitar carreras si hay reintentos inmediatos
+    await payload.update({
+      collection: 'orders',
+      id: orderId,
+      overrideAccess: true,
+      req,
+      data: {
+        trelloCardUrl: '__pending__',
+      },
+    });
 
     const orderNumber = order.orderNumber || String(order.id);
     // URL firmada (R2) de la nota, válida 30 días desde el despacho

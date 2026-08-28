@@ -197,8 +197,8 @@ export default buildConfig({
   editor: lexicalEditor(),
   secret: (() => {
     const secret = process.env.PAYLOAD_SECRET;
-    if (!secret && process.env.NODE_ENV === 'production' && process.env.VERCEL_ENV === 'production') {
-      throw new Error('FATAL: PAYLOAD_SECRET environment variable is missing.');
+    if (!secret && process.env.VERCEL) {
+      throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on Vercel deployments.');
     }
     return secret || 'flow-martes-build-secret-key-32chars-min';
   })(),
