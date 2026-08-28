@@ -28,9 +28,13 @@ export const Media: CollectionConfig = {
     mimeTypes: ['image/*'],
     // Sprint 4: crop:true habilita el recorte manual en el panel admin
     // sin cambios en el schema de BD (solo UI). Patrón oficial COLLECTIONS.md.
-    // focalPoint:true se pospone: añade columna focal_point_x/y → necesita
-    // `pnpm migrate:create` desde un entorno con BD activa antes de aplicar.
+    // Sprint 5: focalPoint:true habilita el selector de punto focal en el admin.
+    // Sin cambios de BD: Payload añade focalX/focalY al schema SIEMPRE que
+    // imageSizes esté definido (ver getBaseFields.js, Payload 3.88). Las columnas
+    // `focal_x` y `focal_y` ya existen en la tabla media desde el schema inicial.
+    // Cambio solo de UI — no requiere migración.
     crop: true,
+    focalPoint: true,
   },
   access: {
     read: () => true,
