@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { assertTenantAccess } from '@/lib/utils';
+// assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
+// Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 import type { Product } from '@/payload-types';
@@ -58,11 +59,17 @@ export async function POST(
       );
     }
 
-    // 1. Find tenant
+    // 1. Find tenant — Sprint 2: user + overrideAccess: false (patrón oficial
+    // QUERIES.md §Local API). El plugin multi-tenant aplica el constraint
+    // { id: { in: tenantIds } } del usuario automáticamente. Si el slug no
+    // pertenece a ningún tenant del usuario, el resultado es vacío → 404.
+    // Se elimina assertTenantAccess manual: Payload lo gestiona aquí.
     const tenantResult = await payload.find({
       collection: 'tenants',
       where: { slug: { equals: tenantSlug } },
       limit: 1,
+      user: authResult.user,
+      overrideAccess: false,
     });
 
     if (tenantResult.docs.length === 0) {
@@ -73,16 +80,6 @@ export async function POST(
     }
 
     const tenantId = tenantResult.docs[0].id;
-
-    // 🔒 Multi-Tenant Authorization Check (Audit Fix #2.3) con el guard
-    // compartido: super-admin o tenant asignado (los IDs ya vienen en el
-    // objeto/JWT del usuario; no hace falta reconsultar users).
-    if (!assertTenantAccess(authResult.user, tenantId)) {
-      return NextResponse.json(
-        { error: 'No tienes permiso para modificar el catálogo de esta tienda.' },
-        { status: 403 }
-      );
-    }
 
     // 2. Read CSV content (either as multipart form-data or raw text)
     let csvText = '';
@@ -153,7 +150,9 @@ export async function POST(
     // Cache categories to avoid duplicate finds/creates in loop
     const categoryCache = new Map<string, number>();
 
-    // Pre-cargar productos existentes del tenant para eliminar N+1 queries (Audit Fix P10)
+    // Pre-cargar productos existentes del tenant para eliminar N+1 queries.
+    // user + overrideAccess: false: el plugin multi-tenant añade el constraint
+    // de tenencia; el where explícito es defensa en profundidad adicional.
     const existingProductsRes = await payload.find({
       collection: 'products',
       where: {
@@ -161,7 +160,8 @@ export async function POST(
       },
       limit: 1000,
       depth: 0,
-      overrideAccess: true,
+      user: authResult.user,
+      overrideAccess: false,
     });
 
     const productBySku = new Map<string, Product>();
@@ -201,6 +201,8 @@ export async function POST(
                 ],
               },
               limit: 1,
+              user: authResult.user,
+              overrideAccess: false,
             });
             if (existingCat.docs.length > 0) {
               categoryId = existingCat.docs[0].id;
@@ -213,6 +215,8 @@ export async function POST(
                   slug: catSlug,
                   tenant: tenantId,
                 },
+                user: authResult.user,
+                overrideAccess: false,
               });
               categoryId = newCat.id;
               categoryCache.set(catSlug, categoryId);
@@ -237,6 +241,8 @@ export async function POST(
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
+            user: authResult.user,
+            overrideAccess: false,
           });
           productBySku.set(sku, updated as Product);
           updatedCount++;
@@ -255,6 +261,8 @@ export async function POST(
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
             },
+            user: authResult.user,
+            overrideAccess: false,
           });
           productBySku.set(sku, created as Product);
           createdCount++;

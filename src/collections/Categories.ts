@@ -26,9 +26,15 @@ export const Categories: CollectionConfig = {
       label: 'Nombre de la Categoría (ej: Pizzas, Bebidas, Ropa)',
     },
     {
+      // Sprint 2: NO se migra a type:'slug' porque la unicidad es compuesta
+      // (tenant_id, slug) — migración 20260827_email_idempotency_and_category_slug_unique.
+      // El tipo nativo slug agregaría un UNIQUE global que rompería tenants con
+      // la misma categoría (ej. dos tiendas con "Bebidas"). Se añade index:true
+      // para que el schema de Payload refleje el índice compuesto existente en BD.
       name: 'slug',
       type: 'text',
       required: true,
+      index: true,
       label: 'Identificador (slug)',
     },
     {

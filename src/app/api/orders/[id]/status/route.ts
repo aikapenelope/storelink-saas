@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { revalidatePath } from 'next/cache';
 import type { Order } from '@/payload-types';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';

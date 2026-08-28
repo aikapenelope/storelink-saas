@@ -1,5 +1,5 @@
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import type { Tenant } from '@/payload-types';
 
 /** Resuelve un tenant por slug (null si no existe). Punto único de consulta

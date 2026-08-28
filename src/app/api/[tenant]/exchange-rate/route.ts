@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { assertTenantAccess } from '@/lib/utils';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
@@ -29,11 +29,15 @@ export async function POST(
     const body = await request.json();
     const { exchangeRateVES } = body;
 
-    // Find tenant
+    // Find tenant — Sprint 2: user + overrideAccess: false para el lookup
+    // inicial. El plugin multi-tenant aplica el constraint automáticamente;
+    // si el slug no es del usuario → resultado vacío → 404 sin revelar existencia.
     const tenantsRes = await payload.find({
       collection: 'tenants',
       where: { slug: { equals: tenantSlug } },
       limit: 1,
+      user,
+      overrideAccess: false,
     });
 
     if (tenantsRes.docs.length === 0) {
@@ -42,8 +46,9 @@ export async function POST(
 
     const tenant = tenantsRes.docs[0];
 
-    // Autorización multi-tenant con el guard compartido (super-admin o
-    // tenant asignado al usuario; los IDs vienen en el JWT/objeto user).
+    // assertTenantAccess: se mantiene como defensa en profundidad porque el
+    // update de abajo usa overrideAccess: true (ver comentario). Si en el
+    // futuro el update se migra a overrideAccess: false, este check es redundante.
     if (!assertTenantAccess(user, tenant.id)) {
       return NextResponse.json({ error: 'No tienes permiso para modificar esta tienda.' }, { status: 403 });
     }
@@ -62,6 +67,12 @@ export async function POST(
       newRate = rateNum;
     }
 
+    // overrideAccess: true es intencional aquí: Tenants.update está restringido
+    // a super-admin en el schema (los tenant-admins no pueden modificar todos
+    // los campos de su tenant). La ruta hace su propia autorización vía
+    // assertTenantAccess + el lookup con overrideAccess:false de arriba.
+    // Pendiente (Sprint 4): añadir field-level access en branding.exchangeRateVES
+    // para hasTenantAccess y migrar este update a overrideAccess: false.
     await payload.update({
       collection: 'tenants',
       id: tenant.id,

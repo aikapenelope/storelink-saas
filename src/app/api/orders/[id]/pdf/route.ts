@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { getDeliveryNoteUrl, ADMIN_DOWNLOAD_TTL_SECONDS } from '@/lib/delivery-note';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
 

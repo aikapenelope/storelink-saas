@@ -4,7 +4,7 @@ import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { uploadDeliveryNotePdf, getDeliveryNoteUrl } from '@/lib/delivery-note';
 import { getPayload, type Payload } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import type { Tenant, Product, Customer } from '@/payload-types';

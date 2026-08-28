@@ -34,10 +34,17 @@ export const Tenants: CollectionConfig = {
       label: 'Nombre del Comercio',
     },
     {
+      // Sprint 2: se mantiene type:'text' porque `slugField()` está marcado
+      // @experimental en Payload 3.88 — no apto para producción con clientes reales.
+      // Se añade index:true para que el schema de Payload declare explícitamente
+      // el índice que ya existe en BD (el unique implica un índice; declararlo
+      // evita discrepancias en el análisis de query plans y futuras migraciones).
+      // Pendiente: migrar a slugField() cuando el API sea estable (>= Payload 4).
       name: 'slug',
       type: 'text',
       required: true,
       unique: true,
+      index: true,
       label: 'Identificador / Ruta de la Tienda (ej: aura-modaaa)',
       admin: {
         description: 'La URL pública de la tienda se creará de inmediato en: https://flow.martes.app/[slug]',

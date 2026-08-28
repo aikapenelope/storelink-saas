@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPayload, type Where } from 'payload';
-import config from '@/payload.config';
+import config from '@payload-config';
 import { verifyCronSecret } from '@/lib/cron-secret';
 
 /**
