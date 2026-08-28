@@ -1,19 +1,66 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { ShoppingBag, Check } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
 import { DemosMartesSwitcher } from './demos-martes-switcher';
-import { ThemeBasicBanner } from './themes/theme-basic';
-import { ThemeFoodDelivery } from './themes/theme-food';
-import { ThemeFashionBoutique } from './themes/theme-fashion';
-import { ThemeMotoParts } from './themes/theme-moto';
-import { ThemeHardwareStore } from './themes/theme-hardware';
-import { ThemeB2BMatrix } from './themes/theme-b2b-matrix';
-import { ThemeEditorial } from './themes/theme-editorial';
-import { ThemeFluidPWA } from './themes/theme-fluid-pwa';
-import { ThemeVercelCommerce } from './themes/theme-vercel-commerce';
 import { VERTICAL_PRESETS } from '@/data/theme-presets';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+
+export interface ThemeProps {
+  tenant: TenantConfig;
+  products: ProductItem[];
+  categories: string[];
+  cartCount: number;
+  cartAmount: number;
+  cart: Array<{ id: string; quantity: number }>;
+  activeTheme?: string;
+  onSelectTheme?: (themeId: string) => void;
+  onOpenCart: () => void;
+  onOpenProductModal: (product: ProductItem) => void;
+  onAddToCart: (product: ProductItem, quantity: number) => void;
+}
+
+const ThemeBasicBanner = dynamic<ThemeProps>(() =>
+  import('./themes/theme-basic').then((m) => m.ThemeBasicBanner)
+);
+const ThemeFoodDelivery = dynamic<ThemeProps>(() =>
+  import('./themes/theme-food').then((m) => m.ThemeFoodDelivery)
+);
+const ThemeFashionBoutique = dynamic<ThemeProps>(() =>
+  import('./themes/theme-fashion').then((m) => m.ThemeFashionBoutique)
+);
+const ThemeMotoParts = dynamic<ThemeProps>(() =>
+  import('./themes/theme-moto').then((m) => m.ThemeMotoParts)
+);
+const ThemeHardwareStore = dynamic<ThemeProps>(() =>
+  import('./themes/theme-hardware').then((m) => m.ThemeHardwareStore)
+);
+const ThemeB2BMatrix = dynamic<ThemeProps>(() =>
+  import('./themes/theme-b2b-matrix').then((m) => m.ThemeB2BMatrix)
+);
+const ThemeEditorial = dynamic<ThemeProps>(() =>
+  import('./themes/theme-editorial').then((m) => m.ThemeEditorial)
+);
+const ThemeFluidPWA = dynamic<ThemeProps>(() =>
+  import('./themes/theme-fluid-pwa').then((m) => m.ThemeFluidPWA)
+);
+const ThemeVercelCommerce = dynamic<ThemeProps>(() =>
+  import('./themes/theme-vercel-commerce').then((m) => m.ThemeVercelCommerce)
+);
+
+const THEME_MAP: Record<string, React.ComponentType<ThemeProps>> = {
+  'basic-banner': ThemeBasicBanner,
+  'food-delivery': ThemeFoodDelivery,
+  'fashion-boutique': ThemeFashionBoutique,
+  'moto-parts': ThemeMotoParts,
+  'hardware-store': ThemeHardwareStore,
+  'b2b-matrix': ThemeB2BMatrix,
+  'editorial': ThemeEditorial,
+  'fluid-pwa': ThemeFluidPWA,
+  'vercel-commerce': ThemeVercelCommerce,
+};
 
 export interface ProductVariant {
   name: string;
@@ -142,7 +189,42 @@ export function StorefrontClient({
   isDemo = false,
   checkoutNonce,
 }: StorefrontClientProps) {
+  const storageKey = `flow_cart_${tenant.slug}`;
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  // Hidratación segura SSR desde localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setCart(parsed);
+        }
+      }
+    } catch {
+      // Silencioso ante errores de parse
+    } finally {
+      setHasHydrated(true);
+    }
+  }, [storageKey]);
+
+  // Persistencia reactiva del carrito
+  useEffect(() => {
+    if (!hasHydrated || typeof window === 'undefined') return;
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem(storageKey, JSON.stringify(cart));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // Silencioso ante cuotas de almacenamiento
+    }
+  }, [cart, hasHydrated, storageKey]);
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
 
@@ -259,29 +341,12 @@ export function StorefrontClient({
     onAddToCart: handleAddToCart,
   };
 
+  const ActiveThemeComponent = THEME_MAP[activeTheme] || ThemeBasicBanner;
+
   return (
     <div className="relative min-h-screen w-full max-w-full overflow-x-hidden">
-      {/* Render Active Theme View from 9 presets */}
-      {activeTheme === 'basic-banner' && <ThemeBasicBanner {...themeProps} />}
-      {activeTheme === 'fashion-boutique' && <ThemeFashionBoutique {...themeProps} />}
-      {activeTheme === 'moto-parts' && <ThemeMotoParts {...themeProps} />}
-      {activeTheme === 'hardware-store' && <ThemeHardwareStore {...themeProps} />}
-      {activeTheme === 'food-delivery' && <ThemeFoodDelivery {...themeProps} />}
-      {activeTheme === 'b2b-matrix' && <ThemeB2BMatrix {...themeProps} />}
-      {activeTheme === 'editorial' && <ThemeEditorial {...themeProps} />}
-      {activeTheme === 'fluid-pwa' && <ThemeFluidPWA {...themeProps} />}
-      {activeTheme === 'vercel-commerce' && <ThemeVercelCommerce {...themeProps} />}
-      {![
-        'basic-banner',
-        'fashion-boutique',
-        'moto-parts',
-        'hardware-store',
-        'food-delivery',
-        'b2b-matrix',
-        'editorial',
-        'fluid-pwa',
-        'vercel-commerce',
-      ].includes(activeTheme) && <ThemeBasicBanner {...themeProps} />}
+      {/* Render Active Theme View from 9 presets dynamically */}
+      <ActiveThemeComponent {...themeProps} />
 
       {/* Shared Interactive Product Customizer Modal */}
       {selectedProduct && (
@@ -298,7 +363,7 @@ export function StorefrontClient({
               <img
                 src={
                   selectedProduct.images?.[0]?.url ||
-                  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80'
+                  DEFAULT_PRODUCT_IMAGE_URL
                 }
                 alt={selectedProduct.title}
                 className="w-full h-full object-cover"
