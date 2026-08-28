@@ -64,6 +64,8 @@ export type Tenant = {
     boardName?: string | null;
     boardUrl?: string | null;
     listId?: string | null;
+    apiKey?: string | null;
+    token?: string | null;
   };
   branding?: {
     logo?: number | Media | null;

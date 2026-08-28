@@ -179,6 +179,33 @@ export const Tenants: CollectionConfig = {
             description: 'ID de 24 caracteres alfanuméricos de la columna "Pendiente" del tablero en Trello',
           },
         },
+        {
+          // BYOK Trello (mismo patrón que emailConfig.resendApiKey): un
+          // comercio avanzado puede traer su PROPIA cuenta de Trello para no
+          // depender de la credencial maestra global (aislamiento operativo
+          // — si la cuenta maestra se suspende o se compromete, este tenant
+          // no se ve afectado). Write-only: nunca se devuelve por REST/admin.
+          name: 'apiKey',
+          type: 'text',
+          access: {
+            read: () => false,
+          },
+          label: 'API Key de Trello Propia del Comercio (Opcional - BYOK)',
+          admin: {
+            description: 'Se guarda oculta (write-only): pégala para usarla o pégala de nuevo para rotarla. Requiere también su Token propio (ambos o ninguno). Si se deja vacío, usa la cuenta maestra global del sistema.',
+          },
+        },
+        {
+          name: 'token',
+          type: 'text',
+          access: {
+            read: () => false,
+          },
+          label: 'Token de Trello Propio del Comercio (Opcional - BYOK)',
+          admin: {
+            description: 'Se guarda oculto (write-only), igual que la API Key propia. Ambos campos deben venir de la misma cuenta de Trello del comercio.',
+          },
+        },
       ],
     },
     {

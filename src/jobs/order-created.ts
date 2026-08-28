@@ -1,5 +1,5 @@
 import type { TaskConfig, WorkflowConfig } from 'payload';
-import { createTrelloOrderCard } from '@/lib/trello';
+import { createTrelloOrderCard, resolveTrelloCredentials } from '@/lib/trello';
 import { getDeliveryNoteUrl } from '@/lib/delivery-note';
 import { buildOrderConfirmationEmailHtml } from '@/lib/order-email';
 import type { Order, Tenant } from '@/payload-types';
@@ -54,11 +54,16 @@ const trelloDispatchOrder: TaskConfig = {
         }).catch(() => null)) as Tenant | null)
       : null;
 
-    // Modelo de operación: credencial MASTER global (Vercel) + listId por
-    // tenant. Sin listId propio NO se despacha (nunca a tableros ajenos).
+    // Modelo de operación: BYOK opcional por tenant (mismo patrón que
+    // resend-tenant-adapter.ts) + credencial MASTER global (Vercel) como
+    // respaldo — ver resolveTrelloCredentials en lib/trello.ts. Un comercio
+    // que traiga su propia cuenta de Trello queda aislado de cualquier
+    // incidente con la cuenta maestra: su despacho no depende de ella.
     const isTrelloEnabled = tenantDoc?.trelloConfig?.enabled !== false;
-    const apiKey = process.env.TRELLO_API_KEY || '';
-    const token = process.env.TRELLO_TOKEN || '';
+    const { apiKey, token } = resolveTrelloCredentials(tenantDoc?.trelloConfig, {
+      apiKey: process.env.TRELLO_API_KEY,
+      token: process.env.TRELLO_TOKEN,
+    });
     const listId = tenantDoc?.trelloConfig?.listId || '';
 
     if (!isTrelloEnabled || !apiKey || !token || !listId) {
