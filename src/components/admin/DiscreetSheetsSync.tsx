@@ -48,11 +48,16 @@ export function DiscreetSheetsSync() {
       if (!res.ok) {
         setStatus({ type: 'error', msg: data.error || 'Error al sincronizar' });
       } else {
+        // La sincronización corre en background (Jobs Queue oficial, ver
+        // src/jobs/catalog-import.ts): la respuesta ya no trae conteos
+        // exactos al instante (data.created/data.updated no existen más).
+        // Mismo mensaje y espera que GoogleSheetsSyncWidget/ProductsSyncPanel
+        // para reflejar el resultado real del job en vez de "0 creados".
         setStatus({
           type: 'success',
-          msg: `¡Listo! ${data.created || 0} creados, ${data.updated || 0} actualizados. Recargando...`,
+          msg: data.message || 'Sincronización en cola. Se reflejará en el catálogo en unos segundos.',
         });
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => window.location.reload(), 4000);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error de red';
