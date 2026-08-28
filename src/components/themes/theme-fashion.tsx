@@ -25,6 +25,7 @@ export function ThemeFashionBoutique({
   products,
   categories,
   cartCount,
+  cartAmount,
   onOpenCart,
   onOpenProductModal,
 }: ThemeProps) {

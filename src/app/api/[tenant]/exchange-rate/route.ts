@@ -80,7 +80,7 @@ export async function POST(
       revalidatePath('/admin');
       // Invalida la tasa cacheada del storefront (ISR)
       revalidateTag('rate');
-    } catch (e) {
+    } catch {
       // Ignored in edge cases
     }
 

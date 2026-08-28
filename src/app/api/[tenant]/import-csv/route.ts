@@ -259,8 +259,9 @@ export async function POST(
           productBySku.set(sku, created as Product);
           createdCount++;
         }
-      } catch (err: any) {
-        errors.push({ line: i + 1, error: err.message || 'Error al procesar fila' });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Error al procesar fila';
+        errors.push({ line: i + 1, error: msg });
       }
     }
 
@@ -268,7 +269,7 @@ export async function POST(
     try {
       revalidatePath(`/${tenantSlug}`);
       revalidatePath('/');
-    } catch (revalidateErr) {
+    } catch {
       // Non-blocking in dev
     }
 
@@ -280,7 +281,7 @@ export async function POST(
       totalProcessed: createdCount + updatedCount,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
       { error: 'Error interno del servidor durante la importación' },
       { status: 500 }

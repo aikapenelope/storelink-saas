@@ -2,19 +2,13 @@
 
 import React, { useState } from 'react';
 import {
-  CheckCircle2,
-  Clock,
   Truck,
   PackageCheck,
-  XCircle,
   MessageCircle,
   ExternalLink,
   Download,
-  Filter,
   Eye,
-  Check,
   X,
-  CreditCard,
 } from 'lucide-react';
 
 interface OrderItem {
@@ -116,8 +110,9 @@ export function DashboardOrdersManager({
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder((prev) => prev ? { ...prev, status: newStatus } : null);
       }
-    } catch (err: any) {
-      alert(`Error actualizando estado: ${err.message || 'Error de conexión'}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      alert(`Error actualizando estado: ${msg}`);
     } finally {
       setUpdatingId(null);
     }
@@ -160,8 +155,9 @@ export function DashboardOrdersManager({
             : null
         );
       }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      alert(`Error: ${msg}`);
     } finally {
       setUpdatingId(null);
     }

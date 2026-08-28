@@ -22,6 +22,7 @@ export function ThemeEditorial({
   products,
   categories,
   cartCount,
+  cartAmount,
   onOpenCart,
   onOpenProductModal,
 }: ThemeProps) {

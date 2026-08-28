@@ -336,7 +336,7 @@ async function upsertCustomerCrm({
   now,
 }: {
   payload: Payload;
-  tenantId: number | string;
+  tenantId: number;
   customer: CheckoutCustomerData;
   safePhone: string;
   safeEmail: string;
@@ -661,7 +661,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       pdfUrl,
       emailSent: false,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Unhandled processOrder error:', err);
     return {
       success: false,

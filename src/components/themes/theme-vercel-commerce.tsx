@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, ArrowRight, Sparkles, Plus } from 'lucide-react';
+import { ShoppingBag, Search, ArrowRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
@@ -14,7 +14,7 @@ interface ThemeProps {
   cartAmount: number;
   onOpenCart: () => void;
   onOpenProductModal: (product: ProductItem) => void;
-  onAddToCart: (product: ProductItem, quantity: number) => void;
+  onAddToCart?: (product: ProductItem, quantity: number) => void;
 }
 
 export function ThemeVercelCommerce({
@@ -25,7 +25,6 @@ export function ThemeVercelCommerce({
   cartAmount,
   onOpenCart,
   onOpenProductModal,
-  onAddToCart,
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');

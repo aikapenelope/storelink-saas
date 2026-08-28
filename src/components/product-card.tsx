@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Plus, Minus, Check, ShoppingBag, Eye } from 'lucide-react';
+import { Plus, Minus, ShoppingBag, Eye } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 

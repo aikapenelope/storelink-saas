@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { THEME_METAS, type ThemeMeta } from '@/data/theme-presets';
 
 const WHATSAPP_PHONE = '584149189169';
@@ -121,10 +122,12 @@ export default function TemplatesPage() {
               >
                 {/* Image Cover */}
                 <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-950">
-                  <img
+                  <Image
                     src={theme.previewImage}
                     alt={theme.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out opacity-90 group-hover:opacity-100"
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out opacity-90 group-hover:opacity-100"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
 

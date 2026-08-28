@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
-import { ShoppingBag, Search, Plus, Minus, Layers, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Minus } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 

@@ -52,10 +52,11 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
           window.location.reload();
         }, 1500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error de conexión con el servidor';
       setResult({
         success: false,
-        message: err.message || 'Error de conexión con el servidor',
+        message: msg,
       });
     } finally {
       setLoading(false);

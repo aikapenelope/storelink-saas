@@ -298,8 +298,9 @@ export async function POST(
           });
           createdCount++;
         }
-      } catch (err: any) {
-        errors.push({ line: i + 1, error: err.message || 'Error al procesar fila' });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Error al procesar fila';
+        errors.push({ line: i + 1, error: msg });
       }
     }
 
@@ -307,7 +308,7 @@ export async function POST(
     try {
       revalidatePath(`/${tenantSlug}`);
       revalidatePath('/');
-    } catch (revalidateErr) {
+    } catch {
       // Non-blocking in dev
     }
 

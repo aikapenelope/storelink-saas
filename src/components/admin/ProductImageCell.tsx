@@ -1,11 +1,16 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
 
 interface ProductImageCellProps {
   cellData?: string | null;
-  rowData?: any;
+  rowData?: {
+    imageUrl?: string | null;
+    images?: Array<{ image?: { url?: string } | null }>;
+    title?: string;
+  };
 }
 
 export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
@@ -21,11 +26,12 @@ export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
 
   return (
     <div className="w-9 h-9 bg-zinc-950 border border-zinc-700 overflow-hidden rounded-none shrink-0 relative flex items-center justify-center">
-      <img
+      <Image
         src={imageUrl}
         alt={rowData?.title || 'Producto'}
-        className="w-full h-full object-cover rounded-none"
-        loading="lazy"
+        fill
+        sizes="36px"
+        className="object-cover rounded-none"
       />
     </div>
   );

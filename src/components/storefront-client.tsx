@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { ShoppingBag, Check } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
 import { DemosMartesSwitcher } from './demos-martes-switcher';
@@ -360,13 +361,15 @@ export function StorefrontClient({
           >
             {/* Image Banner */}
             <div className="relative h-56 bg-slate-100 flex-shrink-0">
-              <img
+              <Image
                 src={
                   selectedProduct.images?.[0]?.url ||
                   DEFAULT_PRODUCT_IMAGE_URL
                 }
                 alt={selectedProduct.title}
-                className="w-full h-full object-cover"
+                fill
+                sizes="(max-width: 640px) 100vw, 448px"
+                className="object-cover"
               />
               <button
                 onClick={() => setSelectedProduct(null)}

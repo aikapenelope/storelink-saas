@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ShoppingBag,
-  Trash2,
   Plus,
   Minus,
   Send,
@@ -20,7 +19,6 @@ import {
   CreditCard,
   Smartphone,
   DollarSign,
-  AlertCircle,
   Camera,
 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
@@ -112,7 +110,6 @@ export function CartDrawer({
   exchangeRateVES = 0,
   showVES = false,
   storeName,
-  whatsappPhone,
   preview = false,
   tenantSlug,
   checkoutNonce,
@@ -351,7 +348,7 @@ export function CartDrawer({
       } else {
         alert(response.error || 'Hubo un error al procesar el pedido.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       alert('Error de conexión al procesar el pedido.');
     } finally {

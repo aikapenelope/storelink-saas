@@ -219,8 +219,9 @@ export default async function TenantStorefrontPage({
       });
       categories = Array.from(catSet);
     }
-  } catch (err: any) {
-    if (err?.digest?.startsWith('NEXT_NOT_FOUND') || err?.message === 'NEXT_NOT_FOUND') {
+  } catch (err: unknown) {
+    const errorObject = err as { digest?: string; message?: string } | null;
+    if (errorObject?.digest?.startsWith('NEXT_NOT_FOUND') || errorObject?.message === 'NEXT_NOT_FOUND') {
       throw err;
     }
     console.error('Error fetching tenant products from Payload:', err);

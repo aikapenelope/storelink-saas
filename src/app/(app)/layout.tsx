@@ -1,6 +1,28 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
+import { Plus_Jakarta_Sans, Space_Grotesk, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-plus-jakarta-sans',
+  display: 'swap',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['500', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Flow by Martes — Tu negocio vendiendo 24/7 en piloto automático | 0% Comisiones',
@@ -24,15 +46,7 @@ export default function AppLayout({
 }) {
   return (
     <html lang="es" className="scroll-smooth">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="antialiased min-h-screen bg-[#0c0418] text-slate-950 selection:bg-violet-500 selection:text-white">
+      <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} ${jetBrainsMono.variable} antialiased min-h-screen bg-[#0c0418] text-slate-950 selection:bg-violet-500 selection:text-white`}>
         {children}
         <Script
           src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"
