@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Image from 'next/image';
 import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight } from 'lucide-react';
-import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -26,8 +27,6 @@ export function ThemeFoodDelivery({
   cartCount,
   cartAmount,
   cart,
-  activeTheme = 'food-delivery',
-  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -188,7 +187,7 @@ export function ThemeFoodDelivery({
                 (product.modifiers && product.modifiers.length > 0);
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               const priceInVES = product.price * exchangeRate;
 
@@ -203,9 +202,11 @@ export function ThemeFoodDelivery({
                       onClick={() => onOpenProductModal(product)}
                       className="relative h-48 w-full rounded-2xl overflow-hidden bg-slate-100 cursor-pointer"
                     >
-                      <img
+                      <Image
                         src={imageUrl}
                         alt={product.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition" />

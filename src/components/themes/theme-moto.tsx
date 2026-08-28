@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Image from 'next/image';
 import { ShoppingBag, Search, Wrench, ShieldCheck, Gauge, Plus, Minus, Zap, CheckCircle2, ChevronRight } from 'lucide-react';
-import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -26,8 +27,6 @@ export function ThemeMotoParts({
   cartCount,
   cartAmount,
   cart,
-  activeTheme = 'moto-parts',
-  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -186,7 +185,7 @@ export function ThemeMotoParts({
                 (product.modifiers && product.modifiers.length > 0);
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               const priceInVES = product.price * exchangeRate;
 
@@ -201,9 +200,11 @@ export function ThemeMotoParts({
                       onClick={() => onOpenProductModal(product)}
                       className="relative aspect-video w-full rounded-2xl overflow-hidden bg-neutral-950 cursor-pointer"
                     >
-                      <img
+                      <Image
                         src={imageUrl}
                         alt={product.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-mono font-black text-amber-400 border border-neutral-800 shadow-md">

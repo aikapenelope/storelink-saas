@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Search, Plus, Minus, CheckCircle2 } from 'lucide-react';
-import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
+import Image from 'next/image';
+import { ShoppingBag, Search, Plus, Minus } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -26,8 +27,6 @@ export function ThemeBasicBanner({
   cartCount,
   cartAmount,
   cart,
-  activeTheme = 'basic-banner',
-  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
   onAddToCart,
@@ -67,9 +66,12 @@ export function ThemeBasicBanner({
 
       {/* 1. Header Banner Image (Plan Básico Hero Banner) */}
       <div className="relative h-44 sm:h-60 w-full bg-slate-800 overflow-hidden">
-        <img
+        <Image
           src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1400&q=80"
           alt="Banner de la Tienda"
+          fill
+          priority
+          sizes="100vw"
           className="w-full h-full object-cover opacity-80"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -167,7 +169,7 @@ export function ThemeBasicBanner({
                 (product.modifiers && product.modifiers.length > 0);
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               const priceInVES = product.price * exchangeRate;
 
@@ -182,9 +184,11 @@ export function ThemeBasicBanner({
                       onClick={() => onOpenProductModal(product)}
                       className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-100 cursor-pointer"
                     >
-                      <img
+                      <Image
                         src={imageUrl}
                         alt={product.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                         className="w-full h-full object-cover hover:scale-105 transition duration-300"
                       />
                       <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-mono px-2 py-0.5 rounded font-bold">

@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Image from 'next/image';
 import { ShoppingBag, Search, ArrowUpRight } from 'lucide-react';
-import { DemosMartesSwitcher } from '@/components/demos-martes-switcher';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -24,13 +25,8 @@ export function ThemeFashionBoutique({
   products,
   categories,
   cartCount,
-  cartAmount,
-  cart,
-  activeTheme = 'fashion-boutique',
-  onSelectTheme = () => {},
   onOpenCart,
   onOpenProductModal,
-  onAddToCart,
 }: ThemeProps) {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,10 +113,13 @@ export function ThemeFashionBoutique({
       {/* 3. Luxury Editorial Hero Banner */}
       <section className="max-w-6xl mx-auto px-6 pt-6">
         <div className="relative rounded-3xl overflow-hidden bg-[#1e1b18] text-white aspect-[21/9] sm:aspect-[24/8] flex items-center shadow-lg">
-          <img
+          <Image
             src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1600&q=80"
             alt="Editorial Fashion Campaign"
-            className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-luminosity"
+            fill
+            priority
+            sizes="(max-width: 1024px) 100vw, 1152px"
+            className="w-full h-full object-cover opacity-60 mix-blend-luminosity"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
           <div className="relative z-10 p-6 sm:p-12 max-w-xl space-y-3">
@@ -182,7 +181,7 @@ export function ThemeFashionBoutique({
                 (product.modifiers && product.modifiers.length > 0);
               const imageUrl =
                 product.images?.[0]?.url ||
-                'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80';
+                DEFAULT_PRODUCT_IMAGE_URL;
 
               const priceInVES = product.price * exchangeRate;
 
@@ -194,9 +193,11 @@ export function ThemeFashionBoutique({
                 >
                   {/* Portrait Image Card */}
                   <div className="relative aspect-[3/4] bg-[#ece5dd] rounded-3xl overflow-hidden shadow-xs group-hover:shadow-xl transition-all duration-500">
-                    <img
+                    <Image
                       src={imageUrl}
                       alt={product.title}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     />
 

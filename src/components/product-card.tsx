@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Plus, Minus, Check, ShoppingBag, Eye } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
 export interface ProductItem {
   id: string;
@@ -28,7 +30,7 @@ interface ProductCardProps {
 export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuantity = 0 }: ProductCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isOutOfStock = product.stockStatus === 'out_of_stock';
-  const imageUrl = product.images?.[0]?.url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
+  const imageUrl = product.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL;
 
   return (
     <>
@@ -38,11 +40,12 @@ export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuanti
           className="relative aspect-square w-full bg-slate-100 overflow-hidden cursor-pointer"
           onClick={() => setIsModalOpen(true)}
         >
-          <img
+          <Image
             src={imageUrl}
             alt={product.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-            loading="lazy"
           />
           {product.featured && (
             <span className="absolute top-2.5 left-2.5 bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm">
@@ -144,7 +147,13 @@ export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuanti
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="relative aspect-video w-full bg-slate-100">
-              <img src={imageUrl} alt={product.title} className="w-full h-full object-cover" />
+              <Image
+                src={imageUrl}
+                alt={product.title}
+                fill
+                sizes="(max-width: 640px) 100vw, 512px"
+                className="w-full h-full object-cover"
+              />
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-900/60 text-white flex items-center justify-center font-bold hover:bg-slate-900 transition"
