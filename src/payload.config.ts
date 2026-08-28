@@ -175,6 +175,12 @@ export default buildConfig({
     defaultFromAddress: process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app',
     defaultFromName: process.env.RESEND_FROM_NAME || 'Flow Notificaciones',
     apiKey: process.env.RESEND_API_KEY || '',
+    // P2 (auditoría BYOK 2026-08-29): safety net del adapter oficial. Solo
+    // se activa si la env var está definida — configurarla ÚNICAMENTE en
+    // Vercel Preview/staging (nunca en producción) para que cualquier
+    // correo de prueba caiga en una bandeja controlada en vez de a clientes
+    // reales.
+    overrideRecipientAddress: process.env.RESEND_OVERRIDE_RECIPIENT || undefined,
   }),
   // Jobs Queue oficial de Payload 3 (docs/jobs-queue): el checkout encola el
   // workflow `order-created` (Trello + email) y lo procesa al instante con
