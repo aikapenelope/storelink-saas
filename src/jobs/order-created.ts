@@ -65,12 +65,15 @@ const trelloDispatchOrder: TaskConfig = {
       return { output: { skipped: true } };
     }
 
-    // Sentinel lock: marca estado intermedio para evitar carreras si hay reintentos inmediatos
+    // Sentinel lock: marca estado intermedio para evitar carreras si hay reintentos inmediatos.
+    // Sprint 3: context.skipInventoryHook evita que el hook de inventario corra
+    // en estas actualizaciones parciales (trelloCardUrl no cambia status de pedido).
     await payload.update({
       collection: 'orders',
       id: orderId,
       overrideAccess: true,
       req,
+      context: { skipInventoryHook: true },
       data: {
         trelloCardUrl: '__pending__',
       },
@@ -123,6 +126,7 @@ const trelloDispatchOrder: TaskConfig = {
       id: orderId,
       overrideAccess: true,
       req,
+      context: { skipInventoryHook: true },
       data: {
         trelloCardUrl: trelloRes.cardId ? `https://trello.com/c/${trelloRes.cardId}` : undefined,
       },
@@ -238,12 +242,14 @@ const sendOrderConfirmationEmail: TaskConfig = {
           : undefined,
       });
 
-      // Actualizar flag de idempotencia en la orden tras envío exitoso
+      // Actualizar flag de idempotencia en la orden tras envío exitoso.
+      // Sprint 3: skipInventoryHook — emailConfirmationSent no afecta stock.
       await payload.update({
         collection: 'orders',
         id: orderId,
         overrideAccess: true,
         req,
+        context: { skipInventoryHook: true },
         data: {
           emailConfirmationSent: true,
         },
