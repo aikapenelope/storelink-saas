@@ -175,10 +175,14 @@ const sendOrderConfirmationEmail: TaskConfig = {
         }).catch(() => null)) as Tenant | null)
       : null;
 
-    // Email oficial de Payload (adapter resend único con dominio autenticado):
-    // El remitente se identifica con el NOMBRE de la tienda y la dirección verificada.
-    // El replyTo va al correo de notificación del comercio.
-    const fromAddress = process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app';
+    // Email oficial de Payload (adapter resend multi-tenant):
+    // Prioridad de from address:
+    //   1. fromEmail propio del tenant  → el adapter resuelve su resendApiKey (BYOK)
+    //   2. RESEND_FROM_EMAIL global     → el adapter usa la master key (fallback)
+    // Para que BYOK funcione, el fromEmail del tenant debe estar verificado en
+    // la cuenta de Resend correspondiente (la propia si tiene key, la master si no).
+    const globalFrom = process.env.RESEND_FROM_EMAIL || 'pedidos@flow.martes.app';
+    const fromAddress = tenantDoc?.emailConfig?.fromEmail?.trim() || globalFrom;
     const customerEmail = order.customer?.email;
 
     if (!customerEmail) {
