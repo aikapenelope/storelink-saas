@@ -257,6 +257,7 @@ export type Order = {
   totalAmount: number;
   currency?: string | null;
   trelloCardUrl?: string | null;
+  emailConfirmationSent?: boolean | null;
   updatedAt: string;
   createdAt: string;
 };

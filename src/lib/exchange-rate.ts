@@ -8,6 +8,8 @@
  *   4. Ninguna → null → la app NO muestra Bs
  */
 
+import { Redis } from '@upstash/redis';
+
 export interface ExchangeRateInfo {
   bcv: number | null;
   binance: number | null;
@@ -15,11 +17,36 @@ export interface ExchangeRateInfo {
   lastUpdated: string;
 }
 
+let redisClient: Redis | null | undefined;
+function getRedis(): Redis | null {
+  if (redisClient !== undefined) return redisClient;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    redisClient = null;
+    return null;
+  }
+  redisClient = new Redis({ url, token });
+  return redisClient;
+}
+
 let cachedRates: { data: ExchangeRateInfo; timestamp: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // Cache for 5 minutes
 
 export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
   const now = Date.now();
+
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const redisCached = await redis.get<ExchangeRateInfo>('storelink:rate:ves');
+      if (redisCached && typeof redisCached === 'object' && redisCached.lastUpdated) {
+        return redisCached;
+      }
+    } catch {
+      // Fallback a memoria si Redis no responde
+    }
+  }
 
   if (cachedRates && now - cachedRates.timestamp < CACHE_TTL_MS) {
     return cachedRates.data;
@@ -111,6 +138,11 @@ export async function getAllLiveExchangeRates(): Promise<ExchangeRateInfo> {
   };
 
   cachedRates = { data: result, timestamp: now };
+  if (redis) {
+    redis.set('storelink:rate:ves', result, { ex: 300 }).catch(() => {
+      // Ignored
+    });
+  }
   return result;
 }
 

@@ -5,6 +5,7 @@ import type {
   PayloadRequest,
   Where,
 } from 'payload';
+import { APIError } from 'payload';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
 import type { Product } from '@/payload-types';
@@ -138,6 +139,12 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
 
       if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
         const qtyToDeduct = Number(item.quantity) || 1;
+        if (matchedVariant.stockQuantity < qtyToDeduct) {
+          throw new APIError(
+            `Stock insuficiente para "${matchedVariant.name || prod.title}". Quedan ${matchedVariant.stockQuantity} unidades.`,
+            400,
+          );
+        }
         await applyVariantStockDelta({
           payload,
           req,
@@ -151,11 +158,16 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
 
       const qtyToDeduct = Number(item.quantity) || 1;
+      if (prod.stockQuantity < qtyToDeduct) {
+        throw new APIError(
+          `Stock insuficiente para "${prod.title}". Quedan ${prod.stockQuantity} unidades.`,
+          400,
+        );
+      }
+
       // Descuento ATÓMICO con el operador $inc nativo de Payload (mismo patrón
       // del plugin oficial @payloadcms/plugin-ecommerce, confirmOrder.ts):
-      // se traduce a SQL `stock_quantity + (-qty)` server-side. La validación
-      // previa de stock en checkout (processOrder) es la que rechaza la venta;
-      // aquí Math.max(0,...) vía min:0 del campo evita negativos residuales.
+      // se traduce a SQL `stock_quantity + (-qty)` server-side.
       await payload.db.updateOne({
         collection: 'products',
         id: prod.id,
@@ -418,6 +430,16 @@ export const Orders: CollectionConfig = {
       label: 'Enlace a la Tarjeta de Trello',
       admin: {
         readOnly: true,
+      },
+    },
+    {
+      name: 'emailConfirmationSent',
+      type: 'checkbox',
+      label: 'Confirmación por Correo Enviada',
+      defaultValue: false,
+      admin: {
+        readOnly: true,
+        description: 'Indica si el correo de confirmación fue enviado exitosamente al cliente para evitar duplicados en reintentos.',
       },
     },
   ],

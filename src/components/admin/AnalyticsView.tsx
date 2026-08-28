@@ -9,6 +9,8 @@ import { DashboardOrdersManager } from './DashboardOrdersManager';
 import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { getOrderKpis, getSalesSeries, getBestSellers } from '@/lib/analytics';
 import { fetchOrdersPage } from '@/app/actions/admin-orders';
+import { isSuperAdmin, getUserTenantIds } from '@/lib/utils';
+import type { Tenant } from '@/payload-types';
 import {
   Wallet,
   ShoppingCart,
@@ -35,33 +37,25 @@ export async function AnalyticsView() {
   }
 
   try {
+    const isSuperAdminUser = isSuperAdmin(user);
+    const tenantIds = getUserTenantIds(user);
+    let tenantId: number | string | null = tenantIds.length > 0 ? tenantIds[0] : null;
+    let tenantDoc: Tenant | null = null;
 
-    const isSuperAdmin = (user as any).role === 'super-admin';
-    let tenantId: number | string | null = null;
-    let tenantDoc: any = null;
-
-    if ((user as any)?.tenants && Array.isArray((user as any).tenants) && (user as any).tenants.length > 0) {
-      const rawTenant = (user as any).tenants[0].tenant;
-      tenantId = typeof rawTenant === 'object' && rawTenant !== null ? rawTenant.id : rawTenant;
-      if (typeof rawTenant === 'object' && rawTenant !== null) {
-        tenantDoc = rawTenant;
-      }
-    }
-
-    if (tenantId && !tenantDoc) {
-      tenantDoc = await payload.findByID({ collection: 'tenants', id: tenantId as any }).catch(() => null);
+    if (tenantId) {
+      tenantDoc = (await payload.findByID({ collection: 'tenants', id: tenantId as number }).catch(() => null)) as Tenant | null;
     }
 
     // If Super Admin and no specific tenant, allow viewing the first store as platform overview
-    if (!tenantDoc && isSuperAdmin) {
+    if (!tenantDoc && isSuperAdminUser) {
       const allTenants = await payload.find({ collection: 'tenants', limit: 1 });
       if (allTenants.docs.length > 0) {
-        tenantDoc = allTenants.docs[0];
+        tenantDoc = allTenants.docs[0] as Tenant;
         tenantId = tenantDoc.id;
       }
     }
 
-    if (!isSuperAdmin && !tenantDoc) {
+    if (!isSuperAdminUser && !tenantDoc) {
       return (
         <div className="p-12 text-center text-zinc-400 bg-black min-h-screen font-sans">
           <div className="max-w-md mx-auto p-6 border border-zinc-800 bg-zinc-950 shadow-2xl rounded-none">
@@ -75,7 +69,7 @@ export async function AnalyticsView() {
     }
 
     const tenantSlug = tenantDoc?.slug || 'aurita';
-    const tenantName = tenantDoc?.name || (isSuperAdmin ? 'Plataforma Global' : 'Mi Tienda');
+    const tenantName = tenantDoc?.name || (isSuperAdminUser ? 'Plataforma Global' : 'Mi Tienda');
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
     const storeUrl = `${siteUrl}/${tenantSlug}`;
     const userName = (user as any).name || (user.email ? user.email.split('@')[0] : 'Comerciante');
@@ -264,7 +258,7 @@ export async function AnalyticsView() {
                 <span className="hidden text-left xl:block">
                   <span className="block text-xs font-bold text-white leading-tight">{userName}</span>
                   <span className="block text-[9px] text-zinc-400 font-mono">
-                    {isSuperAdmin ? 'SUPER ADMIN' : 'TIENDA ADMIN'}
+                    {isSuperAdminUser ? 'SUPER ADMIN' : 'TIENDA ADMIN'}
                   </span>
                 </span>
               </div>
