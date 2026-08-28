@@ -1,5 +1,8 @@
 /**
- * Hardening de ingesta CSV (import-csv / sync-sheets).
+ * Utilidades de ingesta CSV compartidas entre import-csv y sync-sheets.
+ *
+ * parseCSVLine: parser mínimo con soporte de comillas RFC 4180.
+ * sanitizeCsvCell / validateCsvLimits: hardening contra DoS e inyección.
  *
  * Dos vectores cubiertos:
  * 1. DoS por payload gigante: límite de bytes y de filas antes de parsear.
@@ -11,6 +14,31 @@
  * Funciones puras sin dependencias de Next/Payload: testeables de forma
  * determinista (mismo patrón que checkout-guard.ts).
  */
+
+/**
+ * Parsea una línea CSV con soporte de comillas RFC 4180.
+ * Movido aquí desde import-csv/route.ts y sync-sheets/route.ts (estaban
+ * duplicadas 1:1; se centraliza para mantenerlas sincronizadas).
+ */
+export function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+  return result;
+}
 
 /** Máximo tamaño del CSV crudo en bytes (2 MB ≈ decenas de miles de filas cortas). */
 export const MAX_CSV_BYTES = 2 * 1024 * 1024;

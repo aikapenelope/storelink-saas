@@ -5,31 +5,11 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 // assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
-import { sanitizeCsvCell, validateCsvLimits } from '@/lib/csv';
+import { sanitizeCsvCell, validateCsvLimits, parseCSVLine } from '@/lib/csv';
 import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
-import type { Product } from '@/payload-types';
+import type { Category, Product } from '@/payload-types';
 
 export const dynamic = 'force-dynamic';
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-  return result;
-}
 
 export async function POST(
   request: NextRequest,
@@ -197,22 +177,35 @@ export async function POST(
     let updatedCount = 0;
     const errors: Array<{ line: number; error: string }> = [];
 
-    // Cache categories to avoid duplicate finds/creates in loop
-    const categoryCache = new Map<string, number>();
-
-    // Sprint 3 (H5) — pre-cargar productos del tenant antes del loop para
-    // eliminar N+1 queries. Mismo patrón ya aplicado en import-csv/route.ts
-    // (PR #48). Para una hoja de 200 filas: de 200 queries individuales a 1.
+    // Pre-cargar productos existentes del tenant (batch único, sin N+1).
+    // Límite 5000 alineado con MAX_CSV_ROWS para que el pre-fetch cubra
+    // siempre el 100% del catálogo → no se crean duplicados para SKUs existentes.
     const existingProductsRes = await payload.find({
       collection: 'products',
       where: { tenant: { equals: tenantId } },
-      limit: 1000,
+      limit: 5000,
       depth: 0,
       overrideAccess: true,
     });
     const productBySku = new Map<string, Product>();
     for (const prod of existingProductsRes.docs as Product[]) {
       if (prod.sku) productBySku.set(prod.sku, prod);
+    }
+
+    // Pre-cargar categorías existentes del tenant para eliminar la query
+    // individual por categoría en el loop. El cache se inicializa aquí con
+    // todos los slugs del tenant → solo requiere 1 query de creación por
+    // categoría genuinamente nueva (no vista antes en la hoja).
+    const existingCatsRes = await payload.find({
+      collection: 'categories',
+      where: { tenant: { equals: tenantId } },
+      limit: 500,
+      depth: 0,
+      overrideAccess: true,
+    });
+    const categoryCache = new Map<string, number>();
+    for (const cat of existingCatsRes.docs as Category[]) {
+      if (cat.slug) categoryCache.set(cat.slug, cat.id);
     }
 
     for (let i = 1; i < rawLines.length; i++) {
