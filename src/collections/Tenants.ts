@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload';
-import { getUserRole, getUserTenantIds } from '@/lib/utils';
+import { getUserRole, getUserTenantIds, hasTenantAccess } from '@/lib/utils';
 
 export const Tenants: CollectionConfig = {
   slug: 'tenants',
@@ -77,8 +77,8 @@ export const Tenants: CollectionConfig = {
       type: 'group',
       label: 'Notificaciones por Correo (Multi-Tenant Resend)',
       access: {
-        read: ({ req: { user } }) => Boolean(user),
-        update: ({ req: { user } }) => Boolean(user),
+        read: ({ req: { user } }) => hasTenantAccess(user),
+        update: ({ req: { user } }) => hasTenantAccess(user),
       },
       fields: [
         {
@@ -130,8 +130,8 @@ export const Tenants: CollectionConfig = {
       type: 'group',
       label: 'Espacio de Trabajo Trello (Kanban)',
       access: {
-        read: ({ req: { user } }) => Boolean(user),
-        update: ({ req: { user } }) => Boolean(user),
+        read: ({ req: { user } }) => hasTenantAccess(user),
+        update: ({ req: { user } }) => hasTenantAccess(user),
       },
       fields: [
         {
