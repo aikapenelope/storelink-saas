@@ -126,7 +126,7 @@ export function ThemeHardwareStore({
         </div>
       </section>
 
-      {/* 4. Search & Category Filter (Contained for PWA) */}
+      {/* 4. Search & Category Filter (Contained, mobile-friendly) */}
       <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6 w-full min-w-0 max-w-full overflow-hidden">
         <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 w-full min-w-0 max-w-full overflow-hidden">
           <div className="relative flex-1 min-w-0">

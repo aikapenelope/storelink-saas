@@ -10,7 +10,7 @@ Guía oficial paso a paso para administrar la plataforma, dar de alta nuevos com
 | :--- | :--- | :--- |
 | **Plataforma Flow** | [`https://flow.martes.app`](https://flow.martes.app) | Landing comercial oficial de la solución. |
 | **Panel Maestro / Admin** | [`https://flow.martes.app/admin`](https://flow.martes.app/admin) | Panel de control central para Super Admins y Comerciantes. |
-| **Tiendas de Comercios** | `https://[slug].martes.app` | Tienda PWA de cada cliente (ej: `donluigi.martes.app`). |
+| **Tiendas de Comercios** | `https://[slug].martes.app` | Tienda web responsive de cada cliente (ej: `donluigi.martes.app`). |
 
 ---
 

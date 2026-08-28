@@ -355,7 +355,7 @@ export default function FlowLandingPage() {
               </span>
             </h2>
             <p className="mt-3 text-xs sm:text-base leading-relaxed text-slate-300 font-medium">
-              Tiendas PWA ultra-rápidas con <strong>0% comisiones</strong>, catálogo en la nube y checkout directo a WhatsApp con recibo PDF y cobro en USD o Bolívares. Toca cualquier plantilla para probarla en vivo:
+              Tiendas web ultra-rápidas con <strong>0% comisiones</strong>, catálogo en la nube y checkout directo a WhatsApp con recibo PDF y cobro en USD o Bolívares. Toca cualquier plantilla para probarla en vivo:
             </p>
           </div>
 
@@ -899,7 +899,7 @@ export default function FlowLandingPage() {
       </section>
 
       {/* ========================================================================= */}
-      {/* 6. UNIFIED DIAGNÓSTICO CON IA + PREGUNTAS FRECUENTES (PWA OPTIMIZED)      */}
+      {/* 6. UNIFIED DIAGNÓSTICO CON IA + PREGUNTAS FRECUENTES (RESPONSIVE)        */}
       {/* ========================================================================= */}
       <section id="diagnostico" className="relative overflow-hidden bg-[#0c0418] py-16 sm:py-20 text-white border-t border-white/5">
         <div className="pointer-events-none absolute -left-20 top-16 h-80 w-80 rounded-full bg-violet-700/20 blur-3xl"></div>

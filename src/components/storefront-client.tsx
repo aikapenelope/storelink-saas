@@ -519,7 +519,7 @@ export function StorefrontClient({
         onClearCart={() => setCart([])}
       />
 
-      {/* PWA Fixed Bottom Store Demo Switcher Bar (only on marketing/demo mode) */}
+      {/* Fixed Bottom Store Demo Switcher Bar (only on marketing/demo mode) */}
       {isDemo && (
         <DemosMartesSwitcher
           activeTheme={activeTheme}

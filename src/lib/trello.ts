@@ -73,7 +73,7 @@ ${itemsSummary}
 ### 💰 TOTAL A PAGAR: **$${total.toFixed(2)} ${currency}**${vesText}
 ${pdfUrl ? `\n📄 **[Descargar Nota de Entrega en PDF](${pdfUrl})**` : ''}
 
-_Generado automáticamente desde StoreLink PWA_
+_Generado automáticamente desde StoreLink_
     `.trim();
 
     const cardTitle = `🛍️ Pedido #${orderNumber} — ${customerName} ($${total.toFixed(2)} ${currency})`;
