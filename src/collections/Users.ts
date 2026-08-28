@@ -38,6 +38,13 @@ export const Users: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'tenant-admin',
+      // Sprint 1 (C3): saveToJWT: true incluye el campo `role` en el JWT.
+      // Sin esto, Payload no puede leer req.user.role desde el token decodificado
+      // y hace un findByID a la BD en cada request autenticado para poblar el
+      // usuario completo. Con saveToJWT, el role viaja en el token y el access
+      // control corre sin consulta adicional — patrón oficial del skill Payload
+      // (ACCESS-CONTROL.md §RBAC): "enabling role checks without database lookups".
+      saveToJWT: true,
       access: {
         update: ({ req: { user } }) => getUserRole(user) === 'super-admin',
         // Audit fix C3: un tenant-admin no puede crearse con rol super-admin.
