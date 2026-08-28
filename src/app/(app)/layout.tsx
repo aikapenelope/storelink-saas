@@ -28,7 +28,10 @@ export const metadata: Metadata = {
   title: 'Flow by Martes — Tu negocio vendiendo 24/7 en piloto automático | 0% Comisiones',
   description:
     'Flow by Martes — Tu negocio vendiendo 24/7 en piloto automático con agentes de IA oficiales, catálogo interactivo y e-commerce de estándar internacional. 0% comisiones.',
-  manifest: '/manifest.json',
+  // manifest: '/manifest.json' eliminado — Next.js App Router sirve app/manifest.ts
+  // automáticamente en /manifest.webmanifest e inyecta el <link rel="manifest">
+  // correcto. Declararlo aquí con /manifest.json causaba un 404 y la PWA no era
+  // instalable (docs oficiales Next.js file-conventions/manifest).
 };
 
 export const viewport: Viewport = {

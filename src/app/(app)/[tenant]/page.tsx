@@ -143,7 +143,21 @@ export default async function TenantStorefrontPage({
       exchangeRateVES: exchangeRateVES ?? undefined,
       showVES: branding?.showVES ?? true,
       pickupConfig: doc.pickupConfig || undefined,
-      paymentMethodsConfig: doc.paymentMethodsConfig || undefined,
+      // Filtrar solo los métodos de pago habilitados antes de serializar al HTML
+      // público (ISR). El field-level access de Tenants.ts protege la lectura
+      // por REST/admin, pero esta serialización RSC → client bypassa ese acceso.
+      // No revelar cuentas bancarias/crypto de métodos disabled al visitante.
+      paymentMethodsConfig: doc.paymentMethodsConfig
+        ? {
+            pagoMovil:   doc.paymentMethodsConfig.pagoMovil?.enabled   ? doc.paymentMethodsConfig.pagoMovil   : undefined,
+            zelle:       doc.paymentMethodsConfig.zelle?.enabled       ? doc.paymentMethodsConfig.zelle       : undefined,
+            binance:     doc.paymentMethodsConfig.binance?.enabled     ? doc.paymentMethodsConfig.binance     : undefined,
+            zinli:       doc.paymentMethodsConfig.zinli?.enabled       ? doc.paymentMethodsConfig.zinli       : undefined,
+            banescoPanama: doc.paymentMethodsConfig.banescoPanama?.enabled ? doc.paymentMethodsConfig.banescoPanama : undefined,
+            cash:        doc.paymentMethodsConfig.cash?.enabled        ? doc.paymentMethodsConfig.cash        : undefined,
+            pos:         doc.paymentMethodsConfig.pos?.enabled         ? doc.paymentMethodsConfig.pos         : undefined,
+          }
+        : undefined,
       deliveryConfig: doc.deliveryConfig || undefined,
     };
 

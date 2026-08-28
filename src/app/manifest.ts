@@ -9,15 +9,13 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#f8fafc',
     theme_color: '#16a34a',
+    // TODO: agregar icon-192.png e icon-512.png en public/ para que la PWA
+    // sea instalable (Chrome exige ≥192px). Por ahora se usa dashboard.png
+    // como placeholder hasta que se diseñen los iconos definitivos.
     icons: [
       {
-        src: '/icon-192.png',
-        sizes: '192x192',
-        type: 'image/png',
-      },
-      {
-        src: '/icon-512.png',
-        sizes: '512x512',
+        src: '/dashboard.png',
+        sizes: 'any',
         type: 'image/png',
       },
     ],
