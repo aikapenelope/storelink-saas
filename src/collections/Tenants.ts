@@ -63,7 +63,7 @@ export const Tenants: CollectionConfig = {
         { label: '🔧 Ferretería & Herramientas (Ferretería Industrial - Premium)', value: 'hardware-store' },
         { label: '🏢 B2B & Distribución Mayorista (Matriz de Pedidos Rápida)', value: 'b2b-matrix' },
         { label: '✨ Lookbook Editorial & Alta Gama (Elegancia)', value: 'editorial' },
-        { label: '📱 Fluid PWA (Experiencia App Móvil Moderna)', value: 'fluid-pwa' },
+        { label: '📱 Fluid Mobile (Experiencia Web Móvil Moderna)', value: 'fluid-pwa' },
         { label: '⚡ Minimal Dark Tech (Electrónica & Periféricos)', value: 'vercel-commerce' },
       ],
       admin: {

@@ -1,15 +1,15 @@
 # 🚀 StoreLink SaaS • Multi-Tenant E-Commerce Platform
 
-Plataforma SaaS multi-inquilino de catálogos y e-commerce orientada a PWA móvil, con panel de administración profesional por comercio, notas de entrega en PDF y despacho automático de órdenes a Trello y WhatsApp.
+Plataforma SaaS multi-inquilino de catálogos y e-commerce, con una tienda web responsive (mobile-first y de escritorio), panel de administración profesional por comercio, notas de entrega en PDF y despacho automático de órdenes a Trello y WhatsApp.
 
 ---
 
 ## 🌟 Características Principales
 
-* 🏪 **Multi-Tenant Real:** Cada comerciante tiene su propia tienda PWA en la ruta `https://flow.martes.app/[slug]` (ej: `flow.martes.app/donluigi`).
+* 🏪 **Multi-Tenant Real:** Cada comerciante tiene su propia tienda web en la ruta `https://flow.martes.app/[slug]` (ej: `flow.martes.app/donluigi`).
 * 🎨 **9 Plantillas de Tienda & Temas Oficiales:** Soporte nativo para 9 estéticas por nicho (`basic-banner`, `food-delivery`, `fashion-boutique`, `moto-parts`, `hardware-store`, `b2b-matrix`, `editorial`, `fluid-pwa`, `vercel-commerce`), seleccionables al crear o editar el comercio en Payload y explorables en `/templates`.
 * 🛵 **Tarifa Fija de Delivery (Definición del Producto):** El costo de delivery es un **precio fijo** establecido por el comercio en la configuración de Payload (`deliveryConfig.fixedPrice`). Se muestra con transparencia en el catálogo, se suma al subtotal de productos en el carrito, se desglosa en el mensaje estructurado de WhatsApp y se refleja en la Nota de Entrega PDF.
-* 📱 **PWA Mobile-First:** Experiencia tipo app nativa con píldoras de categorías, buscador en vivo, cajón inferior deslizante (`Vaul`), personalizador interactivo de variantes/modificadores y modal de producto.
+* 📱 **Web Responsive Mobile-First:** Experiencia fluida en teléfono y escritorio con píldoras de categorías, buscador en vivo, cajón inferior deslizante (`Vaul`), personalizador interactivo de variantes/modificadores y modal de producto.
 * 💬 **Checkout Directo a WhatsApp:** Formatea y suma los SKUs, subtotales, tarifa de delivery fija, datos de entrega del comprador y abre el chat de WhatsApp con un solo clic.
 * 📋 **Despacho Automático a Trello:** Cada pedido crea una tarjeta en tiempo real en el workspace/lista de su comercio (`POST https://api.trello.com/1/cards`), saliendo todos por la misma credencial maestra configurada en Vercel.
 * 📄 **Notas de Entrega en PDF:** Generación instantánea de notas de entrega en PDF multi-página con logo del comercio, datos del cliente, desglose de ítems, tarifa de delivery y totales USD/VES. Almacenamiento seguro en Cloudflare R2 con URLs firmadas.
@@ -20,7 +20,7 @@ Plataforma SaaS multi-inquilino de catálogos y e-commerce orientada a PWA móvi
   * **Supabase:** Base de datos PostgreSQL (Transaction Pooler 6543).
   * **Cloudflare R2:** Almacenamiento de imágenes (10 GB gratis sin costes de transferencia).
 
-> ℹ️ **Nota:** La sincronización automática del catálogo con Meta WhatsApp Business fue retirada del alcance del producto. Los pedidos entran exclusivamente por el checkout de la tienda PWA.
+> ℹ️ **Nota:** La sincronización automática del catálogo con Meta WhatsApp Business fue retirada del alcance del producto. Los pedidos entran exclusivamente por el checkout de la tienda web.
 
 ---
 
@@ -57,7 +57,7 @@ storelink-saas/
 ├── src/
 │   ├── app/
 │   │   ├── (payload)/               # Rutas del Admin Panel y API de Payload
-│   │   ├── [tenant]/page.tsx        # Catálogo PWA por comercio (flow.martes.app/[slug])
+│   │   ├── [tenant]/page.tsx        # Catálogo web por comercio (flow.martes.app/[slug])
 │   │   ├── actions/checkout.ts      # Server Action (Trello + PDF + WhatsApp + CRM)
 │   │   └── api/
 │   │       ├── [tenant]/            # sync-sheets, import-csv, exchange-rate

@@ -62,10 +62,10 @@ export const DEMO_OPTIONS: DemoOption[] = [
   },
   {
     id: 'fluid-pwa',
-    name: 'Fluid Smart PWA',
-    shortName: 'Fluid App',
+    name: 'Fluid Mobile',
+    shortName: 'Fluid Mobile',
     emoji: '📱',
-    badge: 'Mobile App',
+    badge: 'Mobile-First',
   },
   {
     id: 'vercel-commerce',
@@ -104,7 +104,7 @@ export function DemosMartesSwitcher({
         </span>
       </div>
 
-      {/* Horizontal Scrollable PWA Tab Bar */}
+      {/* Horizontal Scrollable Tab Bar (responsive) */}
       <div className="flex items-center gap-1.5 p-1.5 max-w-3xl mx-auto overflow-x-auto no-scrollbar scroll-smooth">
         {DEMO_OPTIONS.map((opt) => {
           const isSelected = opt.id === activeTheme;

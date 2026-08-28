@@ -6,7 +6,7 @@ import { withPayload } from '@payloadcms/next/withPayload';
  * - La CSP va en modo Report-Only: una CSP restrictiva con script-src sin
  *   nonces rompería el admin de Payload (scripts inline de Next). Fase 2
  *   (backlog): endurecer script-src con nonces cuando el stack lo permita.
- * - img-src replica images.remotePatterns de abajo (+ blob:/data: para el PWA).
+ * - img-src replica images.remotePatterns de abajo (+ blob:/data: para el editor de imágenes del admin).
  */
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },

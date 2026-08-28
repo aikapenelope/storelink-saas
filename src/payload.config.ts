@@ -38,7 +38,7 @@ const generateSeoTitle: GenerateTitle<SeoDoc> = ({ doc }) =>
 const generateSeoDescription: GenerateDescription<SeoDoc> = ({ doc }) =>
   doc?.description ||
   doc?.branding?.welcomeMessage ||
-  'Catálogo interactivo PWA con pedidos directos por WhatsApp.';
+  'Catálogo interactivo con pedidos directos por WhatsApp.';
 
 const generateSeoURL: GenerateURL<SeoDoc> = ({ doc }) =>
   `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc?.slug || ''}`;
