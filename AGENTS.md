@@ -8,7 +8,7 @@ La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga 
 - Instalar: `pnpm install` (pnpm@10.27.0 — nunca npm/yarn)
 - Dev: `pnpm dev` · Build: `pnpm build` (incluye typecheck de TS) · Lint: `pnpm lint` (`next lint`)
 - Tipos de Payload: `pnpm generate:types` — regenéranos tras tocar `src/collections/*`
-- Migraciones: CREAR con `pnpm migrate:create` (única vía válida). APLICAR: automático en producción vía `prodMigrations` (init de Payload). El CLI `payload migrate` NO corre en serverless ni en este entorno (richtext-lexical es ESM con top-level await → ERR_REQUIRE_ASYNC_MODULE).
+- Migraciones — ver sección **"Proceso de migraciones"** más abajo para el flujo completo obligatorio.
 
 ## Estructura
 - `src/collections/` — esquemas Payload: Tenants, Users, Products, Categories, Orders, Customers, Media
@@ -31,11 +31,66 @@ La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga 
 - **PROHIBIDO hacer merge de PRs ni push directo a `main`** — solo crear PRs; el merge lo hace el usuario.
 - Build command de Vercel = `pnpm vercel-build`. NUNCA usar un script llamado `ci` (pnpm lo intercepta como comando built-in).
 
+## Proceso de migraciones
+
+### Regla de atomicidad (NO NEGOCIABLE — aprendida del schema drift de Ago 2026)
+**Todo PR que modifique `src/collections/*.ts` (schema) DEBE incluir en el mismo PR:**
+1. El archivo de migración en `src/migrations/YYYYMMDD_descripcion.ts`
+2. El registro de esa migración en `src/migrations/index.ts`
+
+**NUNCA** mergear cambios de schema sin su migración. Un deploy sin las columnas correspondientes produce un schema drift que bloquea a todos los tenants.
+
+### Cómo funciona `prodMigrations` en este proyecto
+```
+Vercel deploy → Payload init → recorre prodMigrations[]
+  → para cada migración:
+      ¿nombre en payload_migrations (BD)? → SÍ: skip
+                                           → NO: ejecuta up() → INSERT en payload_migrations
+```
+- `pnpm migrate:create` genera el archivo `.ts` con up()/down() — es **la única forma válida** de crear migraciones (ver constraint PROHIBIDO-DDL-manual).
+- `pnpm migrate:create` **NO puede correr** en este entorno ni en Vercel (richtext-lexical ESM top-level await → `ERR_REQUIRE_ASYNC_MODULE`). Debe ejecutarse en un entorno local con la BD conectada.
+- Si el archivo existe pero **no está en `index.ts`**, `prodMigrations` nunca lo ve → schema drift.
+
+### Flujo normal (desarrollo local con BD conectada)
+```bash
+# 1. Editar src/collections/MiColeccion.ts
+# 2. Generar la migración (necesita DATABASE_URI apuntando a la BD)
+pnpm migrate:create
+# 3. Revisar el SQL generado en src/migrations/YYYYMMDD_*.ts
+# 4. El archivo YA está importado y registrado en src/migrations/index.ts (migrate:create lo hace)
+# 5. pnpm generate:types  (actualizar payload-types.ts)
+# 6. pnpm build && pnpm lint
+# 7. Commit ATÓMICO: collections/ + migrations/ + payload-types.ts en el mismo commit
+```
+
+### Flujo de emergencia (schema drift activo en producción, vía Supabase MCP)
+Cuando las columnas ya están en producción pero faltan en BD (o viceversa), usar el MCP de Supabase para reparar directamente por **conexión directa** (no pooler):
+
+```sql
+-- PASO 1: Aplicar el DDL faltante (usar nombres confirmados por los logs de error o por migrate:create local)
+ALTER TABLE "tenants"
+  ADD COLUMN IF NOT EXISTS "mi_columna" NUMERIC DEFAULT 0;
+
+-- PASO 2: Registrar en payload_migrations (batch = MAX(batch) + 1)
+INSERT INTO payload_migrations (name, batch)
+VALUES ('YYYYMMDD_descripcion', <batch_siguiente>);
+```
+
+Luego commitear el archivo `.ts` de migración y el `index.ts` para mantener repo↔BD sincronizados. El próximo deploy en Vercel verá la migración en `payload_migrations` y la saltará (no la re-ejecutará).
+
+**Nomenclatura de columnas** — Payload convierte camelCase a snake_case dividiendo en CADA mayúscula:
+- `fixedPrice` → `fixed_price`
+- `estimatedTime` → `estimated_time`
+- `deliveryConfig` (grupo) + `fixedPrice` (campo) → `delivery_config_fixed_price`
+- `taskID` → `task_i_d` (cada letra mayúscula = nuevo segmento)
+- `exchangeRateVES` → `exchange_rate_v_e_s`
+- Verificar siempre en los logs de error o con `migrate:create` antes de escribir SQL a mano.
+
 ## Proceso obligatorio por PR (aprendido de los fallos de Ago 2026)
 - **Rebasar contra `main` antes de abrir el PR**: `git fetch origin && git rebase origin/main` — nunca entregar PR con base atrasada (genera conflictos).
 - `pnpm build` local 0 errores ANTES de abrir el PR.
 - Validar los patrones contra el entorno REAL antes de usarlos: plan de Vercel (Hobby: 1 cron/día), package manager (pnpm), versión de Node, naming generado por Payload. "Está en la doc" NO significa "funciona en este entorno": verificar el deploy.
-- Migraciones que toquen la BD de producción: aplicar por conexión directa (nunca pooler) y registrar en `payload_migrations`.
+- **Commit atómico de migraciones**: schema + archivo migración + index.ts en el mismo commit. Ver sección "Proceso de migraciones".
 
 ## Convenciones
 - Alias de import: `@/*` → `./src/*`
