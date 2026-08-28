@@ -1,0 +1,156 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Client } from 'pg';
+import { getPayload } from 'payload';
+import type { Payload } from 'payload';
+import { buildMigrationParityConfig } from '../payload.config.migration-parity';
+
+/**
+ * Regresión del incidente P0 del 28-ago-2026: los campos
+ * `deliveryConfig.fixedPrice`/`estimatedTime` se agregaron a Tenants.ts y se
+ * desplegaron a Vercel sin que su migración quedara registrada en
+ * src/migrations/index.ts. Resultado: toda query a `tenants` fallaba con
+ * "column tenants.delivery_config_fixed_price does not exist", bloqueando el
+ * login y el admin de TODOS los tenants.
+ *
+ * tests/payload.config.ts (push: true) NUNCA hubiera atrapado esto: su
+ * esquema se autogenera desde las colecciones, sin pasar por
+ * src/migrations/index.ts. Esta suite usa una config y una base de datos
+ * separadas (tests/payload.config.migration-parity.ts, push: false +
+ * prodMigrations reales) para reproducir el arranque exacto de producción.
+ */
+const runMigrationParity = !!process.env.TEST_DATABASE_URI;
+const d = runMigrationParity ? describe : describe.skip;
+
+const baseConnectionString =
+  process.env.TEST_DATABASE_URI || 'postgres://postgres:postgres@localhost:5432/storelink_test';
+
+const MIGRATIONS_DB_NAME = 'storelink_test_migrations';
+
+/** Reconstruye la connection string apuntando a otra base de datos del mismo servidor. */
+function withDatabase(connectionString: string, dbName: string): string {
+  const url = new URL(connectionString.replace(/^postgres(ql)?:\/\//, 'http://'));
+  return `postgres://${url.username}:${url.password}@${url.host}/${dbName}`;
+}
+
+const adminConnectionString = withDatabase(baseConnectionString, 'postgres');
+const migrationsConnectionString = withDatabase(baseConnectionString, MIGRATIONS_DB_NAME);
+
+let payload: Payload;
+
+d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
+  beforeAll(async () => {
+    // 1. Base de datos propia y efímera: nunca comparte estado con el
+    // esquema autogenerado (push: true) del resto de la suite.
+    const admin = new Client({ connectionString: adminConnectionString });
+    await admin.connect();
+    // WITH (FORCE) (Postgres >= 13, la imagen de CI usa postgres:16-alpine):
+    // autolimpia conexiones colgadas de una corrida anterior interrumpida
+    // (ej. proceso matado a mitad de test) sin fallar con "database is
+    // being accessed by other users".
+    await admin.query(`DROP DATABASE IF EXISTS "${MIGRATIONS_DB_NAME}" WITH (FORCE)`);
+    await admin.query(`CREATE DATABASE "${MIGRATIONS_DB_NAME}"`);
+    await admin.end();
+
+    // 2. Init real: push:false + prodMigrations replica EXACTAMENTE el
+    // arranque de producción (src/payload.config.ts). Si una migración falta
+    // o falla, esta línea lanza — la señal que el incidente del 28-ago no
+    // tuvo en CI.
+    payload = await getPayload({ config: buildMigrationParityConfig(migrationsConnectionString) });
+  }, 120000);
+
+  afterAll(async () => {
+    await payload?.destroy();
+    const admin = new Client({ connectionString: adminConnectionString });
+    await admin.connect();
+    await admin.query(`DROP DATABASE IF EXISTS "${MIGRATIONS_DB_NAME}" WITH (FORCE)`);
+    await admin.end();
+  });
+
+  it('aplica todas las migraciones registradas sin error desde una BD nueva', () => {
+    // Si beforeAll llegó hasta aquí sin lanzar, src/migrations/index.ts se
+    // aplicó limpiamente de punta a punta sobre una base vacía.
+    expect(payload).toBeDefined();
+  });
+
+  it('crea un tenant usando TODOS los grupos de campos sin error de columna faltante', async () => {
+    // Ejercita cada grupo real de Tenants.ts (incluido deliveryConfig, el
+    // grupo del incidente) para que un futuro campo sin migración falle
+    // aquí, en CI, y no en producción.
+    const tenant = await payload.create({
+      collection: 'tenants',
+      overrideAccess: true,
+      data: {
+        name: 'Tienda Paridad',
+        slug: `paridad-${Date.now()}`,
+        whatsappPhone: '584120000000',
+        theme: 'basic-banner',
+        emailConfig: {
+          enabled: true,
+          fromEmail: 'pedidos@paridad.test',
+          notificationEmail: 'admin@paridad.test',
+          emailSubject: 'Confirmación',
+        },
+        trelloConfig: {
+          enabled: true,
+          workspaceName: 'Paridad WS',
+          boardName: 'Pedidos',
+          boardUrl: 'https://trello.com/b/xxx',
+          listId: 'test-list-id',
+        },
+        branding: {
+          currency: 'USD',
+          showVES: true,
+          exchangeRateVES: 100,
+          primaryColor: '#000000',
+          welcomeMessage: 'Bienvenido',
+        },
+        pickupConfig: {
+          enabled: true,
+          locationAddress: 'Av. Test',
+          schedule: 'Lun-Dom 9-18',
+          estimatedTime: '20-30 min',
+          instructions: 'Presentar orden',
+        },
+        paymentMethodsConfig: {
+          pagoMovil: { enabled: true, bank: 'Banesco', phone: '04120000000', idDoc: 'V-1', accountHolder: 'Test' },
+          zelle: { enabled: true, email: 'z@test.com', accountHolder: 'Test' },
+          binance: { enabled: true, payId: '12345678', nickname: 'test' },
+          zinli: { enabled: true, email: 'zi@test.com', accountHolder: 'Test' },
+          banescoPanama: { enabled: true, accountNumber: '123', accountHolder: 'Test', accountType: 'Ahorros' },
+          cash: { enabled: true, instructions: 'Exacto' },
+          pos: { enabled: true, instructions: 'Debito' },
+        },
+        deliveryConfig: {
+          fixedPrice: 3.5,
+          estimatedTime: '30-45 min',
+          zones: [{ name: 'Chacao', priceDelivery: 4, estimatedTime: '35-50 min' }],
+        },
+      } as never,
+    });
+
+    expect(tenant.id).toBeDefined();
+
+    const found = (await payload.findByID({
+      collection: 'tenants',
+      id: tenant.id,
+      overrideAccess: true,
+    })) as unknown as {
+      deliveryConfig?: { fixedPrice?: number; zones?: Array<{ name?: string }> };
+    };
+
+    expect(found.deliveryConfig?.fixedPrice).toBe(3.5);
+    expect(found.deliveryConfig?.zones?.[0]?.name).toBe('Chacao');
+
+    await payload.delete({ collection: 'tenants', id: tenant.id, overrideAccess: true });
+  });
+
+  it('expone las columnas del incidente P0 28-ago-2026 (delivery_config_fixed_price/estimated_time)', async () => {
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const res = await payload.db.drizzle.execute(sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'tenants'
+        AND column_name IN ('delivery_config_fixed_price', 'delivery_config_estimated_time')
+    `);
+    expect(res.rows.length).toBe(2);
+  });
+});

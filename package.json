@@ -13,7 +13,8 @@
     "migrate:create": "payload migrate:create",
     "vercel-build": "pnpm build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "cross-env NODE_OPTIONS=--no-deprecation playwright test --config=playwright.config.ts"
   },
   "keywords": [],
   "author": "",
@@ -51,6 +52,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",

@@ -28,3 +28,9 @@ pnpm-debug.log*
 media/
 .env*
 .mcp.json
+
+# Playwright (tests/e2e/*)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
