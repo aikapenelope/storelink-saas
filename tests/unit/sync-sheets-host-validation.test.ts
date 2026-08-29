@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-describe('Google Sheets SSRF redirect host validation', () => {
+describe('Google Sheets SSRF redirect host validation (acotado)', () => {
   function isLegitimateGoogleSheetsHost(finalHost: string): boolean {
     return (
       finalHost === 'docs.google.com' ||
-      /[.-]sheets\.googleusercontent\.com$/.test(finalHost) ||
-      finalHost.endsWith('.googleusercontent.com')
+      /(^|[.-])sheets\.googleusercontent\.com$/.test(finalHost)
     );
   }
 
@@ -17,6 +16,12 @@ describe('Google Sheets SSRF redirect host validation', () => {
     expect(isLegitimateGoogleSheetsHost('doc-08-4o-sheets.googleusercontent.com')).toBe(true);
     expect(isLegitimateGoogleSheetsHost('doc-0k-10-sheets.googleusercontent.com')).toBe(true);
     expect(isLegitimateGoogleSheetsHost('export.sheets.googleusercontent.com')).toBe(true);
+    expect(isLegitimateGoogleSheetsHost('sheets.googleusercontent.com')).toBe(true);
+  });
+
+  it('bloquea hosts de googleusercontent genéricos fuera de sheets', () => {
+    expect(isLegitimateGoogleSheetsHost('lh3.googleusercontent.com')).toBe(false);
+    expect(isLegitimateGoogleSheetsHost('drive.googleusercontent.com')).toBe(false);
   });
 
   it('bloquea hosts de redirección no autorizados (SSRF)', () => {
