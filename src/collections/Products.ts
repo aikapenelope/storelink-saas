@@ -1,12 +1,59 @@
-import type { CollectionConfig, TextField } from 'payload';
+import { revalidatePath } from 'next/cache';
+import type { CollectionAfterChangeHook, CollectionConfig, TextField } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
+
+/**
+ * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
+ * cuando se crea o edita un producto manualmente en Payload Admin.
+ * Si context.skipRevalidate es true (usado en imports masivos o scripts de mantenimiento),
+ * se omite para evitar N revalidaciones individuales redundantes.
+ */
+const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req }) => {
+  if (req.context?.skipRevalidate) return doc;
+
+  let tenantSlug: string | undefined;
+
+  if (
+    doc.tenant &&
+    typeof doc.tenant === 'object' &&
+    'slug' in doc.tenant &&
+    typeof (doc.tenant as { slug?: string }).slug === 'string'
+  ) {
+    tenantSlug = (doc.tenant as { slug: string }).slug;
+  } else if (doc.tenant) {
+    const tenantId = typeof doc.tenant === 'object' ? (doc.tenant as { id: number | string }).id : doc.tenant;
+    const tenantDoc = await req.payload
+      .findByID({
+        collection: 'tenants',
+        id: Number(tenantId),
+        depth: 0,
+        overrideAccess: true,
+      })
+      .catch(() => null);
+
+    if (tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc) {
+      tenantSlug = (tenantDoc as { slug?: string }).slug;
+    }
+  }
+
+  if (tenantSlug) {
+    try {
+      revalidatePath(`/${tenantSlug}`);
+    } catch {
+      // Non-blocking en entornos fuera de peticiones HTTP de Next.js
+    }
+  }
+
+  return doc;
+};
 
 export const Products: CollectionConfig = {
   slug: 'products',
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
+    afterChange: [revalidateProductStorefront],
   },
   admin: {
     useAsTitle: 'title',

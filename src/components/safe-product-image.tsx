@@ -9,16 +9,26 @@ export interface SafeProductImageProps extends Omit<ImageProps, 'src'> {
   fallbackSrc?: string;
 }
 
+/**
+ * Componente de imagen resiliente para productos.
+ * Si la URL provista devuelve error (404, DNS, timeout o link caído),
+ * conmuta automáticamente a la imagen de fallback sin romper la UI.
+ */
 export function SafeProductImage({
   src,
   fallbackSrc = DEFAULT_PRODUCT_IMAGE_URL,
   alt,
+  onError,
   ...props
 }: SafeProductImageProps) {
-  const [currentSrc, setCurrentSrc] = useState<string>(src || fallbackSrc);
+  const initialSrc = typeof src === 'string' && src.trim().length > 0 ? src.trim() : fallbackSrc;
+  const [currentSrc, setCurrentSrc] = useState<string>(initialSrc);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   useEffect(() => {
-    setCurrentSrc(src || fallbackSrc);
+    const validSrc = typeof src === 'string' && src.trim().length > 0 ? src.trim() : fallbackSrc;
+    setCurrentSrc(validSrc);
+    setHasError(false);
   }, [src, fallbackSrc]);
 
   return (
@@ -26,9 +36,13 @@ export function SafeProductImage({
       {...props}
       src={currentSrc}
       alt={alt || 'Producto'}
-      onError={() => {
-        if (currentSrc !== fallbackSrc) {
+      onError={(e) => {
+        if (!hasError && currentSrc !== fallbackSrc) {
+          setHasError(true);
           setCurrentSrc(fallbackSrc);
+        }
+        if (onError) {
+          onError(e);
         }
       }}
     />

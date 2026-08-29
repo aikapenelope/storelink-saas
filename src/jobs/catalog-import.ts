@@ -140,6 +140,7 @@ const catalogImportRows: TaskConfig = {
             collection: 'products',
             id: existing.id,
             overrideAccess: true,
+            context: { skipRevalidate: true },
             data: {
               title,
               price,
@@ -157,6 +158,7 @@ const catalogImportRows: TaskConfig = {
           const created = await payload.create({
             collection: 'products',
             overrideAccess: true,
+            context: { skipRevalidate: true },
             data: {
               title,
               sku,

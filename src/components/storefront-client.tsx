@@ -2,12 +2,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
 import { ShoppingBag, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
 import { DemosMartesSwitcher } from './demos-martes-switcher';
 import { VERTICAL_PRESETS } from '@/data/theme-presets';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 export interface ThemeProps {
   tenant: TenantConfig;
@@ -372,9 +372,9 @@ export function StorefrontClient({
             className="bg-white text-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[80vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-6 duration-200 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Image Banner & Carousel */}
+            {/* Image Banner & Multi-Image Carousel */}
             <div className="relative h-60 bg-slate-100 flex-shrink-0 select-none group">
-              <Image
+              <SafeProductImage
                 src={productImages[activeImageIndex] || DEFAULT_PRODUCT_IMAGE_URL}
                 alt={`${selectedProduct.title} - Foto ${activeImageIndex + 1}`}
                 fill
@@ -384,7 +384,7 @@ export function StorefrontClient({
               <button
                 type="button"
                 onClick={() => setSelectedProduct(null)}
-                className="absolute top-3 right-3 z-20 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5 transition shadow-md"
+                className="absolute top-3 right-3 z-20 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5 transition shadow-md cursor-pointer"
                 aria-label="Cerrar modal"
               >
                 ✕
@@ -461,7 +461,7 @@ export function StorefrontClient({
                         : 'border-slate-200 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <Image
+                    <SafeProductImage
                       src={imgUrl}
                       alt={`Miniatura ${idx + 1}`}
                       fill
