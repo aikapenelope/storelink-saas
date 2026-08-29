@@ -22,7 +22,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
-import { ProductItem } from '@/components/product-card';
+import type { ProductItem } from '@/components/storefront-client';
 import { processOrder } from '@/app/actions/checkout';
 
 export interface CartItem extends ProductItem {
