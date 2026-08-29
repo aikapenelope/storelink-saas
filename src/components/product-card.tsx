@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
-import { Plus, Minus, ShoppingBag, Eye } from 'lucide-react';
+import { Plus, Minus, ShoppingBag, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 
@@ -29,9 +29,22 @@ interface ProductCardProps {
 
 export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuantity = 0 }: ProductCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeImgIndex, setActiveImgIndex] = useState(0);
   const isOutOfStock = product.stockStatus === 'out_of_stock';
-  const initialImageUrl = product.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL;
-  const [imgSrc, setImgSrc] = useState(initialImageUrl);
+
+  const productImages = useMemo(() => {
+    const list = product.images
+      ?.map((img) => img.url)
+      .filter((url): url is string => typeof url === 'string' && url.length > 0);
+    return list && list.length > 0 ? list : [DEFAULT_PRODUCT_IMAGE_URL];
+  }, [product.images]);
+
+  const [imgSrc, setImgSrc] = useState(productImages[0] || DEFAULT_PRODUCT_IMAGE_URL);
+
+  useEffect(() => {
+    setImgSrc(productImages[0] || DEFAULT_PRODUCT_IMAGE_URL);
+    setActiveImgIndex(0);
+  }, [productImages]);
 
   return (
     <>
@@ -148,21 +161,74 @@ export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuanti
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="relative aspect-video w-full bg-slate-100">
+            <div className="relative aspect-video w-full bg-slate-100 select-none group">
               <Image
-                src={imgSrc}
-                alt={product.title}
+                src={productImages[activeImgIndex] || DEFAULT_PRODUCT_IMAGE_URL}
+                alt={`${product.title} - Foto ${activeImgIndex + 1}`}
                 fill
                 sizes="(max-width: 640px) 100vw, 512px"
-                className="w-full h-full object-cover"
-                onError={() => setImgSrc(DEFAULT_PRODUCT_IMAGE_URL)}
+                className="w-full h-full object-cover transition-opacity duration-200"
               />
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-900/60 text-white flex items-center justify-center font-bold hover:bg-slate-900 transition"
+                className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-slate-900/60 text-white flex items-center justify-center font-bold hover:bg-slate-900 transition cursor-pointer"
+                aria-label="Cerrar modal"
               >
                 ✕
               </button>
+
+              {/* Multi-image Navigation Controls */}
+              {productImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImgIndex((prev) => (prev > 0 ? prev - 1 : productImages.length - 1));
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition shadow-md cursor-pointer"
+                    aria-label="Foto anterior"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImgIndex((prev) => (prev < productImages.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition shadow-md cursor-pointer"
+                    aria-label="Siguiente foto"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+
+                  <div className="absolute top-3 left-3 z-10 bg-black/60 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                    {activeImgIndex + 1} / {productImages.length}
+                  </div>
+
+                  <div className="absolute bottom-2.5 inset-x-0 z-10 flex items-center justify-center gap-1.5">
+                    {productImages.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImgIndex(idx);
+                        }}
+                        className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                          idx === activeImgIndex
+                            ? 'w-6 bg-white shadow-sm'
+                            : 'w-2 bg-white/60 hover:bg-white/90'
+                        }`}
+                        aria-label={`Ver foto ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="p-6">
               <div className="flex items-center justify-between gap-4 mb-2">

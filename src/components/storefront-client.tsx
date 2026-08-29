@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { ShoppingBag, Check } from 'lucide-react';
+import { ShoppingBag, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
 import { DemosMartesSwitcher } from './demos-martes-switcher';
 import { VERTICAL_PRESETS } from '@/data/theme-presets';
@@ -228,12 +228,18 @@ export function StorefrontClient({
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
-  const [modalImgSrc, setModalImgSrc] = useState<string>(DEFAULT_PRODUCT_IMAGE_URL);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const productImages = useMemo(() => {
+    if (!selectedProduct) return [DEFAULT_PRODUCT_IMAGE_URL];
+    const list = selectedProduct.images
+      ?.map((img) => img.url)
+      .filter((url): url is string => typeof url === 'string' && url.length > 0);
+    return list && list.length > 0 ? list : [DEFAULT_PRODUCT_IMAGE_URL];
+  }, [selectedProduct]);
 
   useEffect(() => {
-    if (selectedProduct) {
-      setModalImgSrc(selectedProduct.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL);
-    }
+    setActiveImageIndex(0);
   }, [selectedProduct]);
 
   // Active theme (defaults to tenant.theme, allows live preview toggle)
@@ -366,23 +372,106 @@ export function StorefrontClient({
             className="bg-white text-slate-900 rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[80vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom-6 duration-200 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Image Banner */}
-            <div className="relative h-56 bg-slate-100 flex-shrink-0">
+            {/* Image Banner & Carousel */}
+            <div className="relative h-60 bg-slate-100 flex-shrink-0 select-none group">
               <Image
-                src={modalImgSrc}
-                alt={selectedProduct.title}
+                src={productImages[activeImageIndex] || DEFAULT_PRODUCT_IMAGE_URL}
+                alt={`${selectedProduct.title} - Foto ${activeImageIndex + 1}`}
                 fill
                 sizes="(max-width: 640px) 100vw, 448px"
-                className="object-cover"
-                onError={() => setModalImgSrc(DEFAULT_PRODUCT_IMAGE_URL)}
+                className="object-cover transition-opacity duration-200"
               />
               <button
+                type="button"
                 onClick={() => setSelectedProduct(null)}
-                className="absolute top-4 right-4 bg-black/50 text-white rounded-full p-1.5 hover:bg-black/70"
+                className="absolute top-3 right-3 z-20 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5 transition shadow-md"
+                aria-label="Cerrar modal"
               >
                 ✕
               </button>
+
+              {/* Multi-image Navigation Controls */}
+              {productImages.length > 1 && (
+                <>
+                  {/* Previous Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : productImages.length - 1));
+                    }}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition shadow-md cursor-pointer"
+                    aria-label="Foto anterior"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  {/* Next Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex((prev) => (prev < productImages.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition shadow-md cursor-pointer"
+                    aria-label="Siguiente foto"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+
+                  {/* Counter Badge */}
+                  <div className="absolute top-3 left-3 z-10 bg-black/60 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                    {activeImageIndex + 1} / {productImages.length}
+                  </div>
+
+                  {/* Dot Indicators */}
+                  <div className="absolute bottom-2.5 inset-x-0 z-10 flex items-center justify-center gap-1.5">
+                    {productImages.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImageIndex(idx);
+                        }}
+                        className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                          idx === activeImageIndex
+                            ? 'w-6 bg-white shadow-sm'
+                            : 'w-2 bg-white/60 hover:bg-white/90'
+                        }`}
+                        aria-label={`Ver foto ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Thumbnail Strip for multiple images */}
+            {productImages.length > 1 && (
+              <div className="px-5 pt-3 pb-0 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {productImages.map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`relative w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 transition cursor-pointer ${
+                      idx === activeImageIndex
+                        ? 'border-emerald-600 ring-2 ring-emerald-600/30'
+                        : 'border-slate-200 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <Image
+                      src={imgUrl}
+                      alt={`Miniatura ${idx + 1}`}
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="p-5 space-y-4 flex-1">
               <div className="flex items-center justify-between">
