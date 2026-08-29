@@ -200,6 +200,8 @@ export type Product = {
   variants?: ProductVariant[] | null;
   modifiers?: ProductModifier[] | null;
   imageUrl?: string | null;
+  /** Fase 1 expand: campo principal de imágenes (hasMany text). Generado por pnpm generate:types. */
+  imageUrls?: string[] | null;
   images?: ProductImage[] | null;
   meta?: {
     title?: string | null;

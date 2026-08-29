@@ -154,6 +154,9 @@ export default async function TenantStorefrontPage({
     // silencio). El mapeo a ProductItem liviano ocurre aquí server-side y la
     // página es ISR, así que el costo extra queda fuera del request del
     // cliente. Pendiente (backlog): paginación real con hasNextPage.
+    // depth: 1 — pobla category (nivel 1, necesario para su name en el
+    // storefront). imageUrls es hasMany text, no relación; no requiere depth.
+    // images (upload legacy, hidden en admin) no se usa en el mapeo: ignorado.
     const productsResult = await payload.find({
       collection: 'products',
       where: {
@@ -162,6 +165,7 @@ export default async function TenantStorefrontPage({
         },
       },
       limit: 500,
+      depth: 1,
     });
 
     if (productsResult.docs.length > 0) {
@@ -199,20 +203,16 @@ export default async function TenantStorefrontPage({
                   : [],
               }))
             : [],
-          images: prod.imageUrl
-            ? [{ url: prod.imageUrl }]
-            : Array.isArray(prod.images) && prod.images.length > 0
-            ? prod.images.map((img) => ({
-                // La fila ProductImage solo trae la relación `image`
-                // (poblada como Media con url, o id numérico sin resolver).
-                url:
-                  typeof img.image === 'object' && img.image?.url
-                    ? img.image.url
-                    : DEFAULT_PRODUCT_IMAGE_URL,
-              }))
-            : [{ url: DEFAULT_PRODUCT_IMAGE_URL }],
+          // Fase 1 (expand): imageUrls es el campo principal.
+          // El fallback a images (upload legacy) se mantiene mientras haya
+          // productos sin backfill — se eliminará en la migración contract (Fase 2).
+          images:
+            Array.isArray(prod.imageUrls) && prod.imageUrls.length > 0
+              ? prod.imageUrls.map((url) => ({ url }))
+              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }],
         };
       });
+
 
       // Dynamic categories from loaded products
       const catSet = new Set<string>(['Todos']);

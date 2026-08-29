@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload';
+import type { CollectionConfig, TextField } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 
@@ -10,7 +10,7 @@ export const Products: CollectionConfig = {
   },
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['imageUrl', 'title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
+    defaultColumns: ['imageUrls', 'title', 'sku', 'price', 'stockStatus', 'category', 'tenant'],
   },
   access: {
     read: () => true, // Public read so storefront can display items
@@ -21,17 +21,39 @@ export const Products: CollectionConfig = {
     delete: ({ req: { user } }) => hasTenantAccess(user),
   },
   fields: [
+    // Fase 1 (expand): campo principal de imágenes — texto hasMany con validación de URL.
+    // La primera URL es la foto del catálogo; las siguientes quedan disponibles para
+    // galería en Fase 2. El campo imageUrl (singular) se mantiene en BD hasta la
+    // migración contract (Fase 2, PR separado) para no romper datos existentes.
     {
-      name: 'imageUrl',
+      name: 'imageUrls',
       type: 'text',
-      label: 'Foto',
+      hasMany: true,
+      maxRows: 6,
+      label: 'Fotos del Producto (URLs)',
+      validate: (value: string | string[] | null | undefined): string | true => {
+        const urls = Array.isArray(value) ? value : value ? [value] : [];
+        const invalid = urls.filter((u) => {
+          try {
+            new URL(u);
+            return false;
+          } catch {
+            return true;
+          }
+        });
+        if (invalid.length > 0) {
+          return `URL(s) inválidas: ${invalid.join(', ')}`;
+        }
+        return true;
+      },
       admin: {
-        description: 'URL directa de la imagen del producto (ej: Unsplash, Cloudinary o Google Drive)',
+        description:
+          'Pega una o varias URLs de imagen (Google Drive, Unsplash, tu propio CDN...). La primera es la foto principal del catálogo.',
         components: {
           Cell: '@/components/admin/ProductImageCell#ProductImageCell',
         },
       },
-    },
+    } satisfies TextField,
     {
       name: 'title',
       type: 'text',
@@ -61,9 +83,14 @@ export const Products: CollectionConfig = {
       label: 'Descripción del Producto / Ingredientes / Detalles',
     },
     {
+      // Fase 2 (contract): este campo se dropeará en un PR separado, después
+      // de confirmar en producción que imageUrls funciona correctamente.
+      // Se oculta del admin (hidden: true) para no confundir al comerciante,
+      // pero la columna/tabla en BD se preserva — expand/contract.
       name: 'images',
       type: 'array',
       label: 'Imágenes del Producto',
+      admin: { hidden: true },
       fields: [
         {
           name: 'image',
