@@ -98,9 +98,10 @@ const catalogImportRows: TaskConfig = {
       const imageUrls =
         imgIdx !== -1 && cols[imgIdx]
           ? cols[imgIdx]
-              .split(/[,;]/)
-              .map((u) => sanitizeCsvCell(u))
+              .split(/[,;\n\r]+/)
+              .map((u) => sanitizeCsvCell(u).trim())
               .filter(Boolean)
+              .slice(0, 6)
           : [];
 
       if (!title) continue;

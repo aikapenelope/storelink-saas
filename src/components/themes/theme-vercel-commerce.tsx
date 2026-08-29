@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ShoppingBag, Search, ArrowRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -160,7 +160,7 @@ export function ThemeVercelCommerce({
                 >
                   {/* Image Container */}
                   <div className="relative aspect-square w-full bg-neutral-900 overflow-hidden">
-                    <Image
+                    <SafeProductImage
                       src={imageUrl}
                       alt={product.title}
                       fill

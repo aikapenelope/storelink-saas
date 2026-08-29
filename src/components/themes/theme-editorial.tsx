@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ShoppingBag, Search } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -144,7 +144,7 @@ export function ThemeEditorial({
                 >
                   {/* Image 4:5 Portrait */}
                   <div className="relative aspect-[4/5] bg-[#ece5dd] rounded-xl overflow-hidden shadow-xs">
-                    <Image
+                    <SafeProductImage
                       src={imageUrl}
                       alt={product.title}
                       fill
