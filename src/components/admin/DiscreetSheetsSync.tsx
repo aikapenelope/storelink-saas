@@ -50,8 +50,11 @@ export function DiscreetSheetsSync() {
       } else {
         setStatus({
           type: 'success',
-          msg: data.message || 'Sincronización iniciada en segundo plano. Los productos se están actualizando.',
+          msg: '¡Catálogo sincronizado con éxito! Actualizando vista...',
         });
+        setTimeout(() => {
+          window.location.reload();
+        }, 2500);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error de red';
@@ -90,7 +93,7 @@ export function DiscreetSheetsSync() {
 
       {status && (
         <div
-          className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center gap-2 ${
+          className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
             status.type === 'success'
               ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
               : 'bg-rose-950/80 text-rose-400 border border-rose-800'
@@ -98,15 +101,6 @@ export function DiscreetSheetsSync() {
         >
           {status.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
           <span>{status.msg}</span>
-          {status.type === 'success' && (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="ml-1 text-[11px] underline hover:text-white font-normal"
-            >
-              Refrescar vista
-            </button>
-          )}
         </div>
       )}
     </div>

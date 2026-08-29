@@ -70,8 +70,11 @@ export function ProductsSyncPanel() {
       } else {
         setResult({
           success: true,
-          message: data.message || 'Sincronización iniciada en segundo plano. Los productos se están actualizando.',
+          message: '¡Catálogo sincronizado con éxito! Actualizando vista...',
         });
+        setTimeout(() => {
+          window.location.reload();
+        }, 2500);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error de conexión con el servidor';
@@ -151,15 +154,6 @@ export function ProductsSyncPanel() {
           )}
           <div className="space-y-1">
             <p className="font-semibold leading-relaxed">{result.message}</p>
-            {result.success && (
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="mt-1 text-xs text-white underline hover:text-zinc-300 font-medium block"
-              >
-                Refrescar catálogo
-              </button>
-            )}
             {result.errors && result.errors.length > 0 && (
               <p className="text-[11px] text-rose-300">
                 {result.errors.length} filas tuvieron advertencias de formato.
