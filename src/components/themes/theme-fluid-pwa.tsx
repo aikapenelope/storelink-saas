@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ShoppingBag, Search, Plus, Minus, Info, Sparkles } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -160,7 +160,7 @@ export function ThemeFluidPWA({
                     onClick={() => onOpenProductModal(product)}
                     className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer group"
                   >
-                    <Image
+                    <SafeProductImage
                       src={imageUrl}
                       alt={product.title}
                       fill

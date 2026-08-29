@@ -30,7 +30,8 @@ interface ProductCardProps {
 export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuantity = 0 }: ProductCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isOutOfStock = product.stockStatus === 'out_of_stock';
-  const imageUrl = product.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL;
+  const initialImageUrl = product.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL;
+  const [imgSrc, setImgSrc] = useState(initialImageUrl);
 
   return (
     <>
@@ -41,11 +42,12 @@ export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuanti
           onClick={() => setIsModalOpen(true)}
         >
           <Image
-            src={imageUrl}
+            src={imgSrc}
             alt={product.title}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+            onError={() => setImgSrc(DEFAULT_PRODUCT_IMAGE_URL)}
           />
           {product.featured && (
             <span className="absolute top-2.5 left-2.5 bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm">
@@ -148,11 +150,12 @@ export function ProductCard({ product, currency = 'USD', onAddToCart, cartQuanti
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="relative aspect-video w-full bg-slate-100">
               <Image
-                src={imageUrl}
+                src={imgSrc}
                 alt={product.title}
                 fill
                 sizes="(max-width: 640px) 100vw, 512px"
                 className="w-full h-full object-cover"
+                onError={() => setImgSrc(DEFAULT_PRODUCT_IMAGE_URL)}
               />
               <button
                 onClick={() => setIsModalOpen(false)}

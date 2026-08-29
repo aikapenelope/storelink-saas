@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Search, ArrowUpRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -194,7 +195,7 @@ export function ThemeFashionBoutique({
                 >
                   {/* Portrait Image Card */}
                   <div className="relative aspect-[3/4] bg-[#ece5dd] rounded-3xl overflow-hidden shadow-xs group-hover:shadow-xl transition-all duration-500">
-                    <Image
+                    <SafeProductImage
                       src={imageUrl}
                       alt={product.title}
                       fill

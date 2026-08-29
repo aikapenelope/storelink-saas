@@ -228,6 +228,13 @@ export function StorefrontClient({
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
+  const [modalImgSrc, setModalImgSrc] = useState<string>(DEFAULT_PRODUCT_IMAGE_URL);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      setModalImgSrc(selectedProduct.images?.[0]?.url || DEFAULT_PRODUCT_IMAGE_URL);
+    }
+  }, [selectedProduct]);
 
   // Active theme (defaults to tenant.theme, allows live preview toggle)
   const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'basic-banner');
@@ -362,14 +369,12 @@ export function StorefrontClient({
             {/* Image Banner */}
             <div className="relative h-56 bg-slate-100 flex-shrink-0">
               <Image
-                src={
-                  selectedProduct.images?.[0]?.url ||
-                  DEFAULT_PRODUCT_IMAGE_URL
-                }
+                src={modalImgSrc}
                 alt={selectedProduct.title}
                 fill
                 sizes="(max-width: 640px) 100vw, 448px"
                 className="object-cover"
+                onError={() => setModalImgSrc(DEFAULT_PRODUCT_IMAGE_URL)}
               />
               <button
                 onClick={() => setSelectedProduct(null)}
