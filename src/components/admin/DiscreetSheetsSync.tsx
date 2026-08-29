@@ -48,16 +48,10 @@ export function DiscreetSheetsSync() {
       if (!res.ok) {
         setStatus({ type: 'error', msg: data.error || 'Error al sincronizar' });
       } else {
-        // La sincronización corre en background (Jobs Queue oficial, ver
-        // src/jobs/catalog-import.ts): la respuesta ya no trae conteos
-        // exactos al instante (data.created/data.updated no existen más).
-        // Mismo mensaje y espera que GoogleSheetsSyncWidget/ProductsSyncPanel
-        // para reflejar el resultado real del job en vez de "0 creados".
         setStatus({
           type: 'success',
-          msg: data.message || 'Sincronización en cola. Se reflejará en el catálogo en unos segundos.',
+          msg: data.message || 'Sincronización iniciada en segundo plano. Los productos se están actualizando.',
         });
-        setTimeout(() => window.location.reload(), 4000);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error de red';
@@ -96,14 +90,23 @@ export function DiscreetSheetsSync() {
 
       {status && (
         <div
-          className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+          className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center gap-2 ${
             status.type === 'success'
               ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
               : 'bg-rose-950/80 text-rose-400 border border-rose-800'
           }`}
         >
-          {status.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+          {status.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
           <span>{status.msg}</span>
+          {status.type === 'success' && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="ml-1 text-[11px] underline hover:text-white font-normal"
+            >
+              Refrescar vista
+            </button>
+          )}
         </div>
       )}
     </div>
