@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ShoppingBag, Search, Plus, Minus, Flame, Clock, Star, Sparkles, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -202,7 +202,7 @@ export function ThemeFoodDelivery({
                       onClick={() => onOpenProductModal(product)}
                       className="relative h-48 w-full rounded-2xl overflow-hidden bg-slate-100 cursor-pointer"
                     >
-                      <Image
+                      <SafeProductImage
                         src={imageUrl}
                         alt={product.title}
                         fill

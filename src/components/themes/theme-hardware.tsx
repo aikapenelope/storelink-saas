@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Image from 'next/image';
 import { ShoppingBag, Search, Hammer, CheckCircle2, Plus, Minus, FileText, ChevronRight } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -190,7 +190,7 @@ export function ThemeHardwareStore({
                       onClick={() => onOpenProductModal(product)}
                       className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-50 cursor-pointer"
                     >
-                      <Image
+                      <SafeProductImage
                         src={imageUrl}
                         alt={product.title}
                         fill

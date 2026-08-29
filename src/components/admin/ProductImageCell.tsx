@@ -17,13 +17,14 @@ interface ProductImageCellProps {
 }
 
 export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
+  const [hasError, setHasError] = React.useState(false);
   const imageUrl =
     cellData?.[0] ??
     rowData?.imageUrls?.[0] ??
     (Array.isArray(rowData?.images) && rowData.images[0]?.image?.url) ??
     null;
 
-  if (!imageUrl) {
+  if (!imageUrl || hasError) {
     return (
       <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 rounded-none shrink-0">
         <ImageIcon className="w-4 h-4" />
@@ -39,6 +40,7 @@ export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
         fill
         sizes="36px"
         className="object-cover rounded-none"
+        onError={() => setHasError(true)}
       />
     </div>
   );

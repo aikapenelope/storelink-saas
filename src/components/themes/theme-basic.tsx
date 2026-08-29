@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Search, Plus, Minus } from 'lucide-react';
 import { type ProductItem, type TenantConfig } from '@/components/storefront-client';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { SafeProductImage } from '@/components/safe-product-image';
 
 interface ThemeProps {
   tenant: TenantConfig;
@@ -184,7 +185,7 @@ export function ThemeBasicBanner({
                       onClick={() => onOpenProductModal(product)}
                       className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-100 cursor-pointer"
                     >
-                      <Image
+                      <SafeProductImage
                         src={imageUrl}
                         alt={product.title}
                         fill

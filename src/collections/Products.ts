@@ -31,12 +31,31 @@ export const Products: CollectionConfig = {
       hasMany: true,
       maxRows: 6,
       label: 'Fotos del Producto (URLs)',
+      hooks: {
+        beforeValidate: [
+          ({ value }) => {
+            if (!value) return value;
+            const rawList = Array.isArray(value) ? value : [value];
+            const cleaned = rawList
+              .flatMap((item) => (typeof item === 'string' ? item.split(/[,;\n\r]+/) : item))
+              .map((u) => (typeof u === 'string' ? u.trim() : u))
+              .filter((u) => typeof u === 'string' && u.length > 0);
+            return cleaned.slice(0, 6);
+          },
+        ],
+      },
       validate: (value: string | string[] | null | undefined): string | true => {
-        const urls = Array.isArray(value) ? value : value ? [value] : [];
+        if (!value) return true;
+        const rawList = Array.isArray(value) ? value : [value];
+        const urls = rawList
+          .flatMap((item) => (typeof item === 'string' ? item.split(/[,;\n\r]+/) : item))
+          .map((u) => (typeof u === 'string' ? u.trim() : u))
+          .filter((u) => typeof u === 'string' && u.length > 0);
+
         const invalid = urls.filter((u) => {
           try {
-            new URL(u);
-            return false;
+            const parsed = new URL(u);
+            return !parsed.protocol.startsWith('http');
           } catch {
             return true;
           }
@@ -48,7 +67,7 @@ export const Products: CollectionConfig = {
       },
       admin: {
         description:
-          'Pega una o varias URLs de imagen (Google Drive, Unsplash, tu propio CDN...). La primera es la foto principal del catálogo.',
+          'Pega una o varias URLs de imagen (Google Drive, Unsplash, tu propio CDN...). Puedes separar varias URLs por coma o añadirlas fila por fila. La primera es la foto principal.',
         components: {
           Cell: '@/components/admin/ProductImageCell#ProductImageCell',
         },
