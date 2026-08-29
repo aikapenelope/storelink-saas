@@ -1,8 +1,13 @@
 # PLAN DE ROBUSTECIMIENTO v2 — storelink-saas
 
+> ⚠️ **PLAN HISTÓRICO (Agosto 2026)**
+> Este documento representa la planificación histórica de los sprints de robustecimiento tras la auditoría inicial.
+> La gran mayoría de los ítems planificados en las tablas de sprints (PR-0 a PR-3a, R1 a R10) ya fueron implementados, validados con tests y mergeados en `main`.
+> Consultar `git log`, `docs/ARCHITECTURE_AUDIT_REPORT.md` y `docs/HALLAZGOS_AUDITORIA_PROFUNDA_2026-08-29.md` para el estado técnico en tiempo real en producción.
+
 **Fecha:** 2026-08-24 · **SHA base:** `78bf6e4` (clon `storelink-saas-audit-2026-08-24`)
 **Sustituye a:** `PLAN_ROBUSTECIMIENTO_2026-08-24.md` (v1).
-**Naturaleza:** documento de PLANIFICACIÓN. Ningún fix se ejecuta desde aquí: cada PR se abre rebasado contra `main`, con `pnpm build` verde, y el merge lo hace Ángel (regla del repo).
+**Naturaleza:** documento de PLANIFICACIÓN HISTÓRICA.
 
 ## Fuentes re-verificadas para v2
 
