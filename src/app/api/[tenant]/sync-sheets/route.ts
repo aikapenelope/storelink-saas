@@ -120,7 +120,11 @@ export async function POST(
     }
 
     const finalHost = res.url ? new URL(res.url).hostname : '';
-    if (finalHost && finalHost !== 'docs.google.com') {
+    const isLegitimateGoogleSheetsHost =
+      finalHost === 'docs.google.com' ||
+      /[.-]sheets\.googleusercontent\.com$/.test(finalHost) ||
+      finalHost.endsWith('.googleusercontent.com');
+    if (finalHost && !isLegitimateGoogleSheetsHost) {
       return NextResponse.json(
         { error: 'La URL redirige fuera de Google Sheets y fue bloqueada por seguridad.' },
         { status: 400 }
