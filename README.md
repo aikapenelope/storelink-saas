@@ -8,17 +8,20 @@ Plataforma SaaS multi-inquilino de catálogos y e-commerce, con una tienda web r
 
 * 🏪 **Multi-Tenant Real:** Cada comerciante tiene su propia tienda web en la ruta `https://flow.martes.app/[slug]` (ej: `flow.martes.app/donluigi`).
 * 🎨 **9 Plantillas de Tienda & Temas Oficiales:** Soporte nativo para 9 estéticas por nicho (`basic-banner`, `food-delivery`, `fashion-boutique`, `moto-parts`, `hardware-store`, `b2b-matrix`, `editorial`, `fluid-pwa`, `vercel-commerce`), seleccionables al crear o editar el comercio en Payload y explorables en `/templates`.
-* 🛵 **Tarifa Fija de Delivery (Definición del Producto):** El costo de delivery es un **precio fijo** establecido por el comercio en la configuración de Payload (`deliveryConfig.fixedPrice`). Se muestra con transparencia en el catálogo, se suma al subtotal de productos en el carrito, se desglosa en el mensaje estructurado de WhatsApp y se refleja en la Nota de Entrega PDF.
-* 📱 **Web Responsive Mobile-First:** Experiencia fluida en teléfono y escritorio con píldoras de categorías, buscador en vivo, cajón inferior deslizante (`Vaul`), personalizador interactivo de variantes/modificadores y modal de producto.
-* 💬 **Checkout Directo a WhatsApp:** Formatea y suma los SKUs, subtotales, tarifa de delivery fija, datos de entrega del comprador y abre el chat de WhatsApp con un solo clic.
-* 📋 **Despacho Automático a Trello:** Cada pedido crea una tarjeta en tiempo real en el workspace/lista de su comercio (`POST https://api.trello.com/1/cards`), saliendo todos por la misma credencial maestra configurada en Vercel.
+* 📸 **Múltiples Fotos por Producto (`imageUrls`):** Campo `hasMany: true` tolerante a múltiples URLs separadas por comas, saltos de línea o filas individuales en el admin, con carga optimizada e imágenes resilientes con fallback automático ante enlaces rotos.
+* ⚡ **Jobs Queue Oficial de Payload:** Cola de tareas asíncronas para procesamiento de imports de catálogo masivos (`catalogImportRows`) y workflows de pedidos (`order-created`), con ejecución instantánea vía `after()` y reintentos automáticos mediante un runner externo en GitHub Actions.
+* 🛵 **Tarifa Fija de Delivery:** El costo de delivery es un **precio fijo** establecido por el comercio en la configuración de Payload (`deliveryConfig.fixedPrice`). Se muestra con transparencia en el catálogo, se suma al subtotal de productos en el carrito, se desglosa en el mensaje estructurado de WhatsApp y se refleja en la Nota de Entrega PDF.
+* 📱 **Web Responsive Mobile-First con ISR:** Experiencia fluida en teléfono y escritorio (ISR 300s + revalidación granular en mutaciones), con buscador en vivo, cajón inferior deslizante (`Vaul`), selector de variantes y modal interactivo.
+* 💬 **Checkout Directo a WhatsApp:** Formatea y suma los SKUs, subtotales, tarifa de delivery fija, datos de entrega del comprador y abre el chat de WhatsApp con un solo clic con protección anti-abuso de 3 capas (Nonce HMAC + Honeypot + Rate Limit Upstash).
+* 📋 **Despacho Automático a Trello:** Cada pedido crea una tarjeta en tiempo real en el workspace/lista del comercio (`POST https://api.trello.com/1/cards`), con soporte para cuenta maestra global o credenciales BYOK por comercio.
 * 📄 **Notas de Entrega en PDF:** Generación instantánea de notas de entrega en PDF multi-página con logo del comercio, datos del cliente, desglose de ítems, tarifa de delivery y totales USD/VES. Almacenamiento seguro en Cloudflare R2 con URLs firmadas.
-* 📧 **Adapter de Correo Centralizado:** Integración con Resend a través del adaptador oficial `@payloadcms/email-resend`, centralizado a nivel de plataforma con remitente personalizado por comercio (`fromName = storeName`).
-* 🛡️ **Panel de Administración (Payload CMS 3.x):** Gestión de inventario, stock, precios, subida de fotos a Cloudflare R2, y control de usuarios super-admin / tenant-admin.
+* 📧 **Adapter de Correo Multi-Tenant:** Integración con Resend a través de adaptador centralizado o BYOK por comercio (`fromName = storeName`).
+* 🛡️ **Panel de Administración (Payload CMS 3.x):** Gestión de inventario, stock, precios, fotos, analíticas SQL directas y control de usuarios super-admin / tenant-admin.
 * ☁️ **Infraestructura a Coste $0:**
   * **Vercel:** Hosting y Serverless Functions.
   * **Supabase:** Base de datos PostgreSQL (Transaction Pooler 6543).
   * **Cloudflare R2:** Almacenamiento de imágenes (10 GB gratis sin costes de transferencia).
+  * **Upstash Redis:** Rate limiting y control de caché en el borde.
 
 > ℹ️ **Nota:** La sincronización automática del catálogo con Meta WhatsApp Business fue retirada del alcance del producto. Los pedidos entran exclusivamente por el checkout de la tienda web.
 

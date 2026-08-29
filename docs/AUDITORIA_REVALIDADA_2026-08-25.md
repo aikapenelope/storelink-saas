@@ -98,84 +98,43 @@ meter el guard antes de tener clientes con catálogos grandes.
 
 ---
 
-## 3. Hallazgos VIGENTES tras la re-auditoría (confirmados en `origin/main`)
+## 3. Estado de los Hallazgos tras los ciclos de remediación (Verificado en `origin/main`)
 
-### V-H1 · Stock de variantes nunca se descuenta (High — negocio/inventario)
+### V-H1 · Stock de variantes nunca se descuenta (High) → ✅ **RESUELTO**
+- **Resolución:** `src/collections/Orders.ts` (hook `manageOrderInventoryHook`) descuenta stock de variantes de manera atómica con `$inc` directamente sobre `products_variants` y restaura adecuadamente en cancelaciones.
+- **Evidencia:** Tests de integración y hooks en producción validando decremento por SKU de variante.
 
-- **Evidencia:** `src/collections/Orders.ts` (hook `manageOrderInventoryHook`): el `$inc`
-  atómico se aplica solo sobre `products.stockQuantity` del producto **base**, gated por
-  `prod.trackStock`. Ningún flujo modifica `variants[].stockQuantity`.
-- **Contraste:** `checkout.ts:185-191` valida stock a nivel variante (`matchedVariant.stockQuantity`)
-  y toma el precio de la variante — pero el descuento posterior ignora la variante. Doble error:
-  sobreventa de tallas/variantes + descuadre del stock base si `trackStock=true`.
-- **Patrón oficial:** skill HOOKS.md (collection hooks actúan sobre el documento completo) y el
-  propio comentario del repo cita `@payloadcms/plugin-ecommerce/confirmOrder.ts` como referencia.
-  La corrección requiere resolver la variante (por SKU) y aplicar `$inc` anidado
-  (`variants.N.stockQuantity`) vía `db.updateOne`, o SQL directo a `products_variants`.
-- **Test faltante:** integración que compre por SKU de variante y afirme qué campo decreció.
+### V-H2 · Tarifa de delivery visible pero jamás cobrada (High) → ✅ **RESUELTO**
+- **Resolución:** El checkout valida la tarifa en base de datos (`deliveryConfig.fixedPrice`), la suma al total en USD/VES, la persiste en el campo `deliveryCost` de la orden (migrado en base de datos) y la desglosa tanto en WhatsApp como en el PDF.
 
-### V-H2 · Tarifa de delivery visible pero jamás cobrada (High — ingresos)
+### V-H3 · Fallo de Trello = job exitoso, sin reintentos (High) → ✅ **RESUELTO**
+- **Resolución:** `src/jobs/order-created.ts` y `src/lib/trello.ts` lanzan excepciones explícitas (`throw new Error(...)`) ante fallos de la API de Trello, activando el ciclo de 3 reintentos automáticos configurados en la Jobs Queue oficial.
 
-- **Evidencia:** `cart-drawer.tsx:589` muestra `(+$X)` por zona; `cart-drawer.tsx:202` calcula
-  `total` solo con ítems; `checkout.ts` (reduce de `verifiedItems`) ídem; `Orders.ts` no tiene
-  campo de tarifa de envío.
-- El comerciante configura tarifas en `deliveryConfig.zones.priceDelivery`, el cliente las ve…
-  y paga otro total. Pérdida directa de ingresos + disputas por WhatsApp.
-- **Fix:** sumar la fee server-side según municipio/zona seleccionada y persistirla en la orden
-  (campo nuevo vía `pnpm migrate:create`).
+### V-M1 · `paymentMethodsConfig` serializado completo al HTML público (Medium) → ✅ **RESUELTO**
+- **Resolución:** `src/app/(app)/[tenant]/page.tsx` filtra server-side los métodos con `enabled: false` antes de serializar hacia el cliente (`StorefrontClient`), evitando la fuga de cuentas bancarias inactivas en el HTML público.
 
-### V-H3 · Fallo de Trello = job exitoso, sin reintentos (High — fiabilidad)
+### V-M2 · SVG permitido en Media (Medium) → ✅ **RESUELTO**
+- **Resolución:** `src/collections/Media.ts` restringe estrictamente `mimeTypes` a formatos de mapa de bits (`image/jpeg`, `image/png`, `image/webp`, `image/gif`), bloqueando explícitamente `image/svg+xml`.
 
-- **Evidencia:** `trello.ts:97-107` devuelve `{ success:false }` en vez de lanzar;
-  `order-created.ts:84-112` nunca consulta `trelloRes.success`: guarda
-  `trelloCardUrl: undefined` y retorna output normal → tarea **succeeded**, workflow completado,
-  job archivado.
-- **Contraste Context7 (docs/jobs-queue/tasks.mdx):** *"If an error occurs, the task retries
-  based on the configured limit before ultimately failing"* — los reintentos solo existen si el
-  handler **lanza**. La guía de migración v4 lo hace explícito: *"Throw errors directly for task
-  failures instead of returning state failed"*. Los `retries: { attempts: 3 }` de
-  `order-created.ts:19` son hoy código muerto.
-- **Fix:** `if (!trelloRes.success) throw new Error(\`Trello dispatch failed: ${trelloRes.error}\`)`.
-  La idempotencia ya existe (`order.trelloCardUrl` check en :42) así que el reintento no duplica
-  tarjetas.
-
-### V-M1 · `paymentMethodsConfig` serializado completo al HTML público (Medium)
-
-- `page.tsx:148` pasa el grupo entero a `StorefrontClient` (`'use client'`) → todas las cuentas
-  bancarias (Zelle, Banesco Panamá, Binance, Zinli…), **incluidas las de métodos
-  `enabled:false`**, viajan en el payload RSC de una página pública ISR-cacheada. El field-level
-  access de `Tenants.ts:261-265` protege REST/admin, no esta serialización.
-- Mostrar datos de pago al comprador es decisión de producto (transferencia directa); el mínimo
-  innegociable es filtrar server-side los métodos deshabilitados y documentar la excepción en
-  `docs/AGENTS_CONSTITUTION.md`.
-
-### V-M2 · SVG permitido en Media (Medium)
-
-- `Media.ts:28` → `mimeTypes: ['image/*']` incluye `image/svg+xml`. SVG puede incrustar scripts
-  (stored XSS dependiendo del origen de servido). Fix: excluir svg explícitamente.
-
-### V-M3 · Imports de catálogo N+1 secuencial (~10k queries/request) (Medium-perf)
-
-- `sync-sheets/route.ts` e `import-csv/route.ts`: por fila → 1 find + 1 upsert, secuencial, con
-  tope de 5000 filas. En Vercel + pooler 6543 esto es timeout seguro y sync parcial; además el
-  bucle está duplicado 1:1 entre ambos archivos. Fix: helper compartido + resolución batch
-  (`sku in [...]`) + chunks.
+### V-M3 · Imports de catálogo N+1 secuencial (Medium-perf) → 🟡 **PARCIALMENTE RESUELTO (Riesgo Latente Vigente)**
+- **Estado:** Se implementó la Jobs Queue oficial (`catalogImportRows` en `src/jobs/catalog-import.ts`) con procesamiento asíncrono y resolución en `Map`.
+- **Riesgo Latente Vigente:** La precarga de productos para deduplicación por SKU tiene un tope fijo de `limit: 5000` (`catalog-import.ts:60`). Si una tienda supera los 5.000 productos totales, los SKUs posteriores no entran en el `Map` y podrían insertarse duplicados. Se mantiene este ítem como advertencia técnica activa en el roadmap.
 
 ---
 
-## 4. Resumen priorizado (estado actual de `main`)
+## 4. Resumen priorizado actualizado
 
-| Prioridad | Acción | Esfuerzo |
-|---|---|---|
-| P1 | V-H1: descuento de stock de variantes (+ test) | Medio |
-| P1 | V-H3: throw en fallo Trello (activa retries existentes) | Trivial |
-| P1 | V-H2: cobrar y persistir delivery fee | Medio |
-| P2 | PWA: ruta manifest + iconos en `public/` | Trivial |
-| P2 | Slugs: eliminar fallbacks `'aurita'/'don-luigi'/'DON LUIGI'` | Trivial |
-| P2 | Copy `Tenants.ts:68` (ejemplo España → Venezuela) | Trivial |
-| P3 | V-M1: filtrar métodos de pago disabled antes de serializar | Bajo |
-| P3 | V-M2: bloquear SVG en Media | Trivial |
-| P3 | V-M3: batch import catálogo + deduplicar | Alto |
+| Prioridad | Ítem | Estado en `main` |
+|---|---|:---:|
+| P1 | V-H1: descuento de stock de variantes (+ test) | ✅ RESUELTO |
+| P1 | V-H3: throw en fallo Trello (activa retries existentes) | ✅ RESUELTO |
+| P1 | V-H2: cobrar y persistir delivery fee | ✅ RESUELTO |
+| P2 | PWA: migrado a Storefront Web Responsive sin PWA | ✅ RESUELTO |
+| P2 | Slugs: eliminación de fallbacks obsoletos de tiendas | ✅ RESUELTO |
+| P2 | Copy `Tenants.ts`: normalizado a código Venezuela (+58) | ✅ RESUELTO |
+| P3 | V-M1: filtrar métodos de pago disabled antes de serializar | ✅ RESUELTO |
+| P3 | V-M2: bloquear SVG en Media | ✅ RESUELTO |
+| P3 | V-M3: tope de 5.000 filas en precarga de dedupe | 🟡 PENDIENTE / RIESGO LATENTE |
 
 ---
 
