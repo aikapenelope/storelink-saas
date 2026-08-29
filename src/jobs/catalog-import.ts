@@ -95,7 +95,13 @@ const catalogImportRows: TaskConfig = {
       const description = descIdx !== -1 ? sanitizeCsvCell(cols[descIdx]) : '';
       const stockQuantity = stockIdx !== -1 ? parseInt(cols[stockIdx], 10) || 0 : undefined;
       const rawCategory = catIdx !== -1 && cols[catIdx] ? sanitizeCsvCell(cols[catIdx]) : '';
-      const imageUrl = imgIdx !== -1 && cols[imgIdx] ? sanitizeCsvCell(cols[imgIdx]) : undefined;
+      const imageUrls =
+        imgIdx !== -1 && cols[imgIdx]
+          ? cols[imgIdx]
+              .split(/[,;]/)
+              .map((u) => sanitizeCsvCell(u))
+              .filter(Boolean)
+          : [];
 
       if (!title) continue;
 
@@ -138,7 +144,7 @@ const catalogImportRows: TaskConfig = {
               price,
               description,
               category: categoryId,
-              imageUrl: imageUrl || undefined,
+              imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
               stockQuantity,
               trackStock: stockQuantity !== undefined,
               stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
@@ -155,7 +161,7 @@ const catalogImportRows: TaskConfig = {
               sku,
               price,
               description,
-              imageUrl: imageUrl || undefined,
+              imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
               category: categoryId,
               tenant: tenantId,
               stockQuantity,
