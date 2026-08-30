@@ -6,7 +6,12 @@ import { withPayload } from '@payloadcms/next/withPayload';
  * - La CSP va en modo Report-Only: una CSP restrictiva con script-src sin
  *   nonces rompería el admin de Payload (scripts inline de Next). Fase 2
  *   (backlog): endurecer script-src con nonces cuando el stack lo permita.
- * - img-src replica images.remotePatterns de abajo (+ blob:/data: para el editor de imágenes del admin).
+ * - img-src: cubre los CDNs reales que los comerciantes usan en imageUrls
+ *   de productos (Google Drive, Cloudinary, Pexels…) + blob:/data: para el
+ *   editor de imágenes del admin. Sin estos dominios, al pasar la CSP a
+ *   enforce en Fase 2 todas las imágenes de producto quedarían bloqueadas.
+ * - connect-src incluye Upstash REST API (rate-limit/exchange-rate) y la
+ *   propia URL del sitio (fetch de Server Actions y route handlers).
  */
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -18,11 +23,17 @@ const securityHeaders = [
     key: 'Content-Security-Policy-Report-Only',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://code.iconify.design",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' blob: data: https://images.unsplash.com https://*.r2.cloudflarestorage.com https://*.supabase.co https://*.vercel.app",
+      // img-src: Unsplash + R2/Supabase/Vercel (infraestructura propia) +
+      // Google Drive (lh3.googleusercontent.com = thumbnails de Drive,
+      // drive.google.com = enlaces directos) + Cloudinary + Pexels +
+      // code.iconify.design (iconos inline del admin) +
+      // blob:/data: para el editor de imágenes del admin.
+      "img-src 'self' blob: data: https://images.unsplash.com https://*.r2.cloudflarestorage.com https://*.supabase.co https://*.vercel.app https://drive.google.com https://lh3.googleusercontent.com https://res.cloudinary.com https://images.pexels.com https://code.iconify.design",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      // connect-src: el propio sitio + Upstash REST (rate-limit/exchange-rate)
+      "connect-src 'self' https://*.upstash.io",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

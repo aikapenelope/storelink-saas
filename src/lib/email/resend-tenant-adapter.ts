@@ -60,8 +60,12 @@ export async function resolveApiKey(fromAddress: string, payload: Payload, maste
       where: { 'emailConfig.fromEmail': { equals: fromAddress } },
       limit: 1,
       overrideAccess: true,
-      // Seleccionar solo el campo necesario para minimizar payload de la query
-      select: { emailConfig: { resendApiKey: true } } as never,
+      // `select` está tipado en Payload 3.x como un objeto plano de
+      // booleanos/sub-objetos; el tipo interno es complejo y varía por
+      // colección. Usamos Parameters<typeof payload.find>[0]['select'] para
+      // capturar el tipo exacto que Payload espera sin 'as never' que
+      // ocultaría errores de estructura al compilador.
+      select: { emailConfig: { resendApiKey: true } } as Parameters<typeof payload.find>[0]['select'],
     });
     const tenantKey = (tenants.docs[0] as { emailConfig?: { resendApiKey?: string } } | undefined)
       ?.emailConfig?.resendApiKey;

@@ -39,8 +39,11 @@ export const viewport: Viewport = {
   themeColor: '#7c3aed',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // WCAG 2.1 SC 1.4.4 (Resize text): no se bloquea el zoom del navegador.
+  // maximumScale y userScalable se omiten para dejar el comportamiento por
+  // defecto del navegador — los usuarios con baja visión pueden pellizcar
+  // para agrandar sin restricciones. La UI usa tamaños de fuente relativos
+  // (rem/em) que escalan correctamente con el zoom del sistema.
 };
 
 export default function AppLayout({
