@@ -130,7 +130,7 @@ export const Tenants: CollectionConfig = {
       required: true,
       label: 'Teléfono de WhatsApp para Pedidos',
       admin: {
-        description: 'Incluir código de país sin el signo + (ej: 34600111222 o 584121234567)',
+        description: 'Incluir código de país sin el signo + (ej: 584121234567 — código Venezuela 58 obligatorio). El sistema añade el prefijo 58 automáticamente si el número no lo trae; un número con código de otro país (ej: 34 de España) quedará inválido para WhatsApp.',
       },
     },
     {

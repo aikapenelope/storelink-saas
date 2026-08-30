@@ -52,8 +52,16 @@ export default function AppLayout({
     <html lang="es" className="scroll-smooth">
       <body className={`${plusJakartaSans.className} ${spaceGrotesk.variable} ${jetBrainsMono.variable} antialiased min-h-screen bg-[#0c0418] text-slate-950 selection:bg-violet-500 selection:text-white`}>
         {children}
+        {/* Iconify: cargado con SRI (Subresource Integrity) para proteger el
+            storefront contra un compromiso del CDN de Iconify. El hash sha384
+            corresponde a iconify-icon.min.js v2.1.0 — actualizarlo si se
+            bumpa la versión (https://www.srihash.org/ o `openssl dgst -sha384
+            -binary <file> | openssl base64 -A`). crossOrigin="anonymous" es
+            requerido por la spec de SRI para cross-origin resources. */}
         <Script
           src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"
+          integrity="sha384-GPb5RlngihS9H0z1D137JsvzmeZ7tCpWEF4t5YDoTZyMsPP8S7h7vFDh4XhheU83"
+          crossOrigin="anonymous"
           strategy="afterInteractive"
         />
       </body>

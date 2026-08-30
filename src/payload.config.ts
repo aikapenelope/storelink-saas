@@ -210,10 +210,18 @@ export default buildConfig({
   editor: lexicalEditor(),
   secret: (() => {
     const secret = process.env.PAYLOAD_SECRET;
-    if (!secret && process.env.VERCEL) {
-      throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on Vercel deployments.');
+    // Permitir el build estático de Next.js sin la variable (fase de análisis
+    // de rutas: NEXT_PHASE=phase-production-build). En runtime (Vercel, dev
+    // con servidor activo) el secreto es obligatorio.
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+    if (!secret && !isBuildPhase) {
+      throw new Error(
+        'FATAL: PAYLOAD_SECRET environment variable is required. Set it in your .env.local or Vercel environment variables.',
+      );
     }
-    return secret || 'flow-martes-build-secret-key-32chars-min';
+    // Durante el build estático se devuelve un placeholder no funcional.
+    // En runtime este bloque nunca se alcanza (se lanzó arriba).
+    return secret ?? 'build-placeholder-not-used-in-runtime';
   })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
