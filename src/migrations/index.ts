@@ -13,6 +13,7 @@ import * as migration_20260828_add_tenant_delivery_config_columns from './202608
 import * as migration_20260829_add_trello_byok_and_list_id_fix from './20260829_add_trello_byok_and_list_id_fix';
 import * as migration_20260829_products_image_urls from './20260829_products_image_urls';
 import * as migration_20260830_tenants_from_email_unique from './20260830_tenants_from_email_unique';
+import * as migration_20260901_trello_list_id_unique from './20260901_trello_list_id_unique';
 
 export const migrations = [
   {
@@ -91,5 +92,10 @@ export const migrations = [
     up: migration_20260830_tenants_from_email_unique.up,
     down: migration_20260830_tenants_from_email_unique.down,
     name: '20260830_tenants_from_email_unique',
+  },
+  {
+    up: migration_20260901_trello_list_id_unique.up,
+    down: migration_20260901_trello_list_id_unique.down,
+    name: '20260901_trello_list_id_unique',
   },
 ];

@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { GoogleSheetsSyncWidget } from './GoogleSheetsSyncWidget';
 import { ExchangeRateControl } from './ExchangeRateControl';
 import { DashboardOrdersManager } from './DashboardOrdersManager';
+import { JobsStatusView } from './JobsStatusView';
 import { getAllLiveExchangeRates, resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { getOrderKpis, getSalesSeries, getBestSellers } from '@/lib/analytics';
 import { fetchOrdersPage } from '@/app/actions/admin-orders';
@@ -428,7 +429,12 @@ export async function AnalyticsView() {
             </article>
           </section>
 
-          {/* 4. Exchange Rate Control Panel */}
+          {/* 4. Jobs Status Panel */}
+          <section>
+            <JobsStatusView />
+          </section>
+
+          {/* 5. Exchange Rate Control Panel */}
           <section>
             <ExchangeRateControl
               tenantSlug={tenantSlug}
