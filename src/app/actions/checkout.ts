@@ -334,6 +334,8 @@ async function upsertCustomerCrm({
   safeEmail,
   total,
   now,
+  orderDoc,
+  verifiedItems,
 }: {
   payload: Payload;
   tenantId: number;
@@ -342,6 +344,8 @@ async function upsertCustomerCrm({
   safeEmail: string;
   total: number;
   now: Date;
+  orderDoc: { id: number | string };
+  verifiedItems: CheckoutItemData[];
 }): Promise<void> {
   try {
     const cleanPhone = safePhone.trim();
@@ -394,13 +398,59 @@ async function upsertCustomerCrm({
 
     const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
 
+    // Preparar datos del historial y preferencias
+    const itemsSummary = verifiedItems
+      .map((item) => `${item.quantity}x ${item.title}`)
+      .join(', ');
+    
+    const purchaseHistoryEntry = {
+      orderId: orderDoc.id,
+      amount: total,
+      date: now.toISOString().split('T')[0], // YYYY-MM-DD
+      itemsSummary,
+      deliveryType: customer.deliveryType || 'delivery',
+    };
+
+    const updatePreferences = {
+      preferredPaymentMethod: customer.paymentDetails?.methodKey || customer.paymentMethod,
+      preferredDeliveryType: customer.deliveryType || 'none',
+    };
+
     if (existingCust) {
       await applyOrderToCustomerSql(existingCust);
+      
+      // Actualizar historial y preferencias vía Payload API
+      // Type cast temporal hasta que los tipos se regeneren con la migración
+      const currentHistory = Array.isArray((existingCust as any).purchaseHistory) ? (existingCust as any).purchaseHistory : [];
+      const updatedHistory = [purchaseHistoryEntry, ...currentHistory].slice(0, 50); // Mantener últimos 50
+      
+      const currentPrefs = (existingCust as any).preferences || {};
+      const mergedPrefs = { ...currentPrefs, ...updatePreferences };
+      
+      // Calcular nuevo valor promedio
+      const newTotalSpent = (Number(existingCust.totalSpent) || 0) + total;
+      const newTotalOrders = (Number(existingCust.totalOrders) || 0) + 1;
+      const newAvgOrderValue = newTotalOrders > 0 ? newTotalSpent / newTotalOrders : 0;
+
+      await payload.update({
+        collection: 'customers',
+        id: existingCust.id,
+        overrideAccess: true,
+        // Cast temporal hasta que los tipos se regeneren con la migración
+        data: {
+          purchaseHistory: updatedHistory,
+          preferences: {
+            ...mergedPrefs,
+            averageOrderValue: newAvgOrderValue,
+          },
+        } as any,
+      });
     } else {
       try {
         await payload.create({
           collection: 'customers',
           overrideAccess: true,
+          // Cast temporal hasta que los tipos se regeneren con la migración
           data: {
             name: customer.name,
             phone: cleanPhone,
@@ -410,7 +460,12 @@ async function upsertCustomerCrm({
             totalSpent: total,
             tag: 'nuevo',
             lastOrderAt: now.toISOString(),
-          },
+            purchaseHistory: [purchaseHistoryEntry],
+            preferences: {
+              ...updatePreferences,
+              averageOrderValue: total,
+            },
+          } as any,
         });
       } catch (createErr) {
         // Carrera concurrente: índice único compuesto customers_tenant_phone_unique
@@ -605,6 +660,21 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         },
       });
 
+      // ------------------------------------------------------------------
+      // 8. Upsert Customer in CRM Collection (Atomic Postgres SQL)
+      // ------------------------------------------------------------------
+      await upsertCustomerCrm({
+        payload,
+        tenantId,
+        customer,
+        safePhone,
+        safeEmail,
+        total,
+        now,
+        orderDoc: { id: orderDoc.id as number },
+        verifiedItems,
+      });
+
       // Despacho asíncrono vía Jobs Queue oficial
       try {
         const job = await payload.jobs.queue({
@@ -629,19 +699,6 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         error: 'No se pudo registrar tu pedido. Por favor inténtalo de nuevo.',
       };
     }
-
-    // ------------------------------------------------------------------
-    // 8. Upsert Customer in CRM Collection (Atomic Postgres SQL)
-    // ------------------------------------------------------------------
-    await upsertCustomerCrm({
-      payload,
-      tenantId,
-      customer,
-      safePhone,
-      safeEmail,
-      total,
-      now,
-    });
 
     // ------------------------------------------------------------------
     // 9. Revalidate Next.js Cache — solo el storefront del tenant activo.

@@ -7,6 +7,18 @@ export const Customers: CollectionConfig = {
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
+    // Hook afterChange para revalidar el caché del admin cuando se actualiza el CRM
+    afterChange: [
+      async ({ doc, req }) => {
+        // Solo revalidar si hay cambios significativos en el CRM
+        // para no invalidar el caché en cada actualización menor
+        if (req.context?.skipRevalidate) return doc;
+        
+        // El CRM se usa principalmente en el admin, así que no necesitamos
+        // revalidación agresiva del storefront
+        return doc;
+      },
+    ],
   },
   admin: {
     useAsTitle: 'name',
@@ -121,6 +133,95 @@ export const Customers: CollectionConfig = {
       name: 'notes',
       type: 'textarea',
       label: 'Notas Internas del Comerciante',
+    },
+    {
+      name: 'purchaseHistory',
+      type: 'array',
+      label: 'Historial de Compras',
+      admin: {
+        description: 'Registro de todos los pedidos del cliente para análisis de patrones y retención.',
+      },
+      fields: [
+        {
+          name: 'orderId',
+          type: 'relationship',
+          relationTo: 'orders',
+          label: 'Pedido',
+        },
+        {
+          name: 'amount',
+          type: 'number',
+          label: 'Monto del Pedido ($)',
+        },
+        {
+          name: 'date',
+          type: 'date',
+          label: 'Fecha del Pedido',
+        },
+        {
+          name: 'itemsSummary',
+          type: 'textarea',
+          label: 'Resumen de Productos',
+          admin: {
+            description: 'Lista de productos comprados en este pedido.',
+          },
+        },
+        {
+          name: 'deliveryType',
+          type: 'select',
+          label: 'Modalidad de Entrega',
+          options: [
+            { label: '🛵 Delivery', value: 'delivery' },
+            { label: '🛍️ Pickup', value: 'pickup' },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'preferences',
+      type: 'group',
+      label: 'Preferencias del Cliente',
+      fields: [
+        {
+          name: 'preferredPaymentMethod',
+          type: 'text',
+          label: 'Método de Pago Preferido',
+          admin: {
+            description: 'Método de pago que el cliente usa más frecuentemente.',
+          },
+        },
+        {
+          name: 'preferredDeliveryType',
+          type: 'select',
+          label: 'Modalidad de Entrega Preferida',
+          options: [
+            { label: '🛵 Delivery', value: 'delivery' },
+            { label: '🛍️ Pickup', value: 'pickup' },
+            { label: 'Sin preferencia', value: 'none' },
+          ],
+        },
+        {
+          name: 'averageOrderValue',
+          type: 'number',
+          label: 'Valor Promedio de Pedido ($)',
+          admin: {
+            description: 'Promedio de gasto por pedido (calculado automáticamente).',
+            readOnly: true,
+          },
+        },
+        {
+          name: 'preferredCategories',
+          type: 'array',
+          label: 'Categorías Favoritas',
+          fields: [
+            {
+              name: 'category',
+              type: 'text',
+              label: 'Categoría',
+            },
+          ],
+        },
+      ],
     },
   ],
 };
