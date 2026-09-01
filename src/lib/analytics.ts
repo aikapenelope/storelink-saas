@@ -58,34 +58,28 @@ export async function getOrderKpis(
   const t = tenantClause(tenantId);
   const { ordersTable, customersTable } = getTableNames(payload);
 
-  const [totalsRes, todayRes, pendingRes, customersRes] = await Promise.all([
-    payload.db.drizzle.execute(sql`
-      SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
-      FROM ${ordersTable}
-      WHERE (status != 'cancelled' OR status IS NULL) ${t}
-    `),
-    payload.db.drizzle.execute(sql`
-      SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::float8 AS total
-      FROM ${ordersTable}
-      WHERE (status != 'cancelled' OR status IS NULL)
-        AND created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} ${t}
-    `),
-    payload.db.drizzle.execute(sql`
-      SELECT COUNT(*)::int AS count
-      FROM ${ordersTable}
-      WHERE (status IN ('pending', 'preparing', 'in_delivery') OR status IS NULL) ${t}
-    `),
-    payload.db.drizzle.execute(sql`
-      SELECT COUNT(*)::int AS count FROM ${customersTable} WHERE 1=1 ${t}
-    `),
-  ]);
+  // Optimización: consolidar 4 queries en 1 sola query
+  const ordersRes = await payload.db.drizzle.execute(sql`
+    SELECT 
+      COUNT(*) FILTER (WHERE status != 'cancelled' OR status IS NULL) AS order_count,
+      COALESCE(SUM(total_amount) FILTER (WHERE status != 'cancelled' OR status IS NULL), 0)::float8 AS total_usd,
+      COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} AND (status != 'cancelled' OR status IS NULL)) AS today_count,
+      COALESCE(SUM(total_amount) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} AND (status != 'cancelled' OR status IS NULL)), 0)::float8 AS today_usd,
+      COUNT(*) FILTER (WHERE status IN ('pending', 'preparing', 'in_delivery') OR status IS NULL) AS pending_count
+    FROM ${ordersTable}
+    WHERE 1=1 ${t}
+  `);
+
+  const customersRes = await payload.db.drizzle.execute(sql`
+    SELECT COUNT(*)::int AS count FROM ${customersTable} WHERE 1=1 ${t}
+  `);
 
   return {
-    orderCount: num(totalsRes.rows[0]?.count),
-    totalUSD: num(totalsRes.rows[0]?.total),
-    todayOrderCount: num(todayRes.rows[0]?.count),
-    todayUSD: num(todayRes.rows[0]?.total),
-    pendingCount: num(pendingRes.rows[0]?.count),
+    orderCount: num(ordersRes.rows[0]?.order_count),
+    totalUSD: num(ordersRes.rows[0]?.total_usd),
+    todayOrderCount: num(ordersRes.rows[0]?.today_count),
+    todayUSD: num(ordersRes.rows[0]?.today_usd),
+    pendingCount: num(ordersRes.rows[0]?.pending_count),
     customerCount: num(customersRes.rows[0]?.count),
   };
 }

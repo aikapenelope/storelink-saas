@@ -75,6 +75,53 @@ export const ADMIN_ROUTE_LIMITS = {
 
 export type AdminRouteKey = keyof typeof ADMIN_ROUTE_LIMITS;
 
+/**
+ * Rate-limit por tenant para protección contra abuso distribuido.
+ * Complementa el rate-limit por IP+tenant al agregar un contador compartido
+ * específico por tenant_id. Útil para prevenir ataques coordinados desde múltiples IPs.
+ */
+const TENANT_RATE_LIMITS = {
+  'checkout': 50, // 50 pedidos/min por tenant (protección contra ataques)
+  'import-csv': 5, // 5 importaciones/min por tenant
+  'sync-sheets': 10, // 10 sincronizaciones/min por tenant
+} as const;
+
+export type TenantRateLimitKey = keyof typeof TENANT_RATE_LIMITS;
+
+const tenantLimiters = new Map<string, Ratelimit | null>();
+
+function getTenantLimiter(tenantId: number | string, route: TenantRateLimitKey): Ratelimit | null {
+  const key = `${tenantId}:${route}`;
+  if (tenantLimiters.has(key)) return tenantLimiters.get(key) ?? null;
+  
+  const redis = getSharedRedis();
+  const rl = redis
+    ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(TENANT_RATE_LIMITS[route], '60 s'),
+      prefix: `storelink:tenant:${route}`,
+    })
+    : null;
+  tenantLimiters.set(key, rl);
+  return rl;
+}
+
+export async function checkTenantRateLimit(
+  tenantId: number | string,
+  route: TenantRateLimitKey
+): Promise<RateLimitVerdict> {
+  const rl = getTenantLimiter(tenantId, route);
+  if (!rl) return { allowed: true };
+
+  try {
+    const result = await rl.limit(String(tenantId));
+    return { allowed: result.success, remaining: result.remaining };
+  } catch (err) {
+    console.warn('Tenant rate-limit no disponible (fail-open):', err);
+    return { allowed: true };
+  }
+}
+
 let sharedRedis: Redis | null | undefined;
 
 function getSharedRedis(): Redis | null {
