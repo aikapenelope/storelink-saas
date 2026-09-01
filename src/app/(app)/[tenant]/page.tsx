@@ -4,6 +4,7 @@ import { getPayload } from 'payload';
 import config from '@payload-config';
 import { unstable_cache } from 'next/cache';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
+import { getCachedProducts } from '@/lib/storefront-cache';
 import type { Tenant } from '@/payload-types';
 import {
   StorefrontClient,
@@ -149,27 +150,13 @@ export default async function TenantStorefrontPage({
       deliveryConfig: doc.deliveryConfig || undefined,
     };
 
-    // Fetch products for this tenant
-    // Tope de catálogo: 500 (antes 100, que truncaba tiendas grandes en
-    // silencio). El mapeo a ProductItem liviano ocurre aquí server-side y la
-    // página es ISR, así que el costo extra queda fuera del request del
-    // cliente. Pendiente (backlog): paginación real con hasNextPage.
-    // depth: 1 — pobla category (nivel 1, necesario para su name en el
-    // storefront). imageUrls es hasMany text, no relación; no requiere depth.
-    // images (upload legacy, hidden en admin) no se usa en el mapeo: ignorado.
-    const productsResult = await payload.find({
-      collection: 'products',
-      where: {
-        tenant: {
-          equals: doc.id,
-        },
-      },
-      limit: 500,
-      depth: 1,
-    });
+    // Fetch products for this tenant con caché distribuido Redis
+    // Complementa el ISR de Next.js (300s) con caché adicional para reducir
+    // carga BD en picos de tráfico. Fallback a memoria y BD si Redis no responde.
+    const { products: productsDocs } = await getCachedProducts(payload, doc.id);
 
-    if (productsResult.docs.length > 0) {
-      products = productsResult.docs.map((prod) => {
+    if (productsDocs.length > 0) {
+      products = productsDocs.map((prod) => {
         return {
           id: String(prod.id),
           sku: prod.sku || `SKU-${prod.id}`,
