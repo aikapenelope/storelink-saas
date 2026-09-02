@@ -36,6 +36,7 @@ const catalogImportRows: TaskConfig = {
     { name: 'created', type: 'number' },
     { name: 'updated', type: 'number' },
     { name: 'errorCount', type: 'number' },
+    { name: 'rejectedImageUrls', type: 'number' },
   ],
   handler: async ({ input, req }) => {
     const { payload } = req;
@@ -89,6 +90,10 @@ const catalogImportRows: TaskConfig = {
       if (cat.slug) categoryCache.set(cat.slug, cat.id);
     }
 
+    // Total de URLs de imagen descartadas en TODO el import (reporte al final).
+    let totalRejectedImageUrls = 0;
+    const rejectedImageSamples: string[] = [];
+
     for (let i = 1; i < rawLines.length; i++) {
       const cols = parseCSVLine(rawLines[i]);
       const title = sanitizeCsvCell(cols[titleIdx]);
@@ -100,14 +105,30 @@ const catalogImportRows: TaskConfig = {
       // Auditoría final 2026-09-01 (CRÍTICO): descartar URLs con host fuera de
       // la whitelist (src/lib/image-hosts.ts). Un host no listado hacía que
       // next/image lanzara en render y tumbara el storefront entero del tenant.
-      const imageUrls =
+      //
+      // Fix (PR imágenes por URL): el descarte YA NO es silencioso — se cuenta
+      // y se reporta en el output del job (rejectedImageUrls) para que el
+      // comerciante sepa que una foto no entró en vez de descubrirlo mirando
+      // la tienda. La normalización de Drive (image-hosts) corre ANTES del
+      // filtro, así que los formatos docs.google.com/uc?id=, /open?id=,
+      // /thumbnail?id= y /file/d/ sí se rescatan y solo se descartan hosts
+      // genuinamente no permitidos.
+      const allImageCandidates =
         imgIdx !== -1 && cols[imgIdx]
           ? cols[imgIdx]
               .split(/[,;\n\r]+/)
               .map((u) => normalizeProductImageUrl(sanitizeCsvCell(u).trim()))
-              .filter((u) => Boolean(u) && isAllowedImageUrl(u))
-              .slice(0, 6)
           : [];
+      const imageUrls = allImageCandidates
+        .filter((u) => {
+          const ok = Boolean(u) && isAllowedImageUrl(u);
+          if (!ok && u) {
+            totalRejectedImageUrls++;
+            if (rejectedImageSamples.length < 3) rejectedImageSamples.push(u);
+          }
+          return ok;
+        })
+        .slice(0, 6);
 
       if (!title) continue;
 
@@ -186,6 +207,16 @@ const catalogImportRows: TaskConfig = {
       }
     }
 
+    // Reporte de imágenes descartadas: el fallo silencioso es el peor tipo de
+    // fallo para el comerciante (ve "una sola foto" sin saber por qué). Los
+    // samples van al log del job para diagnóstico inmediato.
+    if (totalRejectedImageUrls > 0) {
+      console.warn(
+        `[storelink][catalog-import] ${totalRejectedImageUrls} URL(s) de imagen descartadas por host no permitido. ` +
+          `Hosts permitidos: ver src/lib/image-hosts.ts. Ejemplos: ${rejectedImageSamples.join(' | ')}`
+      );
+    }
+
     try {
       revalidatePath(`/${tenantSlug}`);
     } catch {
@@ -197,7 +228,14 @@ const catalogImportRows: TaskConfig = {
     // ISR, o los cambios no se ven hasta 3 min después.
     await invalidateProductsCache(tenantId);
 
-    return { output: { created: createdCount, updated: updatedCount, errorCount } };
+    return {
+      output: {
+        created: createdCount,
+        updated: updatedCount,
+        errorCount,
+        rejectedImageUrls: totalRejectedImageUrls,
+      },
+    };
   },
 };
 

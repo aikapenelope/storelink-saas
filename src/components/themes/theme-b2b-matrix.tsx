@@ -171,6 +171,12 @@ export function ThemeB2BMatrix({
                         sizes="64px"
                         className="object-cover"
                       />
+                      {product.images && product.images.length > 1 && (
+                        <div className="absolute top-1 right-1 z-10 bg-slate-900/90 text-white text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5 shadow-xs">
+                          <span>📷</span>
+                          <span>{product.images.length}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1">
@@ -302,6 +308,11 @@ export function ThemeB2BMatrix({
                                 sizes="40px"
                                 className="object-cover"
                               />
+                              {product.images && product.images.length > 1 && (
+                                <div className="absolute bottom-0 right-0 bg-slate-900/90 text-white text-[7px] font-bold px-1 rounded-tl flex items-center">
+                                  📷{product.images.length}
+                                </div>
+                              )}
                             </div>
                             <div>
                               <p className="font-bold text-slate-900 group-hover:text-blue-600 transition">

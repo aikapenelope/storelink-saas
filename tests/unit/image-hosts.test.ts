@@ -125,6 +125,38 @@ describe('normalizeProductImageUrl', () => {
     expect(isAllowedImageUrl(normalized)).toBe(true);
   });
 
+  it('convierte docs.google.com/uc?export=view&id= (formato común al copiar de Sheets/Docs)', () => {
+    const docsUrl = 'https://docs.google.com/uc?export=view&id=1XyZabc123-_-456';
+    const normalized = normalizeProductImageUrl(docsUrl);
+    expect(normalized).toBe('https://lh3.googleusercontent.com/d/1XyZabc123-_-456');
+    expect(isAllowedImageUrl(normalized)).toBe(true);
+  });
+
+  it('convierte drive.google.com/uc?id= (export clásico) a stream directo', () => {
+    const driveUrl = 'https://drive.google.com/uc?id=1AbCdEfGhIjKlMnOp';
+    const normalized = normalizeProductImageUrl(driveUrl);
+    expect(normalized).toBe('https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOp');
+    expect(isAllowedImageUrl(normalized)).toBe(true);
+  });
+
+  it('convierte miniaturas thumbnail?id= de Drive y Docs a stream directo', () => {
+    const driveThumb = 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w400';
+    expect(normalizeProductImageUrl(driveThumb)).toBe(
+      'https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOp'
+    );
+
+    const docsThumb = 'https://docs.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w400';
+    expect(normalizeProductImageUrl(docsThumb)).toBe(
+      'https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOp'
+    );
+  });
+
+  it('no normaliza ids con caracteres inválidos (los deja para que la validación los rechace)', () => {
+    const weird = 'https://docs.google.com/uc?id=../etc/passwd';
+    expect(normalizeProductImageUrl(weird)).toBe(weird);
+    expect(isAllowedImageUrl(weird)).toBe(false);
+  });
+
   it('preserva intactas URLs directas de otros hosts (Unsplash, R2, Cloudinary)', () => {
     const unsplash = 'https://images.unsplash.com/photo-12345?w=600';
     expect(normalizeProductImageUrl(unsplash)).toBe(unsplash);

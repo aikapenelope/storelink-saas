@@ -70,6 +70,14 @@ export function isAllowedImageUrl(url: string): boolean {
  * y no un archivo de imagen directo), lo transforma automáticamente a la URL CDN
  * de transmisión directa de Google (lh3.googleusercontent.com/d/<id>),
  * la cual está en la whitelist y devuelve directamente los bytes de la imagen.
+ *
+ * Cubre los formatos más comunes de enlaces copiados de Drive/Docs:
+ *  - drive.google.com/file/d/<id>/view?...
+ *  - drive.google.com/open?id=<id>
+ *  - drive.google.com/uc?id=<id>        (export directo, formato clásico)
+ *  - drive.google.com/thumbnail?id=<id> (miniaturas)
+ *  - docs.google.com/uc?export=view&id=<id>  (muy común al copiar desde Sheets/Docs)
+ *  - docs.google.com/thumbnail?id=<id>
  */
 export function normalizeProductImageUrl(url: string): string {
   const trimmed = url.trim();
@@ -77,13 +85,17 @@ export function normalizeProductImageUrl(url: string): string {
 
   try {
     const parsed = new URL(trimmed);
-    if (parsed.hostname === 'drive.google.com') {
+    const isGoogleFileHost =
+      parsed.hostname === 'drive.google.com' || parsed.hostname === 'docs.google.com';
+    if (isGoogleFileHost) {
       const fileMatch = parsed.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
       if (fileMatch?.[1]) {
         return `https://lh3.googleusercontent.com/d/${fileMatch[1]}`;
       }
       const idParam = parsed.searchParams.get('id');
-      if (idParam) {
+      // El id de Drive es alfanumérico con - y _; validamos para no construir
+      // URLs con caracteres raros desde inputs arbitrarios.
+      if (idParam && /^[a-zA-Z0-9_-]+$/.test(idParam)) {
         return `https://lh3.googleusercontent.com/d/${idParam}`;
       }
     }
