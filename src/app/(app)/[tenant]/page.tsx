@@ -177,7 +177,7 @@ export default async function TenantStorefrontPage({
                 sku: v.sku || undefined,
                 price: Number(v.price) || 0,
                 stockQuantity: v.stockQuantity ? Number(v.stockQuantity) : undefined,
-                stockStatus: v.stockStatus || undefined,
+                stockStatus: (v.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
               }))
             : [],
           modifiers: Array.isArray(prod.modifiers)
@@ -208,8 +208,9 @@ export default async function TenantStorefrontPage({
               }
             }
 
-            if (urls.length === 0 && typeof prod.imageUrl === 'string' && prod.imageUrl.trim().length > 0) {
-              urls.push(normalizeProductImageUrl(prod.imageUrl.trim()));
+            const legacyImageUrl = (prod as { imageUrl?: unknown }).imageUrl;
+            if (urls.length === 0 && typeof legacyImageUrl === 'string' && legacyImageUrl.trim().length > 0) {
+              urls.push(normalizeProductImageUrl(legacyImageUrl.trim()));
             }
 
             if (urls.length === 0 && Array.isArray(prod.images)) {
