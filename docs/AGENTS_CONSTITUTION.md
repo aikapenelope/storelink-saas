@@ -39,8 +39,8 @@ Protocolo no negociable de trabajo sobre este repositorio. Aplica a TODO cambio 
 ### Payload CMS 3.x
 - **Sincronización de tipos obligatoria:** cada cambio en `src/collections/*.ts` debe reflejarse en `src/payload-types.ts` con `pnpm generate:types` (no editar el archivo generado a mano).
 - **Aislamiento multi-tenant:** toda consulta a colecciones de tenant debe ir filtrada por el tenant del usuario (`where: { tenant: { equals } }`), salvo `super-admin`. El array `tenants` de users y la creación de tenants son solo de `super-admin` (ya blindado en `payload.config.ts` con `tenantsArrayField.arrayFieldAccess`).
-- **Datos sensibles:** los datos de pago de comercios (`paymentMethodsConfig`) solo se leen con sesión activa; nunca exponerlos por API pública ni en Server Components del storefront.
-- **Inventario:** usar el operador atómico oficial `$inc` para descuentos de stock (no read-modify-write); evitar sobreventa.
+- **Datos sensibles y pagos:** las credenciales administrativas maestras (API keys de Resend, claves/tokens de Trello) son write-only y jamás se exponen en el storefront ni en REST público. Los datos de cobro comercial para transferencia manual (números de cuenta bancaria para Pago Móvil, correos Zelle) se exponen únicamente para los métodos habilitados en el drawer de checkout para que el comprador realice el pago.
+- **Inventario atómico:** usar deducción transaccional directa con lock de fila y condición de no-negatividad (`WHERE stock_quantity >= qty RETURNING`) para variantes y productos base, o el operador atómico oficial `$inc` en campos top-level (no read-modify-write), previniendo sobreventa bajo concurrencia extrema.
 - `payload.config.ts` tiene `push: false`: los cambios de esquema se aplican SOLO vía migraciones explícitas, nunca con auto-push.
 
 ### Supabase (Postgres) & Vercel Serverless
