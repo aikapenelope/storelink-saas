@@ -166,7 +166,7 @@ const applyBaseProductStockDelta = async ({
  * El tag se recalcula con los MISMOS umbrales de upsertCustomerCrm
  * (orders >= 3 || spent >= 50 → vip; si no frecuente; 0 → inactivo).
  */
-const CRM_RECONCILIATION_ENABLED = false;
+const CRM_RECONCILIATION_ENABLED = true;
 
 const applyCustomerCrmDelta = async ({
   payload,
@@ -408,7 +408,8 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
     tenantId != null &&
     customerPhone &&
     Number.isFinite(totalAmount) &&
-    totalAmount > 0
+    totalAmount > 0 &&
+    (doc as unknown as { crmCounted?: boolean }).crmCounted === true
   ) {
     try {
       await applyCustomerCrmDelta({
@@ -679,6 +680,16 @@ export const Orders: CollectionConfig = {
           ],
         },
       ],
+    },
+    {
+      name: 'crmCounted',
+      type: 'checkbox',
+      defaultValue: false,
+      label: 'CRM Contado',
+      admin: {
+        description: 'Indica si este pedido ya fue contado en el CRM del cliente (totalOrders/totalSpent). Los pedidos creados fuera del checkout quedan en false.',
+        readOnly: true,
+      },
     },
     {
       name: 'trelloCardUrl',

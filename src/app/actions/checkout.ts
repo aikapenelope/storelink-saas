@@ -671,7 +671,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           totalAmount: total,
           currency: currency || 'USD',
           exchangeRateVES: vesRate ?? undefined,
-        },
+          crmCounted: true,
+        } as never,
       });
 
       // ------------------------------------------------------------------

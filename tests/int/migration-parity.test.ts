@@ -55,7 +55,20 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
     // arranque de producción (src/payload.config.ts). Si una migración falta
     // o falla, esta línea lanza — la señal que el incidente del 28-ago no
     // tuvo en CI.
-    payload = await getPayload({ config: buildMigrationParityConfig(migrationsConnectionString) });
+    //
+    // FIX (auditoría 2026-09-01): `prodMigrations` solo corre con
+    // NODE_ENV === 'production' (packages/db-postgres/dist/connect.js L116).
+    // En vitest NODE_ENV es 'test' y con push:false NO se genera esquema
+    // alguno — la BD de paridad quedaba vacía y el test validaba NADA.
+    // Se fuerza temporalmente NODE_ENV=production para que el adapter
+    // ejecute las migraciones de verdad, y se restaura a 'test' después.
+    const savedNodeEnv = process.env.NODE_ENV as string;
+    (process.env as Record<string, string>).NODE_ENV = 'production';
+    try {
+      payload = await getPayload({ config: buildMigrationParityConfig(migrationsConnectionString) });
+    } finally {
+      (process.env as Record<string, string>).NODE_ENV = savedNodeEnv ?? 'test';
+    }
   }, 120000);
 
   afterAll(async () => {
@@ -142,6 +155,12 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
     expect(found.deliveryConfig?.zones?.[0]?.name).toBe('Chacao');
 
     await payload.delete({ collection: 'tenants', id: tenant.id, overrideAccess: true });
+  });
+
+  it('lee customers sin error de columna faltante (drift de CRM 20260901_2)', async () => {
+    const customersRes = await payload.find({ collection: 'customers', overrideAccess: true });
+    expect(customersRes).toBeDefined();
+    expect(Array.isArray(customersRes.docs)).toBe(true);
   });
 
   it('expone las columnas del incidente P0 28-ago-2026 (delivery_config_fixed_price/estimated_time)', async () => {
