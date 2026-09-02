@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image, { type ImageProps } from 'next/image';
 import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
+import { isAllowedImageUrl } from '@/lib/image-hosts';
 
 export interface SafeProductImageProps extends Omit<ImageProps, 'src'> {
   src?: string | null;
@@ -13,6 +14,14 @@ export interface SafeProductImageProps extends Omit<ImageProps, 'src'> {
  * Componente de imagen resiliente para productos.
  * Si la URL provista devuelve error (404, DNS, timeout o link caído),
  * conmuta automáticamente a la imagen de fallback sin romper la UI.
+ *
+ * Defensa en profundidad (auditoría final 2026-09-01, CRÍTICO): next/image
+ * LANZA en render si el host no está en images.remotePatterns — ese throw NO
+ * lo captura onError y tumbaba el árbol React entero (500 en SSR). Aunque la
+ * whitelist ya se valida al guardar (Products.ts) y al importar (catalog-
+ * import.ts), un producto histórico o un bug podrían traer un host no listado:
+ * en ese caso se renderiza con <img> nativo (que sí tiene onError real) en
+ * lugar de next/image, degradando a "imagen rota → fallback" en vez de crash.
  */
 export function SafeProductImage({
   src,
@@ -31,20 +40,38 @@ export function SafeProductImage({
     setHasError(false);
   }, [src, fallbackSrc]);
 
+  const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    if (!hasError && currentSrc !== fallbackSrc) {
+      setHasError(true);
+      setCurrentSrc(fallbackSrc);
+    }
+    if (onError) {
+      onError(e as never);
+    }
+  };
+
+  // Host fuera de la whitelist → <img> nativo: el throw de render de
+  // next/image es imposible de atrapar; con <img> el fallback funciona.
+  if (!isAllowedImageUrl(currentSrc)) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={currentSrc}
+        alt={alt || 'Producto'}
+        onError={handleError}
+        className={props.className}
+        style={props.style as React.CSSProperties | undefined}
+        loading="lazy"
+      />
+    );
+  }
+
   return (
     <Image
       {...props}
       src={currentSrc}
       alt={alt || 'Producto'}
-      onError={(e) => {
-        if (!hasError && currentSrc !== fallbackSrc) {
-          setHasError(true);
-          setCurrentSrc(fallbackSrc);
-        }
-        if (onError) {
-          onError(e);
-        }
-      }}
+      onError={handleError}
     />
   );
 }

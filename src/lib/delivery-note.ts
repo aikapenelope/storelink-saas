@@ -71,11 +71,14 @@ export async function getDeliveryNoteUrl(
   orderNumber: string,
   expiresInSeconds = DELIVERY_NOTE_TTL_SECONDS
 ): Promise<string | null> {
-  if (process.env.R2_PUBLIC_URL) {
-    const baseUrl = process.env.R2_PUBLIC_URL.replace(/\/$/, '');
-    return `${baseUrl}/${keyFor(orderNumber)}`;
-  }
-
+  // Auditoría final 2026-09-01 (CRÍTICO): las Notas de Entrega SIEMPRE se
+  // sirven con URL firmada, nunca por la URL pública del bucket. La key es
+  // enumerable (delivery-notes/YYMMDD-NNNNNN.pdf) y el PDF contiene PII
+  // completa del cliente (nombre, teléfono, dirección, pago): si el bucket
+  // tiene acceso público (R2_PUBLIC_URL, que usa el plugin de media para las
+  // imágenes de producto), las notas quedaban expuestas a enumeración
+  // cross-tenant. Media sigue usando la URL pública (imágenes públicas por
+  // diseño); delivery-notes NO.
   try {
     // AWS SDK v3 separa la clase base Client por copia de @aws-sdk/types
     // (campos privados), así que TS no ve asignable S3Client a Client aunque
