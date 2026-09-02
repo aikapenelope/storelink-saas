@@ -16,6 +16,8 @@ import * as migration_20260830_tenants_from_email_unique from './20260830_tenant
 import * as migration_20260901_trello_list_id_unique from './20260901_trello_list_id_unique';
 import * as migration_20260901_2_customers_crm_expansion from './20260901_2_customers_crm_expansion';
 
+import * as migration_20260902_repair_customers_crm_schema from './20260902_repair_customers_crm_schema';
+
 export const migrations = [
   {
     up: migration_20260819_add_theme_emailconfig_variants_modifiers.up,
@@ -103,5 +105,10 @@ export const migrations = [
     up: migration_20260901_2_customers_crm_expansion.up,
     down: migration_20260901_2_customers_crm_expansion.down,
     name: '20260901_2_customers_crm_expansion',
+  },
+  {
+    up: migration_20260902_repair_customers_crm_schema.up,
+    down: migration_20260902_repair_customers_crm_schema.down,
+    name: '20260902_repair_customers_crm_schema',
   },
 ];
