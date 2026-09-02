@@ -6,6 +6,7 @@ import type {
   Where,
 } from 'payload';
 import { APIError } from 'payload';
+import { revalidatePath } from 'next/cache';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
@@ -319,12 +320,37 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   }
 
   // Auditoría final 2026-09-01 (P1): si llegamos aquí hubo descuento o
-  // reposición de stock — invalidar el caché Redis/memoria del storefront
-  // para que el stock visible no quede obsoleto hasta 3 min tras la venta.
-  // Antes solo se llamaba revalidatePath (ISR), pero el HTML regenerado
-  // leía el caché Redis viejo vía getCachedProducts.
+  // reposición de stock — refrescar TODAS las capas de caché del storefront:
+  //   1. invalidateProductsCache (Redis/memoria): el HTML regenerado leía el
+  //      caché viejo vía getCachedProducts.
+  //   2. revalidatePath del tenant (review Devin #64): checkout ya revalida,
+  //      pero cancelaciones/reactivaciones hechas desde el admin o desde
+  //      /api/orders/[id]/status NO — el HTML ISR quedaba viejo hasta 5 min.
   if (tenantId != null && Number.isFinite(Number(tenantId))) {
-    invalidateProductsCache(Number(tenantId));
+    await invalidateProductsCache(Number(tenantId));
+
+    if (isCancelled || isReactivated) {
+      try {
+        const tenantDoc = await payload
+          .findByID({
+            collection: 'tenants',
+            id: Number(tenantId),
+            depth: 0,
+            overrideAccess: true,
+            req,
+          })
+          .catch(() => null);
+        const tenantSlug =
+          tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc
+            ? (tenantDoc as { slug?: string }).slug
+            : undefined;
+        if (tenantSlug) {
+          revalidatePath(`/${tenantSlug}`);
+        }
+      } catch {
+        // Non-blocking: el TTL de ISR (300s) acota la obsolescencia si falla.
+      }
+    }
   }
 
   return doc;

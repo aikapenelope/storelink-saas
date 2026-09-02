@@ -195,7 +195,7 @@ const catalogImportRows: TaskConfig = {
     // Auditoría final 2026-09-01 (P1): el import cambió precios/stock/imágenes
     // en bloque — invalidar el caché Redis/memoria del storefront además del
     // ISR, o los cambios no se ven hasta 3 min después.
-    invalidateProductsCache(tenantId);
+    await invalidateProductsCache(tenantId);
 
     return { output: { created: createdCount, updated: updatedCount, errorCount } };
   },

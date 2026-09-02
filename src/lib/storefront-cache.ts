@@ -83,14 +83,21 @@ export async function getCachedProducts(
   return { products, source: 'database' };
 }
 
-export function invalidateProductsCache(tenantId: number): void {
+export async function invalidateProductsCache(tenantId: number): Promise<void> {
   const cacheKey = `storefront:products:${tenantId}`;
   inMemoryCache.delete(cacheKey);
-  
+
   const redis = getRedis();
   if (redis) {
-    redis.del(cacheKey).catch(() => {
-      // Non-blocking
-    });
+    // Fix review Devin (#64): AWAIT del borr distribuido. Antes era fire-
+    // and-forget: un revalidatePath inmediato podía regenerar el HTML leyendo
+    // el valor VIEJO de Redis antes de que el DEL aterrizara. El fallo de Redis
+    // se tolera (el TTL de 180s es el límite de consistencia), pero la
+    // invalidación exitosa debe completarse antes de devolver el control.
+    try {
+      await redis.del(cacheKey);
+    } catch {
+      // Non-blocking: si Redis no responde, el TTL acota la obsolescencia.
+    }
   }
 }

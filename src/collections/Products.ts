@@ -1,19 +1,30 @@
 import { revalidatePath } from 'next/cache';
-import type { CollectionAfterChangeHook, CollectionConfig, TextField } from 'payload';
+import type {
+  CollectionAfterChangeHook,
+  CollectionAfterDeleteHook,
+  CollectionConfig,
+  PayloadRequest,
+  TextField,
+} from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image-hosts';
 import { invalidateProductsCache } from '@/lib/storefront-cache';
 
 /**
- * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
- * cuando se crea o edita un producto manualmente en Payload Admin.
- * Si context.skipRevalidate es true (usado en imports masivos o scripts de mantenimiento),
- * se omite para evitar N revalidaciones individuales redundantes.
+ * Helper compartido (review Devin #64): resuelve el tenant del producto y
+ * refresca TODAS las capas de caché del storefront — ISR (revalidatePath) y
+ * caché distribuido Redis/memoria (invalidateProductsCache, awaitable). Lo
+ * usan afterChange (create/update) y afterDelete: un producto BORRADO también
+ * debe desaparecer del catálogo al instante, no al expirar el TTL.
  */
-const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req }) => {
-  if (req.context?.skipRevalidate) return doc;
-
+const refreshProductStorefrontCache = async ({
+  doc,
+  req,
+}: {
+  doc: Record<string, unknown>;
+  req: PayloadRequest;
+}): Promise<void> => {
   let tenantSlug: string | undefined;
 
   if (
@@ -47,16 +58,38 @@ const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req
     }
   }
 
-  // Auditoría final 2026-09-01 (P1): invalidar también el caché Redis/memoria
-  // del storefront — revalidatePath regenera el HTML, pero éste lee de
-  // getCachedProducts y podía servir datos viejos hasta 3 min (TTL Redis).
   const tenantIdForCache =
     doc.tenant && typeof doc.tenant === 'object'
       ? (doc.tenant as { id?: number | string }).id
       : (doc.tenant as number | string | undefined);
   if (tenantIdForCache != null && Number.isFinite(Number(tenantIdForCache))) {
-    invalidateProductsCache(Number(tenantIdForCache));
+    await invalidateProductsCache(Number(tenantIdForCache));
   }
+};
+
+/**
+ * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
+ * cuando se crea o edita un producto manualmente en Payload Admin.
+ * Si context.skipRevalidate es true (usado en imports masivos o scripts de mantenimiento),
+ * se omite para evitar N revalidaciones individuales redundantes.
+ */
+const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req }) => {
+  if (req.context?.skipRevalidate) return doc;
+
+  await refreshProductStorefrontCache({ doc, req });
+
+  return doc;
+};
+
+/**
+ * Review Devin #64: los productos ELIMINADOS no pasaban por ninguna
+ * invalidación — seguían visibles en el storefront hasta expirar el TTL de
+ * Redis (180s) y el ISR (300s).
+ */
+const revalidateProductOnDelete: CollectionAfterDeleteHook = async ({ doc, req }) => {
+  if (req.context?.skipRevalidate) return doc;
+
+  await refreshProductStorefrontCache({ doc, req });
 
   return doc;
 };
@@ -67,6 +100,7 @@ export const Products: CollectionConfig = {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
     afterChange: [revalidateProductStorefront],
+    afterDelete: [revalidateProductOnDelete],
   },
   admin: {
     useAsTitle: 'title',
