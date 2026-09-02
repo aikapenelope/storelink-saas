@@ -2,6 +2,7 @@ import { Redis } from '@upstash/redis';
 import { revalidatePath } from 'next/cache';
 import type { Payload } from 'payload';
 import type { Product } from '@/payload-types';
+import { normalizeProductImageUrl } from '@/lib/image-hosts';
 
 /**
  * Caché distribuido Redis para productos del storefront.
@@ -69,7 +70,14 @@ export async function getCachedProducts(
     depth: 1,
   });
 
-  const products = productsResult.docs as Product[];
+  const rawProducts = productsResult.docs as Product[];
+  const products: Product[] = rawProducts.map((p) => ({
+    ...p,
+    imageUrls: Array.isArray(p.imageUrls)
+      ? p.imageUrls.map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u) : u))
+      : p.imageUrls,
+    imageUrl: typeof p.imageUrl === 'string' ? normalizeProductImageUrl(p.imageUrl) : p.imageUrl,
+  }));
 
   // 4. Guardar en caché memoria
   inMemoryCache.set(cacheKey, { data: products, timestamp: now });

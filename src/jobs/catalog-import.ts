@@ -1,7 +1,7 @@
 import type { TaskConfig } from 'payload';
 import { revalidatePath } from 'next/cache';
 import { sanitizeCsvCell, parseCSVLine } from '@/lib/csv';
-import { isAllowedImageUrl } from '@/lib/image-hosts';
+import { isAllowedImageUrl, normalizeProductImageUrl } from '@/lib/image-hosts';
 import { invalidateProductsCache } from '@/lib/storefront-cache';
 import type { Category, Product } from '@/payload-types';
 
@@ -104,7 +104,7 @@ const catalogImportRows: TaskConfig = {
         imgIdx !== -1 && cols[imgIdx]
           ? cols[imgIdx]
               .split(/[,;\n\r]+/)
-              .map((u) => sanitizeCsvCell(u).trim())
+              .map((u) => normalizeProductImageUrl(sanitizeCsvCell(u).trim()))
               .filter((u) => Boolean(u) && isAllowedImageUrl(u))
               .slice(0, 6)
           : [];

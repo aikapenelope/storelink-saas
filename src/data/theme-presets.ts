@@ -156,7 +156,11 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
         category: { id: 'c1', name: 'Hogar' },
         stockStatus: 'in_stock',
         featured: true,
-        images: [{ url: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1534349762230-e0cadf78f5da?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'b2',
@@ -167,7 +171,10 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
         category: { id: 'c2', name: 'Tecnología' },
         stockStatus: 'in_stock',
         featured: true,
-        images: [{ url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'b3',
@@ -222,7 +229,11 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
             ],
           },
         ],
-        images: [{ url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'f2',
@@ -237,7 +248,10 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
           { name: 'Mediana (6 porciones)', sku: 'PIZ-001-M', price: 12.5, stockStatus: 'in_stock' },
           { name: 'Familiar (8 porciones)', sku: 'PIZ-001-L', price: 16.0, stockStatus: 'in_stock' },
         ],
-        images: [{ url: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'f3',
@@ -282,7 +296,11 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
           { name: 'Talla M - Negro Mate', sku: 'AUR-01-M', price: 28.0, stockStatus: 'in_stock' },
           { name: 'Talla L - Negro Mate', sku: 'AUR-01-L', price: 28.0, stockStatus: 'in_stock' },
         ],
-        images: [{ url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'fa2',
@@ -297,7 +315,10 @@ export const VERTICAL_PRESETS: Record<string, VerticalPreset> = {
           { name: 'Talla S - Blanco Crudo', sku: 'AUR-V02-S', price: 65.0, stockStatus: 'in_stock' },
           { name: 'Talla M - Blanco Crudo', sku: 'AUR-V02-M', price: 65.0, stockStatus: 'in_stock' },
         ],
-        images: [{ url: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=600&q=80' }],
+        images: [
+          { url: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=600&q=80' },
+          { url: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=600&q=80' },
+        ],
       },
       {
         id: 'fa3',

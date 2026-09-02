@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 import { getTenantBySlug } from '@/lib/tenants';
 import { DEFAULT_PRODUCT_IMAGE_URL, RESERVED_TENANT_SLUGS } from '@/lib/constants';
+import { normalizeProductImageUrl } from '@/lib/image-hosts';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -191,12 +192,44 @@ export default async function TenantStorefrontPage({
               }))
             : [],
           // Fase 1 (expand): imageUrls es el campo principal.
-          // El fallback a images (upload legacy) se mantiene mientras haya
-          // productos sin backfill — se eliminará en la migración contract (Fase 2).
-          images:
-            Array.isArray(prod.imageUrls) && prod.imageUrls.length > 0
-              ? prod.imageUrls.map((url) => ({ url }))
-              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }],
+          // Cadena de resolución resiliente:
+          // 1. prod.imageUrls (text hasMany, campo principal multi-foto)
+          // 2. prod.imageUrl (string histórico previo a la migración)
+          // 3. prod.images (relación upload legacy a Media)
+          // 4. DEFAULT_PRODUCT_IMAGE_URL (fallback de seguridad si no hay fotos)
+          images: (() => {
+            const urls: string[] = [];
+
+            if (Array.isArray(prod.imageUrls)) {
+              for (const u of prod.imageUrls) {
+                if (typeof u === 'string' && u.trim().length > 0) {
+                  urls.push(normalizeProductImageUrl(u.trim()));
+                }
+              }
+            }
+
+            if (urls.length === 0 && typeof prod.imageUrl === 'string' && prod.imageUrl.trim().length > 0) {
+              urls.push(normalizeProductImageUrl(prod.imageUrl.trim()));
+            }
+
+            if (urls.length === 0 && Array.isArray(prod.images)) {
+              for (const img of prod.images) {
+                if (
+                  typeof img.image === 'object' &&
+                  img.image &&
+                  'url' in img.image &&
+                  typeof img.image.url === 'string' &&
+                  img.image.url.trim().length > 0
+                ) {
+                  urls.push(normalizeProductImageUrl(img.image.url.trim()));
+                }
+              }
+            }
+
+            return urls.length > 0
+              ? urls.map((url) => ({ url }))
+              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }];
+          })(),
         };
       });
 

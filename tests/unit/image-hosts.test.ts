@@ -3,6 +3,7 @@ import {
   ALLOWED_IMAGE_HOST_SUFFIXES,
   isAllowedImageHostname,
   isAllowedImageUrl,
+  normalizeProductImageUrl,
 } from '@/lib/image-hosts';
 
 describe('image-hosts whitelist', () => {
@@ -16,10 +17,19 @@ describe('image-hosts whitelist', () => {
     expect(isAllowedImageHostname('mi-app.vercel.app')).toBe(true);
   });
 
-  it('rechaza hosts ajenos (caso real: Google Drive, Imgur)', () => {
+  it('rechaza hosts ajenos no listados (caso real: Google Drive visor HTML, sitios no CDN)', () => {
     expect(isAllowedImageHostname('drive.google.com')).toBe(false);
-    expect(isAllowedImageHostname('i.imgur.com')).toBe(false);
+    expect(isAllowedImageHostname('dropbox.com')).toBe(false);
     expect(isAllowedImageHostname('evil.com')).toBe(false);
+  });
+
+  it('acepta nuevos CDNs permitidos (R2 público, martes.app, Google CDN, Cloudinary, Imgur, Shopify)', () => {
+    expect(isAllowedImageHostname('pub-12345.r2.dev')).toBe(true);
+    expect(isAllowedImageHostname('flow.martes.app')).toBe(true);
+    expect(isAllowedImageHostname('lh3.googleusercontent.com')).toBe(true);
+    expect(isAllowedImageHostname('res.cloudinary.com')).toBe(true);
+    expect(isAllowedImageHostname('i.imgur.com')).toBe(true);
+    expect(isAllowedImageHostname('cdn.shopify.com')).toBe(true);
   });
 
   it('rechaza hosts que terminan en el sufijo sin ser subdominio (notsupabase.co)', () => {
@@ -91,11 +101,40 @@ describe('image-hosts whitelist', () => {
     const rejectedSamples = [
       'http://xyz.supabase.co/a.png', // http: next lo rechazaría (protocol https)
       'https://supabase.co.evil.com/a.png', // sufijo como subdominio de atacante
-      'https://drive.google.com/uc?id=123',
+      'https://evil.com/uc?id=123',
       'https://evil-images.unsplash.com.evil.com/a.png',
     ];
     for (const url of rejectedSamples) {
       expect(isAllowedImageUrl(url), `whitelist debe rechazar ${url}`).toBe(false);
     }
+  });
+});
+
+describe('normalizeProductImageUrl', () => {
+  it('convierte enlaces de compartir de Google Drive (/file/d/) a stream directo en googleusercontent', () => {
+    const driveUrl = 'https://drive.google.com/file/d/1B2C3D4E5F6G7H8I9J/view?usp=sharing';
+    const normalized = normalizeProductImageUrl(driveUrl);
+    expect(normalized).toBe('https://lh3.googleusercontent.com/d/1B2C3D4E5F6G7H8I9J');
+    expect(isAllowedImageUrl(normalized)).toBe(true);
+  });
+
+  it('convierte enlaces open?id= de Google Drive a stream directo', () => {
+    const driveUrl = 'https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp';
+    const normalized = normalizeProductImageUrl(driveUrl);
+    expect(normalized).toBe('https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOp');
+    expect(isAllowedImageUrl(normalized)).toBe(true);
+  });
+
+  it('preserva intactas URLs directas de otros hosts (Unsplash, R2, Cloudinary)', () => {
+    const unsplash = 'https://images.unsplash.com/photo-12345?w=600';
+    expect(normalizeProductImageUrl(unsplash)).toBe(unsplash);
+
+    const r2 = 'https://pub-abc123.r2.dev/foto.webp';
+    expect(normalizeProductImageUrl(r2)).toBe(r2);
+  });
+
+  it('maneja strings vacíos sin romper', () => {
+    expect(normalizeProductImageUrl('')).toBe('');
+    expect(normalizeProductImageUrl('   ')).toBe('');
   });
 });

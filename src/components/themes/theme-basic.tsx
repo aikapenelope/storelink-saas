@@ -195,6 +195,12 @@ export function ThemeBasicBanner({
                       <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-mono px-2 py-0.5 rounded font-bold">
                         {product.sku}
                       </div>
+                      {product.images && product.images.length > 1 && (
+                        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                          <span>📷</span>
+                          <span>{product.images.length}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Content */}

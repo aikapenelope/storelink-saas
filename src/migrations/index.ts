@@ -17,6 +17,7 @@ import * as migration_20260901_trello_list_id_unique from './20260901_trello_lis
 import * as migration_20260901_2_customers_crm_expansion from './20260901_2_customers_crm_expansion';
 
 import * as migration_20260902_repair_customers_crm_schema from './20260902_repair_customers_crm_schema';
+import * as migration_20260902_backfill_normalize_drive_image_urls from './20260902_backfill_normalize_drive_image_urls';
 
 export const migrations = [
   {
@@ -110,5 +111,10 @@ export const migrations = [
     up: migration_20260902_repair_customers_crm_schema.up,
     down: migration_20260902_repair_customers_crm_schema.down,
     name: '20260902_repair_customers_crm_schema',
+  },
+  {
+    up: migration_20260902_backfill_normalize_drive_image_urls.up,
+    down: migration_20260902_backfill_normalize_drive_image_urls.down,
+    name: '20260902_backfill_normalize_drive_image_urls',
   },
 ];

@@ -223,6 +223,13 @@ export function ThemeFoodDelivery({
                         </span>
                       </div>
 
+                      {product.images && product.images.length > 1 && (
+                        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-xs text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                          <span>📷</span>
+                          <span>{product.images.length}</span>
+                        </div>
+                      )}
+
                       {isOutOfStock && (
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
                           <span className="bg-rose-600 text-white text-xs font-black uppercase px-4 py-1.5 rounded-full shadow-lg">

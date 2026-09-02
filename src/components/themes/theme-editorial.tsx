@@ -156,6 +156,12 @@ export function ThemeEditorial({
                         Exclusivo
                       </span>
                     )}
+                    {product.images && product.images.length > 1 && (
+                      <span className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-[#2d2825]/80 backdrop-blur-md text-white text-[8px] sm:text-[9px] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full font-medium flex items-center gap-1 shadow-xs">
+                        <span>📷</span>
+                        <span>{product.images.length}</span>
+                      </span>
+                    )}
                     {isOutOfStock && (
                       <div className="absolute inset-0 bg-[#2d2825]/50 backdrop-blur-[2px] flex items-center justify-center">
                         <span className="text-[10px] sm:text-xs uppercase tracking-widest bg-white text-[#2d2825] px-3 py-1 rounded-full font-bold shadow-md">
