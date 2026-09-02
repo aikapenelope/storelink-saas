@@ -168,7 +168,7 @@ const applyBaseProductStockDelta = async ({
  */
 const CRM_RECONCILIATION_ENABLED = true;
 
-const applyCustomerCrmDelta = async ({
+export const applyCustomerCrmDelta = async ({
   payload,
   tenantId,
   phone,

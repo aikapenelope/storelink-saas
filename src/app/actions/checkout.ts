@@ -12,6 +12,7 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
+import { applyCustomerCrmDelta } from '@/collections/Orders';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 
@@ -716,6 +717,25 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             context: { skipInventoryHook: true },
             data: { crmCounted: true } as never,
           });
+
+          // Race check (review Devin #67): la orden pudo haber sido cancelada
+          // entre su creación y este punto. Si ya está cancelada, aplicar el
+          // decremento AHORA (el hook no lo hará porque crmCounted era false
+          // cuando la cancelación ocurrió).
+          const currentOrder = await payload.findByID({
+            collection: 'orders',
+            id: orderDoc.id as number,
+            overrideAccess: true,
+          });
+          if ((currentOrder as { status?: string }).status === 'cancelled') {
+            await applyCustomerCrmDelta({
+              payload,
+              tenantId,
+              phone: safePhone,
+              totalAmount: total,
+              sign: -1,
+            });
+          }
         } catch (flagErr) {
           // Opposite partial failure: CRM increment committeó pero la flag no
           // se pudo actualizar. El incremento es real; si la orden se cancela
