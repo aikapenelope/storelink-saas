@@ -10,6 +10,7 @@
     "lint": "next lint",
     "generate:types": "cross-env PAYLOAD_SECRET=generate-types-only DATABASE_URI='' payload generate:types",
     "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
+    "migrate:direct": "node scripts/migrate-direct.mjs",
     "migrate:create": "payload migrate:create",
     "vercel-build": "pnpm build",
     "test": "vitest run",
