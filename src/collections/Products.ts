@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import type { CollectionAfterChangeHook, CollectionConfig, TextField } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
+import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image-hosts';
 
 /**
  * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
@@ -110,11 +111,24 @@ export const Products: CollectionConfig = {
         if (invalid.length > 0) {
           return `URL(s) inválidas: ${invalid.join(', ')}`;
         }
+        // Auditoría final 2026-09-01 (CRÍTICO): solo hosts de la whitelist
+        // (src/lib/image-hosts.ts). Un host no listado hace que next/image
+        // lance en render y tumbe la tienda entera (500 en SSR).
+        const disallowed = urls.filter((u) => {
+          try {
+            return !isAllowedImageHostname(new URL(u).hostname);
+          } catch {
+            return true;
+          }
+        });
+        if (disallowed.length > 0) {
+          return `Host de imagen no permitido: ${disallowed.join(', ')}. Hosts permitidos: ${ALLOWED_IMAGE_HOST_SUFFIXES.join(', ')} (o sus subdominios).`;
+        }
         return true;
       },
       admin: {
         description:
-          'Pega una o varias URLs de imagen (Google Drive, Unsplash, tu propio CDN...). Puedes separar varias URLs por coma o añadirlas fila por fila. La primera es la foto principal.',
+          'Pega una o varias URLs de imagen de hosts permitidos (Unsplash, Supabase, Cloudflare R2, Vercel). Puedes separar varias URLs por coma o añadirlas fila por fila. La primera es la foto principal. NOTA: enlaces de Google Drive NO funcionan como imagen directa.',
         components: {
           Cell: '@/components/admin/ProductImageCell#ProductImageCell',
         },

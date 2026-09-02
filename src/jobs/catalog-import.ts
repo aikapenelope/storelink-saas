@@ -1,6 +1,7 @@
 import type { TaskConfig } from 'payload';
 import { revalidatePath } from 'next/cache';
 import { sanitizeCsvCell, parseCSVLine } from '@/lib/csv';
+import { isAllowedImageUrl } from '@/lib/image-hosts';
 import type { Category, Product } from '@/payload-types';
 
 /**
@@ -95,12 +96,15 @@ const catalogImportRows: TaskConfig = {
       const description = descIdx !== -1 ? sanitizeCsvCell(cols[descIdx]) : '';
       const stockQuantity = stockIdx !== -1 ? parseInt(cols[stockIdx], 10) || 0 : undefined;
       const rawCategory = catIdx !== -1 && cols[catIdx] ? sanitizeCsvCell(cols[catIdx]) : '';
+      // Auditoría final 2026-09-01 (CRÍTICO): descartar URLs con host fuera de
+      // la whitelist (src/lib/image-hosts.ts). Un host no listado hacía que
+      // next/image lanzara en render y tumbara el storefront entero del tenant.
       const imageUrls =
         imgIdx !== -1 && cols[imgIdx]
           ? cols[imgIdx]
               .split(/[,;\n\r]+/)
               .map((u) => sanitizeCsvCell(u).trim())
-              .filter(Boolean)
+              .filter((u) => Boolean(u) && isAllowedImageUrl(u))
               .slice(0, 6)
           : [];
 

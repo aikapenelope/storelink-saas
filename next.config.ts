@@ -1,4 +1,6 @@
+import type { NextConfig } from 'next';
 import { withPayload } from '@payloadcms/next/withPayload';
+import { ALLOWED_IMAGE_HOST_SUFFIXES } from './src/lib/image-hosts';
 
 /**
  * Security headers fase 1 (plan docs/PLAN_ROBUSTECIMIENTO_v2.md, R7/C6):
@@ -32,8 +34,22 @@ const securityHeaders = [
   },
 ];
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+/**
+ * Auditoría final 2026-09-01 (CRÍTICO): remotePatterns se DERIVA de la
+ * whitelist única src/lib/image-hosts.ts. Antes la lista vivía solo aquí
+ * mientras Products.ts aceptaba cualquier host http(s): una URL con host no
+ * listado hacía que next/image lanzara en render y tumbaba el storefront
+ * completo del tenant (500). Ahora la misma fuente alimenta la validación de
+ * admin, el import de Sheets y esta config.
+ *
+ * Por cada sufijo se emiten DOS patterns — exacto Y `*.sufijo` — para cubrir
+ * exactamente el matcher de src/lib/image-hosts.ts (host === sufijo OR
+ * endsWith('.'+sufijo)). La semántica de picomatch (que Next usa para el
+ * hostname) hace que `*` cruce puntos, así que `*.sufijo` cubre subdominios
+ * a cualquier nivel. tests/unit/image-hosts.test.ts verifica esta
+ * equivalencia con `hasRemoteMatch` de Next para cada URL aceptada.
+ */
+const nextConfig: NextConfig = {
   poweredByHeader: false,
   headers: async () => [
     {
@@ -42,24 +58,10 @@ const nextConfig = {
     },
   ],
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.supabase.co',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.r2.cloudflarestorage.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.vercel.app',
-      },
-    ],
+    remotePatterns: ALLOWED_IMAGE_HOST_SUFFIXES.flatMap((hostname) => [
+      { protocol: 'https' as const, hostname },
+      { protocol: 'https' as const, hostname: `*.${hostname}` },
+    ]),
   },
   experimental: {
     reactCompiler: false,
