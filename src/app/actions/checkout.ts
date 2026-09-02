@@ -3,7 +3,7 @@
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { uploadDeliveryNotePdf, getDeliveryNoteUrl } from '@/lib/delivery-note';
-import { getPayload, type Payload, APIError } from 'payload';
+import { getPayload, type Payload } from 'payload';
 import config from '@payload-config';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
@@ -774,10 +774,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       }
     } catch (orderErr) {
       console.error('Order creation error:', orderErr);
-      if (
-        orderErr instanceof APIError ||
-        (orderErr instanceof Error && orderErr.message.includes('Stock insuficiente'))
-      ) {
+      // Propagar únicamente mensajes controlados de inventario ("Stock insuficiente para [Producto]")
+      // No exponer raw APIError ni detalles internos de backend a usuarios no autenticados (review Devin #69)
+      if (orderErr instanceof Error && orderErr.message.includes('Stock insuficiente')) {
         return {
           success: false,
           error: orderErr.message,
