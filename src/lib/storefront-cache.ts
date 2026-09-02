@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis';
+import { revalidatePath } from 'next/cache';
 import type { Payload } from 'payload';
 import type { Product } from '@/payload-types';
 
@@ -89,10 +90,10 @@ export async function invalidateProductsCache(tenantId: number): Promise<void> {
 
   const redis = getRedis();
   if (redis) {
-    // Fix review Devin (#64): AWAIT del borr distribuido. Antes era fire-
-    // and-forget: un revalidatePath inmediato podía regenerar el HTML leyendo
-    // el valor VIEJO de Redis antes de que el DEL aterrizara. El fallo de Redis
-    // se tolera (el TTL de 180s es el límite de consistencia), pero la
+    // Fix review Devin/Graphify (#64): AWAIT del borr distribuido. Antes era
+    // fire-and-forget: un revalidatePath inmediato podía regenerar el HTML
+    // leyendo el valor VIEJO de Redis antes de que el DEL aterrizara. El fallo
+    // de Redis se tolera (el TTL de 180s es el límite de consistencia), pero la
     // invalidación exitosa debe completarse antes de devolver el control.
     try {
       await redis.del(cacheKey);
@@ -100,4 +101,59 @@ export async function invalidateProductsCache(tenantId: number): Promise<void> {
       // Non-blocking: si Redis no responde, el TTL acota la obsolescencia.
     }
   }
+}
+
+const POST_COMMIT_INVALIDATION_TIMEOUT_MS = 3000;
+const POST_COMMIT_POLL_MS = 25;
+
+/**
+ * Pass de invalidación POST-commit (hallazgo Devin/Graphify #64): los hooks
+ * afterChange/afterDelete de Payload corren DENTRO de la transacción (el
+ * commit ocurre después de que los hooks resuelven). Si invalidamos solo ahí,
+ * un render concurrente en la ventana [invalidate → commit] puede releer el
+ * estado pre-commit de la BD y repoblar Redis/ISR con un producto borrado (o
+ * stock viejo) durante todo el TTL.
+ *
+ * Esta función NO bloquea el hook: espera de forma no bloqueante a que la
+ * transacción termine (commitTransaction/rollback borran req.transactionID —
+ * utilities/commitTransaction.js) y entonces re-invalida + revalida el ISR.
+ * Cierra la ventana de forma determinista. Tope de 3s para no dejar timers
+ * huérfanos en serverless; si vence, invalida igual (idempotente).
+ *
+ * El caller SIEMPRE mantiene la invalidación inmediata (cubre el caso sin
+ * transacción y el de esta pasada perdida si el runtime muere con el response).
+ */
+export function schedulePostCommitInvalidation(
+  req: { transactionID?: unknown } | undefined,
+  tenantId: number,
+  tenantSlug?: string
+): void {
+  const perform = async (): Promise<void> => {
+    await invalidateProductsCache(tenantId);
+    if (tenantSlug) {
+      try {
+        revalidatePath(`/${tenantSlug}`);
+      } catch {
+        // Non-blocking
+      }
+    }
+  };
+
+  // Sin transacción activa: el write ya es durable (autocommit) → invalidar ya.
+  if (!req || !req.transactionID) {
+    void perform();
+    return;
+  }
+
+  const deadline = Date.now() + POST_COMMIT_INVALIDATION_TIMEOUT_MS;
+  const attempt = async (): Promise<void> => {
+    if (req.transactionID && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, POST_COMMIT_POLL_MS));
+      return attempt();
+    }
+    await perform();
+  };
+  void attempt().catch(() => {
+    // Best-effort: el TTL de Redis/ISR acota la obsolescencia residual.
+  });
 }

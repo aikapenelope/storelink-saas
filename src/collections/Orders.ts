@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
-import { invalidateProductsCache } from '@/lib/storefront-cache';
+import { invalidateProductsCache, schedulePostCommitInvalidation } from '@/lib/storefront-cache';
 import type { Product } from '@/payload-types';
 
 /**
@@ -319,37 +319,50 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
     }
   }
 
-  // Auditoría final 2026-09-01 (P1): si llegamos aquí hubo descuento o
-  // reposición de stock — refrescar TODAS las capas de caché del storefront:
+  // Auditoría final 2026-09-01 (P1) + review Graphify #64: refrescar TODAS las
+  // capas de caché del storefront tras cambios de stock:
   //   1. invalidateProductsCache (Redis/memoria): el HTML regenerado leía el
   //      caché viejo vía getCachedProducts.
-  //   2. revalidatePath del tenant (review Devin #64): checkout ya revalida,
-  //      pero cancelaciones/reactivaciones hechas desde el admin o desde
+  //   2. Pass POST-commit (no bloqueante): este hook corre DENTRO de la
+  //      transacción; el pass cierra la ventana [invalidate → commit].
+  //   3. revalidatePath del tenant (solo cancel/reactivación): el checkout ya
+  //      revalida, pero las transiciones hechas desde el admin o desde
   //      /api/orders/[id]/status NO — el HTML ISR quedaba viejo hasta 5 min.
+  // Todo es BEST-EFFORT: un fallo de caché/ISR nunca debe abortar el pedido ni
+  // el inventario (review Graphify: un throw aquí abriría la tx del checkout
+  // como fallida).
   if (tenantId != null && Number.isFinite(Number(tenantId))) {
-    await invalidateProductsCache(Number(tenantId));
+    try {
+      await invalidateProductsCache(Number(tenantId));
+      schedulePostCommitInvalidation(req, Number(tenantId));
 
-    if (isCancelled || isReactivated) {
-      try {
-        const tenantDoc = await payload
-          .findByID({
-            collection: 'tenants',
-            id: Number(tenantId),
-            depth: 0,
-            overrideAccess: true,
-            req,
-          })
-          .catch(() => null);
-        const tenantSlug =
-          tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc
-            ? (tenantDoc as { slug?: string }).slug
-            : undefined;
-        if (tenantSlug) {
-          revalidatePath(`/${tenantSlug}`);
+      if (isCancelled || isReactivated) {
+        try {
+          const tenantDoc = await payload
+            .findByID({
+              collection: 'tenants',
+              id: Number(tenantId),
+              depth: 0,
+              overrideAccess: true,
+              req,
+            })
+            .catch(() => null);
+          const tenantSlug =
+            tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc
+              ? (tenantDoc as { slug?: string }).slug
+              : undefined;
+          if (tenantSlug) {
+            revalidatePath(`/${tenantSlug}`);
+          }
+        } catch {
+          // Non-blocking: el TTL de ISR (300s) acota la obsolescencia si falla.
         }
-      } catch {
-        // Non-blocking: el TTL de ISR (300s) acota la obsolescencia si falla.
       }
+    } catch (cacheErr) {
+      console.error(
+        `[storelink][orders][${doc.id}] invalidación de caché del storefront falló (non-blocking):`,
+        cacheErr
+      );
     }
   }
 

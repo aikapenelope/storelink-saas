@@ -79,12 +79,24 @@ export type AdminRouteKey = keyof typeof ADMIN_ROUTE_LIMITS;
  * Rate-limit por tenant para protección contra abuso distribuido.
  * Complementa el rate-limit por IP+tenant al agregar un contador compartido
  * específico por tenant_id. Útil para prevenir ataques coordinados desde múltiples IPs.
+ *
+ * Review Graphify #64: el límite de CHECKOUT por tenant se lee de env con
+ * default 50/min. 50 pedidos/min es una cota anti-abuso razonable, pero una
+ * tienda en pico legítimo (promo, lanzamiento) puede superarla y bloquearía a
+ * TODOS sus clientes durante ese minuto (failure mode tenant-wide). El dueño
+ * puede subirlo con RATE_LIMIT_TENANT_CHECKOUT_PER_MIN (ej. 200) sin deploy.
  */
 const TENANT_RATE_LIMITS = {
-  'checkout': 50, // 50 pedidos/min por tenant (protección contra ataques)
+  'checkout': tenantCheckoutRateMax(), // 50/min default, env-configurable
   'import-csv': 5, // 5 importaciones/min por tenant
   'sync-sheets': 10, // 10 sincronizaciones/min por tenant
 } as const;
+
+function tenantCheckoutRateMax(): number {
+  const raw = process.env.RATE_LIMIT_TENANT_CHECKOUT_PER_MIN;
+  const configured = Number(raw);
+  return Number.isFinite(configured) && configured > 0 ? configured : 50;
+}
 
 export type TenantRateLimitKey = keyof typeof TENANT_RATE_LIMITS;
 

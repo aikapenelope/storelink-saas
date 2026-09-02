@@ -299,23 +299,27 @@ const orderCreatedWorkflow: WorkflowConfig<'order-created'> = {
   inputSchema: [{ name: 'orderId', type: 'number', required: true }],
   handler: async ({ job, tasks }) => {
     const orderId = job.input.orderId as number;
-    // Auditoría final 2026-09-01 (P1): Trello PRIMERO y email NO bloqueante.
-    // Antes corría email → Trello en secuencia: un fallo persistente de Resend
-    // (cuota agotada, clave BYOK inválida, dominio sin verificar) mataba el
-    // workflow tras 3 reintentos y la tarjeta de Trello NUNCA se creaba — el
-    // pedido quedaba registrado pero invisible en el tablero del comercio.
-    // Trello es el canal operativo de despacho; el email al cliente es
-    // secundario. Si el email falla, se registra y se reintenta en la próxima
-    // pasada del runner externo sin impedir el despacho.
+    // Auditoría final 2026-09-01 (P1) + review Graphify #64: Trello PRIMERO y
+    // email NO bloquante. Antes corría email → Trello en secuencia: un fallo
+    // persistente de Resend (cuota agotada, clave BYOK inválida, dominio sin
+    // verificar) mataba el workflow y la tarjeta de Trello NUNCA se creaba.
+    // Ahora Trello (canal operativo de despacho) siempre se completa. La tarea
+    // sendOrderConfirmationEmail ya tiene sus propios 3 reintentos con backoff
+    // (TaskConfig.retries); agotados, NO marcamos el workflow como fallido: si
+    // re-lanzamos aquí, el job entero queda hasError y el runner re-ejecuta el
+    // workflow (re-corría Trello, aunque idempotente por sentinel) para un
+    // canal que es secundario (el cliente recibe confirmación por WhatsApp en
+    // la respuesta del checkout). Se registra y el workflow termina OK.
     await tasks.trelloDispatchOrder('dispatch-trello', { input: { orderId } });
     try {
       await tasks.sendOrderConfirmationEmail('send-email', { input: { orderId } });
     } catch (emailTaskErr) {
       console.error(
-        `[storelink][order-created] email del pedido ${orderId} falló; el despacho a Trello ya se completó. El runner externo lo reintentará:`,
+        `[storelink][order-created] email del pedido ${orderId} no enviado tras 3 reintentos (best-effort); el despacho a Trello ya se completó:`,
         emailTaskErr
       );
-      throw emailTaskErr; // marca el job como fallido SOLO para reintentar el email
+      // NO re-lanzar: el workflow se considera completado (Trello OK). El flag
+      // emailConfirmationSent queda false para un reenvío manual si se desea.
     }
   },
 };
