@@ -1,8 +1,91 @@
 import { revalidatePath } from 'next/cache';
-import type { CollectionAfterChangeHook, CollectionConfig, TextField } from 'payload';
+import type {
+  CollectionAfterChangeHook,
+  CollectionAfterDeleteHook,
+  CollectionConfig,
+  PayloadRequest,
+  TextField,
+} from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image-hosts';
+import { invalidateProductsCache, schedulePostCommitInvalidation } from '@/lib/storefront-cache';
+
+/**
+ * Helper compartido (review Devin #64): resuelve el tenant del producto y
+ * refresca TODAS las capas de caché del storefront — ISR (revalidatePath) y
+ * caché distribuido Redis/memoria (invalidateProductsCache, awaitable). Lo
+ * usan afterChange (create/update) y afterDelete: un producto BORRADO también
+ * debe desaparecer del catálogo al instante, no al expirar el TTL.
+ *
+ * Orden deliberado (review Graphify #64): primero se vacía el caché distribuido
+ * (await) y DESPUÉS se revalida el ISR — si revalidatePath corriera antes, la
+ * regeneración leería el valor viejo de Redis y repoblaría el HTML con datos
+ * obsoletos. Además se agenda un pass POST-commit (no bloqueante) que cierra la
+ * ventana [invalidate → commit] de las operaciones transaccionales de Payload.
+ * Todo es best-effort: un fallo de caché/ISR nunca debe romper el CRUD.
+ */
+const refreshProductStorefrontCache = async ({
+  doc,
+  req,
+}: {
+  doc: Record<string, unknown>;
+  req: PayloadRequest;
+}): Promise<void> => {
+  try {
+    let tenantSlug: string | undefined;
+
+    if (
+      doc.tenant &&
+      typeof doc.tenant === 'object' &&
+      'slug' in doc.tenant &&
+      typeof (doc.tenant as { slug?: string }).slug === 'string'
+    ) {
+      tenantSlug = (doc.tenant as { slug: string }).slug;
+    } else if (doc.tenant) {
+      const tenantId = typeof doc.tenant === 'object' ? (doc.tenant as { id: number | string }).id : doc.tenant;
+      const tenantDoc = await req.payload
+        .findByID({
+          collection: 'tenants',
+          id: Number(tenantId),
+          depth: 0,
+          overrideAccess: true,
+        })
+        .catch(() => null);
+
+      if (tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc) {
+        tenantSlug = (tenantDoc as { slug?: string }).slug;
+      }
+    }
+
+    const tenantIdForCache =
+      doc.tenant && typeof doc.tenant === 'object'
+        ? (doc.tenant as { id?: number | string }).id
+        : (doc.tenant as number | string | undefined);
+
+    if (tenantIdForCache == null || !Number.isFinite(Number(tenantIdForCache))) return;
+
+    // 1. Vaciar caché distribuido PRIMERO (await) — ver orden arriba.
+    await invalidateProductsCache(Number(tenantIdForCache));
+
+    // 2. Pass post-commit: cierra la carrera de los hooks transaccionales.
+    schedulePostCommitInvalidation(req, Number(tenantIdForCache), tenantSlug);
+
+    // 3. Revalidar el ISR del tenant (solo después de haber vaciado Redis).
+    if (tenantSlug) {
+      try {
+        revalidatePath(`/${tenantSlug}`);
+      } catch {
+        // Non-blocking en entornos fuera de peticiones HTTP de Next.js
+      }
+    }
+  } catch (err) {
+    // Best-effort garantizado (review Graphify #64): si inválida/ISR falla
+    // inesperadamente, el TTL de Redis/ISR acota la obsolescencia y el CRUD del
+    // producto no debe abortar.
+    console.error('[storelink][products] refresh de caché del storefront falló (non-blocking):', err);
+  }
+};
 
 /**
  * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
@@ -13,38 +96,20 @@ import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image
 const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req }) => {
   if (req.context?.skipRevalidate) return doc;
 
-  let tenantSlug: string | undefined;
+  await refreshProductStorefrontCache({ doc, req });
 
-  if (
-    doc.tenant &&
-    typeof doc.tenant === 'object' &&
-    'slug' in doc.tenant &&
-    typeof (doc.tenant as { slug?: string }).slug === 'string'
-  ) {
-    tenantSlug = (doc.tenant as { slug: string }).slug;
-  } else if (doc.tenant) {
-    const tenantId = typeof doc.tenant === 'object' ? (doc.tenant as { id: number | string }).id : doc.tenant;
-    const tenantDoc = await req.payload
-      .findByID({
-        collection: 'tenants',
-        id: Number(tenantId),
-        depth: 0,
-        overrideAccess: true,
-      })
-      .catch(() => null);
+  return doc;
+};
 
-    if (tenantDoc && typeof tenantDoc === 'object' && 'slug' in tenantDoc) {
-      tenantSlug = (tenantDoc as { slug?: string }).slug;
-    }
-  }
+/**
+ * Review Devin #64: los productos ELIMINADOS no pasaban por ninguna
+ * invalidación — seguían visibles en el storefront hasta expirar el TTL de
+ * Redis (180s) y el ISR (300s).
+ */
+const revalidateProductOnDelete: CollectionAfterDeleteHook = async ({ doc, req }) => {
+  if (req.context?.skipRevalidate) return doc;
 
-  if (tenantSlug) {
-    try {
-      revalidatePath(`/${tenantSlug}`);
-    } catch {
-      // Non-blocking en entornos fuera de peticiones HTTP de Next.js
-    }
-  }
+  await refreshProductStorefrontCache({ doc, req });
 
   return doc;
 };
@@ -55,6 +120,7 @@ export const Products: CollectionConfig = {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
     afterChange: [revalidateProductStorefront],
+    afterDelete: [revalidateProductOnDelete],
   },
   admin: {
     useAsTitle: 'title',
