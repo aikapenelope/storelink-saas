@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 import { getTenantBySlug } from '@/lib/tenants';
 import { DEFAULT_PRODUCT_IMAGE_URL, RESERVED_TENANT_SLUGS } from '@/lib/constants';
+import { normalizeProductImageUrl } from '@/lib/image-hosts';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -202,13 +203,13 @@ export default async function TenantStorefrontPage({
             if (Array.isArray(prod.imageUrls)) {
               for (const u of prod.imageUrls) {
                 if (typeof u === 'string' && u.trim().length > 0) {
-                  urls.push(u.trim());
+                  urls.push(normalizeProductImageUrl(u.trim()));
                 }
               }
             }
 
             if (urls.length === 0 && typeof prod.imageUrl === 'string' && prod.imageUrl.trim().length > 0) {
-              urls.push(prod.imageUrl.trim());
+              urls.push(normalizeProductImageUrl(prod.imageUrl.trim()));
             }
 
             if (urls.length === 0 && Array.isArray(prod.images)) {
@@ -220,7 +221,7 @@ export default async function TenantStorefrontPage({
                   typeof img.image.url === 'string' &&
                   img.image.url.trim().length > 0
                 ) {
-                  urls.push(img.image.url.trim());
+                  urls.push(normalizeProductImageUrl(img.image.url.trim()));
                 }
               }
             }
