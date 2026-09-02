@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import type { Payload } from 'payload';
 import type { Product } from '@/payload-types';
 import { normalizeProductImageUrl } from '@/lib/image-hosts';
@@ -164,7 +165,22 @@ export function schedulePostCommitInvalidation(
     }
     await perform();
   };
-  void attempt().catch(() => {
-    // Best-effort: el TTL de Redis/ISR acota la obsolescencia residual.
-  });
+
+  const runAttempt = () => {
+    attempt().catch(() => {
+      // Best-effort: el TTL de Redis/ISR acota la obsolescencia residual.
+    });
+  };
+
+  try {
+    // Next.js 15: after() garantiza que la función Serverless en Vercel permanezca viva
+    // hasta completar la invalidación post-commit en background sin congelar la CPU.
+    after(async () => {
+      await attempt().catch(() => {});
+    });
+  } catch {
+    // Si se invoca fuera del contexto de una petición web (ej: CLI, tests unitarios),
+    // se ejecuta la promesa flotante estándar como fallback resiliente.
+    void runAttempt();
+  }
 }
