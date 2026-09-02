@@ -348,8 +348,11 @@ async function upsertCustomerCrm({
   orderDoc: { id: number | string };
   verifiedItems: CheckoutItemData[];
 }): Promise<void> {
-  try {
-    const cleanPhone = safePhone.trim();
+  // Contrato (review Graphify #65): los errores DEBEN llegar al boundary de
+  // checkout (donde están orderDoc.id y orderNumber) para el log estructurado.
+  // Este wrapper NO traga errores — el caller decide si es best-effort.
+  // Preserva best-effort checkout: el pedido se registra aunque el CRM falle.
+  const cleanPhone = safePhone.trim();
 
     const findCustomerByTenantPhone = () =>
       payload.find({
@@ -475,9 +478,6 @@ async function upsertCustomerCrm({
         await applyOrderToCustomerSql(winner);
       }
     }
-  } catch (crmErr) {
-    console.warn('CRM upsert warning:', crmErr);
-  }
 }
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
@@ -677,17 +677,39 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       // ------------------------------------------------------------------
       // 8. Upsert Customer in CRM Collection (Atomic Postgres SQL)
       // ------------------------------------------------------------------
-      await upsertCustomerCrm({
-        payload,
-        tenantId,
-        customer,
-        safePhone,
-        safeEmail,
-        total,
-        now,
-        orderDoc: { id: orderDoc.id as number },
-        verifiedItems,
-      });
+      // Auditoría final 2026-09-01 (P2): el CRM es BEST-EFFORT y NO comparte
+      // transacción con el pedido (cada op Local API es su propia tx). Antes,
+      // si el upsert fallaba DESPUÉS de crear la orden, el catch devolvía
+      // "No se pudo registrar tu pedido" con la orden YA registrada y el
+      // stock YA descontado → el cliente reintentaba → pedido duplicado +
+      // doble descuento de stock + job nunca encolado (pedido sin despacho).
+      // Ahora el fallo del CRM se registra y continúa: el pedido y su
+      // despacho a Trello/email son la parte crítica; el CRM se repara con
+      // los datos de la orden (totalSpent/totalOrders siempre derivables).
+      try {
+        await upsertCustomerCrm({
+          payload,
+          tenantId,
+          customer,
+          safePhone,
+          safeEmail,
+          total,
+          now,
+          orderDoc: { id: orderDoc.id as number },
+          verifiedItems,
+        });
+      } catch (crmErr) {
+        // Observabilidad (review Graphify #65): reportamos éxito al cliente
+        // (el pedido es real) pero NO silenciamos la pérdida de datos del CRM.
+        // Log estructurado con prefijo accionable para que un script de
+        // reconciliación pueda volver a derivar totalSpent/totalOrders desde
+        // la orden. Causa conocida: drift de schema de Customers (P0-B) o
+        // fallo transitorio.
+        console.error(
+          `[storelink][crm][checkout] CRM upsert falló para orden ${orderDoc.id} (orderNumber ${orderNumber}); pedido registrado y en despacho. Reconciliar CRM desde esta orden.`,
+          crmErr
+        );
+      }
 
       // Despacho asíncrono vía Jobs Queue oficial
       try {

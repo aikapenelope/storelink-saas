@@ -135,6 +135,80 @@ const applyBaseProductStockDelta = async ({
 };
 
 /**
+ * Reconciliación CRM cancel↔activo (auditoría 2026-09-01 + review Devin #65).
+ *
+ * ⚠️ GATEADA por CRM_RECONCILIATION_ENABLED. Hoy = false:
+ *   - Hallazgos Devin #65 §1 y §3: el upsert del checkout (upsertCustomerCrm)
+ *     y este delta dependen del schema de Customers, que en producción está en
+ *     DRIFT: la migración 20260901_2_customers_crm_expansion guardó el grupo
+ *     `preferences` como JSONB, pero Payload 3.88 aplana los grupos en
+ *     columnas (preferences_*) y crea tablas para los arrays. Cualquier op
+ *     Local API sobre customers falla ahí. Este delta ya NO escribe a
+ *     `preferences_average_order_value` (columna inexistente → tx ABORTED →
+ *     cancelación revertida en silencio): usa SOLO columnas reales
+ *     (total_orders, total_spent, tag) sobre un EJECUTOR AISLADO de la
+ *     transacción del request (adapter.drizzle, no la sesión de la tx) — así
+ *     un fallo del CRM no puede abortar el pedido ni el inventario.
+ *   - Hallazgo Devin #65 §2 (aún abierto): orders creadas fuera del checkout
+ *     nunca incrementan el CRM; restar en cancelación descontaría compras no
+ *     contadas. ANTES de poner la flag en true hay que resolverlo (track
+ *     persistido `crmCounted` en orders o centralizar el incremento del CRM
+ *     en el hook para TODOS los canales de creación), junto con la migración
+ *     de reparación del schema.
+ *
+ * Al activar (P0-B):
+ *   1. Migración de reparación de Customers (generar con `migrate:create` en
+ *      local): drop de preferences/purchase_history JSONB → columnas
+ *      aplanadas + tablas + backfill.
+ *   2. Track de órdenes contadas en orders (`crmCounted`).
+ *   3. Establecer CRM_RECONCILIATION_ENABLED = true.
+ *
+ * El tag se recalcula con los MISMOS umbrales de upsertCustomerCrm
+ * (orders >= 3 || spent >= 50 → vip; si no frecuente; 0 → inactivo).
+ */
+const CRM_RECONCILIATION_ENABLED = false;
+
+const applyCustomerCrmDelta = async ({
+  payload,
+  tenantId,
+  phone,
+  totalAmount,
+  sign,
+}: {
+  payload: Payload;
+  tenantId: number | string;
+  phone: string;
+  totalAmount: number;
+  /** +1 = pedido (re)activo; -1 = cancelación */
+  sign: 1 | -1;
+}): Promise<void> => {
+  const adapter = payload.db as unknown as PostgresAdapterLike;
+  const tableName = adapter.tableNameMap.get('customers') || 'customers';
+  const signedTotal = sign * totalAmount;
+
+  // Ejecutor AISLADO (adapter.drizzle = conexión del pool, NO la sesión de la
+  // tx del request): si este UPDATE falla, no aborta la transacción del
+  // pedido/inventario. Solo toca columnas reales del schema actual.
+  await adapter.drizzle.execute(sql`
+    update ${sql.identifier(tableName)}
+    set total_orders = greatest(coalesce(total_orders, 0) + ${sign}, 0),
+        total_spent = greatest(coalesce(total_spent, 0) + ${signedTotal}, 0),
+        tag = case
+          when coalesce(total_orders, 0) + ${sign} <= 0 then 'inactivo'
+          when coalesce(total_orders, 0) + ${sign} >= 3
+            or coalesce(total_spent, 0) + ${signedTotal} >= 50 then 'vip'
+          else 'frecuente'
+        end
+    where tenant_id = ${tenantId} and phone = ${phone}
+  `);
+  // preferences.averageOrderValue NO se recalcula aquí: en el schema real de
+  // producción vive dentro del JSONB `preferences` y escribirlo a mano por SQL
+  // crudo sobre el JSONB incurre en el riesgo de naming documentado en
+  // AGENTS.md. Se recalcula en la migración P0-B (backfill) y en upsertCustomerCrm
+  // (que corre vía Local API y pasa por la transformación oficial de Payload).
+};
+
+/**
  * Hook oficial de gestión de inventario en Payload CMS 3.x
  * Se ejecuta automáticamente ante cualquier canal de creación o actualización de pedidos:
  * - Creación de pedido / Activación: resta la cantidad solicitada del stock de los productos de forma atómica.
@@ -316,6 +390,39 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
         productId: prod.id,
         delta: qtyToRestore,
       });
+    }
+  }
+
+  // Reconciliación CRM cancel↔activo (review Devin #65 → flag CRM_RECONCILIATION_ENABLED).
+  // En CREATE no interviene (upsertCustomerCrm del checkout ya incrementa los
+  // contadores vía Local API). Solo transiciones cancel↔activo: cancelación
+  // resta (sign -1), reactivación suma (sign +1). El delta usa un EJECUTOR
+  // AISLADO de la tx (adapter.drizzle) y SOLO columnas reales → un fallo del
+  // CRM nunca aborta el pedido ni la reposición de stock. Best-effort igualmente.
+  const customerPhone =
+    doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
+  const totalAmount = Number(doc.totalAmount);
+  if (
+    CRM_RECONCILIATION_ENABLED &&
+    (isCancelled || isReactivated) &&
+    tenantId != null &&
+    customerPhone &&
+    Number.isFinite(totalAmount) &&
+    totalAmount > 0
+  ) {
+    try {
+      await applyCustomerCrmDelta({
+        payload,
+        tenantId,
+        phone: customerPhone,
+        totalAmount,
+        sign: isCancelled ? -1 : 1,
+      });
+    } catch (crmErr) {
+      console.error(
+        `[storelink][orders][${doc.id}] reconciliación CRM falló (non-blocking) para estado ${currentStatus}:`,
+        crmErr
+      );
     }
   }
 

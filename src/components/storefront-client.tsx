@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { ShoppingBag, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CartDrawer, type CartItem } from './cart-drawer';
@@ -242,6 +242,33 @@ export function StorefrontClient({
     setActiveImageIndex(0);
   }, [selectedProduct]);
 
+  // Auditoría final 2026-09-01 (P2): swipe táctil del carrusel. En mobile las
+  // flechas son difíciles de pulgar y los dots son targets de ~8px: el gesto
+  // de deslizar es la interacción esperada en una galería móvil. Umbral de
+  // 40px para no interferir con taps ni con el scroll vertical del modal.
+  const carouselTouchStartX = useRef<number | null>(null);
+  const handleCarouselTouchStart = (e: React.TouchEvent) => {
+    carouselTouchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const handleCarouselTouchEnd = (e: React.TouchEvent) => {
+    const startX = carouselTouchStartX.current;
+    carouselTouchStartX.current = null;
+    if (startX == null || productImages.length < 2) return;
+    const endX = e.changedTouches[0]?.clientX;
+    if (endX == null) return;
+    const dx = endX - startX;
+    if (Math.abs(dx) < 40) return;
+    setActiveImageIndex((prev) =>
+      dx < 0
+        ? prev < productImages.length - 1
+          ? prev + 1
+          : 0
+        : prev > 0
+          ? prev - 1
+          : productImages.length - 1
+    );
+  };
+
   // Active theme (defaults to tenant.theme, allows live preview toggle)
   const [activeTheme, setActiveTheme] = useState<string>(tenant.theme || 'basic-banner');
 
@@ -373,7 +400,11 @@ export function StorefrontClient({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Image Banner & Multi-Image Carousel */}
-            <div className="relative h-60 bg-slate-100 flex-shrink-0 select-none group">
+            <div
+              className="relative h-60 bg-slate-100 flex-shrink-0 select-none group"
+              onTouchStart={handleCarouselTouchStart}
+              onTouchEnd={handleCarouselTouchEnd}
+            >
               <SafeProductImage
                 src={productImages[activeImageIndex] || DEFAULT_PRODUCT_IMAGE_URL}
                 alt={`${selectedProduct.title} - Foto ${activeImageIndex + 1}`}
