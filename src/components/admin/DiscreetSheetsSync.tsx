@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { FileSpreadsheet, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { pollImportCompletion } from './import-status';
 
 export function DiscreetSheetsSync() {
   const [url, setUrl] = useState('');
@@ -48,10 +49,21 @@ export function DiscreetSheetsSync() {
       if (!res.ok) {
         setStatus({ type: 'error', msg: data.error || 'Error al sincronizar' });
       } else {
-        setStatus({
-          type: 'success',
-          msg: '¡Catálogo sincronizado con éxito! Actualizando vista...',
-        });
+        // Review Devin #72: polling del resultado real del job (created/
+        // updated/rejectedImageUrls) en vez de un "en cola" genérico.
+        const jobId = data?.jobId != null ? String(data.jobId) : null;
+        if (jobId) {
+          const outcome = await pollImportCompletion(tenantSlug, jobId);
+          setStatus({
+            type: outcome.summary.success ? 'success' : 'error',
+            msg: outcome.summary.message,
+          });
+        } else {
+          setStatus({
+            type: 'success',
+            msg: '¡Catálogo sincronizado con éxito! Actualizando vista...',
+          });
+        }
         setTimeout(() => {
           window.location.reload();
         }, 2500);

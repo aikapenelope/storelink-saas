@@ -4,21 +4,25 @@ import config from '@payload-config';
 import { verifyCronSecret } from '@/lib/cron-secret';
 
 /**
- * Purga de jobs fallidos (plan v2 R2 / hallazgo NV3).
+ * Purga de jobs antiguos (plan v2 R2 / hallazgo NV3 + review Devin #72).
  *
- * El `deleteJobOnComplete` oficial SOLO borra los exitosos
- * (packages/payload/src/queues/operations/runJobs/index.ts): los fallidos
- * (hasError=true) persisten indefinidamente y quedan fuera de procesamiento
- * (la query del runner los excluye con hasError not_equals true). Con 3
- * intentos por tarea, cada fallo persistente de Trello/Resend deja filas
- * huérfanas que este endpoint purga tras la retención indicada.
+ * Dos retenciones:
+ *  - FALLIDOS (hasError=true) >30d: persisten indefinidamente (deleteJobOnComplete
+ *    no los toca) y quedan fuera de procesamiento (la query del runner los excluye
+ *    con hasError not_equals true). Se purgan a los 30 días.
+ *  - COMPLETADOS (completedAt seteado) >24h: desde que deleteJobOnComplete pasó a
+ *    false (mismo PR), los exitosos persisten para que /api/[tenant]/import-status
+ *    pueda leer su output (created/updated/rejectedImageUrls). 24h es de sobra
+ *    para el polling del cliente admin; después se purgan para que la tabla no
+ *    crezca (el input incluye el CSV completo).
  *
  * Mecanismo idéntico al interno de Payload: payload.db.deleteMany sobre la
  * colección de jobs — sin hooks ni versiones innecesarias. Autenticación:
  * x-cron-secret timing-safe, el mismo secreto del runner externo.
  */
 
-const CLEANUP_RETENTION_DAYS = 30;
+const FAILED_RETENTION_DAYS = 30;
+const COMPLETED_RETENTION_HOURS = 24;
 
 /**
  * 'payload-jobs' es la colección INTERNA de la Jobs Queue: existe en runtime
@@ -40,23 +44,48 @@ export async function POST(request: Request) {
 
   try {
     const payload = await getPayload({ config });
-    const cutoff = new Date(
-      Date.now() - CLEANUP_RETENTION_DAYS * 24 * 60 * 60 * 1000
+    const failedCutoff = new Date(
+      Date.now() - FAILED_RETENTION_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const completedCutoff = new Date(
+      Date.now() - COMPLETED_RETENTION_HOURS * 60 * 60 * 1000
     ).toISOString();
 
-    const res = await (payload.db as unknown as { deleteMany: InternalJobsDeleteMany }).deleteMany({
+    const deleteMany = (payload.db as unknown as {
+      deleteMany: InternalJobsDeleteMany;
+    }).deleteMany;
+
+    // 1. Fallidos (hasError) >30d
+    const failedRes = await deleteMany({
       collection: 'payload-jobs',
       where: {
         and: [
           { hasError: { equals: true } },
-          { createdAt: { less_than: cutoff } },
-        ],
+          { createdAt: { less_than: failedCutoff } },
+        ] as Where[],
       },
     });
 
-    const deleted = (res as { deletedCount?: number } | undefined)?.deletedCount;
-    console.log('[storelink][cleanup-jobs] fallidos >30d purgados:', deleted ?? 'n/a');
-    return NextResponse.json({ ok: true, deleted: deleted ?? null });
+    // 2. Completados (completedAt seteado) >24h — review Devin #72
+    const completedRes = await deleteMany({
+      collection: 'payload-jobs',
+      where: {
+        and: [
+          { completedAt: { exists: true } },
+          { completedAt: { less_than: completedCutoff } },
+        ] as Where[],
+      },
+    });
+
+    const deletedFailed = (failedRes as { deletedCount?: number } | undefined)?.deletedCount;
+    const deletedCompleted = (completedRes as { deletedCount?: number } | undefined)?.deletedCount;
+    console.log(
+      '[storelink][cleanup-jobs] purgados — fallidos >30d:',
+      deletedFailed ?? 'n/a',
+      '| completados >24h:',
+      deletedCompleted ?? 'n/a'
+    );
+    return NextResponse.json({ ok: true, deleted: deletedFailed ?? null, deletedCompleted: deletedCompleted ?? null });
   } catch (err) {
     console.error('[storelink][cleanup-jobs] error:', err);
     return NextResponse.json({ error: 'Error interno en la limpieza' }, { status: 500 });

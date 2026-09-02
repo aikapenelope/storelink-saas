@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { pollImportCompletion } from './import-status';
 
 export function ProductsSyncPanel() {
   const [url, setUrl] = useState('');
@@ -68,10 +69,18 @@ export function ProductsSyncPanel() {
           message: data.error || 'Error al sincronizar con Google Sheets',
         });
       } else {
-        setResult({
-          success: true,
-          message: '¡Catálogo sincronizado con éxito! Actualizando vista...',
-        });
+        // Review Devin #72: polling del resultado real del job (created/
+        // updated/rejectedImageUrls) en vez de un "en cola" genérico.
+        const jobId = data?.jobId != null ? String(data.jobId) : null;
+        if (jobId) {
+          const outcome = await pollImportCompletion(tenantSlug, jobId);
+          setResult(outcome.summary);
+        } else {
+          setResult({
+            success: true,
+            message: '¡Catálogo sincronizado con éxito! Actualizando vista...',
+          });
+        }
         setTimeout(() => {
           window.location.reload();
         }, 2500);

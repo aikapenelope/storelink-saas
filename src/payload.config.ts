@@ -189,10 +189,15 @@ export default buildConfig({
   // Actions → GET /api/payload-jobs/run, con x-cron-secret) reintenta fallos;
   // access.run valida ese secreto sobre el endpoint REST oficial.
   jobs: {
-    // R2 (plan v2): explícito a propósito — el default oficial SOLO borra los
-    // exitosos; los fallidos (hasError) persisten y los purga el endpoint
-    // /api/admin/cleanup-jobs vía runner externo.
-    deleteJobOnComplete: true,
+    // deleteJobOnComplete en false (review Devin #72): los jobs exitosos
+    // PERSISTEN con completedAt seteado — el runner los excluye de forma
+    // nativa (query `completedAt exists: false`, ver
+    // packages/payload/src/queues/operations/runJobs), así que NO se
+    // re-ejecutan. Esto permite que /api/[tenant]/import-status lea el output
+    // del import (created/updated/rejectedImageUrls) y se lo muestre al
+    // comerciante. La retención la controla /api/admin/cleanup-jobs, que
+    // purga completados >24h y fallidos >30d.
+    deleteJobOnComplete: false,
     tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
     workflows: orderJobs.workflows,
     access: {

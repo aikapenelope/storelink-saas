@@ -94,8 +94,17 @@ export function normalizeProductImageUrl(url: string): string {
       }
       const idParam = parsed.searchParams.get('id');
       // El id de Drive es alfanumérico con - y _; validamos para no construir
-      // URLs con caracteres raros desde inputs arbitrarios.
-      if (idParam && /^[a-zA-Z0-9_-]+$/.test(idParam)) {
+      // URLs con caracteres raros desde inputs arbitrarios. Además (review
+      // Devin #72) SOLO confiamos en los endpoints oficiales de
+      // compartición/exportación de Drive/Docs: otras rutas con ?id= (p.ej. el
+      // gid de una hoja de cálculo o paths de embed) NO identifican un archivo
+      // de imagen y producirían enlaces rotos que caerían al fallback.
+      const isKnownExportPath =
+        (parsed.hostname === 'drive.google.com' &&
+          ['/open', '/uc', '/thumbnail'].includes(parsed.pathname)) ||
+        (parsed.hostname === 'docs.google.com' &&
+          ['/uc', '/thumbnail'].includes(parsed.pathname));
+      if (idParam && isKnownExportPath && /^[a-zA-Z0-9_-]+$/.test(idParam)) {
         return `https://lh3.googleusercontent.com/d/${idParam}`;
       }
     }

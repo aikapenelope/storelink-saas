@@ -151,6 +151,17 @@ describe('normalizeProductImageUrl', () => {
     );
   });
 
+  it('no normaliza rutas no oficiales de Drive/Docs aunque traigan ?id= (review Devin #72)', () => {
+    // El gid de una hoja NO es un id de archivo de imagen
+    const sheet = 'https://docs.google.com/spreadsheets/d/e/XYZ/pub?gid=0&id=123';
+    expect(normalizeProductImageUrl(sheet)).toBe(sheet);
+    expect(isAllowedImageUrl(sheet)).toBe(false);
+
+    const embed = 'https://drive.google.com/embed?id=1AbCdEfGhIjKlMnOp';
+    expect(normalizeProductImageUrl(embed)).toBe(embed);
+    expect(isAllowedImageUrl(embed)).toBe(false);
+  });
+
   it('no normaliza ids con caracteres inválidos (los deja para que la validación los rechace)', () => {
     const weird = 'https://docs.google.com/uc?id=../etc/passwd';
     expect(normalizeProductImageUrl(weird)).toBe(weird);
