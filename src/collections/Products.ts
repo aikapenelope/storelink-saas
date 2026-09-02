@@ -8,7 +8,7 @@ import type {
 } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
-import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image-hosts';
+import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname, normalizeProductImageUrl } from '@/lib/image-hosts';
 import { invalidateProductsCache, schedulePostCommitInvalidation } from '@/lib/storefront-cache';
 
 /**
@@ -152,7 +152,7 @@ export const Products: CollectionConfig = {
             const rawList = Array.isArray(value) ? value : [value];
             const cleaned = rawList
               .flatMap((item) => (typeof item === 'string' ? item.split(/[,;\n\r]+/) : item))
-              .map((u) => (typeof u === 'string' ? u.trim() : u))
+              .map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u.trim()) : u))
               .filter((u) => typeof u === 'string' && u.length > 0);
             return cleaned.slice(0, 6);
           },
@@ -163,7 +163,7 @@ export const Products: CollectionConfig = {
         const rawList = Array.isArray(value) ? value : [value];
         const urls = rawList
           .flatMap((item) => (typeof item === 'string' ? item.split(/[,;\n\r]+/) : item))
-          .map((u) => (typeof u === 'string' ? u.trim() : u))
+          .map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u.trim()) : u))
           .filter((u) => typeof u === 'string' && u.length > 0);
 
         const invalid = urls.filter((u) => {
@@ -194,7 +194,7 @@ export const Products: CollectionConfig = {
       },
       admin: {
         description:
-          'Pega una o varias URLs de imagen de hosts permitidos (Unsplash, Supabase, Cloudflare R2, Vercel). Puedes separar varias URLs por coma o añadirlas fila por fila. La primera es la foto principal. NOTA: enlaces de Google Drive NO funcionan como imagen directa.',
+          'Pega una o varias URLs de imagen de hosts permitidos (Unsplash, Cloudflare R2, martes.app, Google, Cloudinary, Imgur, Shopify, Supabase, Vercel). Puedes separar varias URLs por coma o añadirlas fila por fila. La primera es la foto principal.',
         components: {
           Cell: '@/components/admin/ProductImageCell#ProductImageCell',
         },

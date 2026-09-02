@@ -210,6 +210,13 @@ export function ThemeMotoParts({
                       <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-mono font-black text-amber-400 border border-neutral-800 shadow-md">
                         OEM: {product.sku}
                       </div>
+
+                      {product.images && product.images.length > 1 && (
+                        <div className="absolute top-3 right-3 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold text-amber-400 border border-neutral-800 flex items-center gap-1 shadow-md">
+                          <span>📷</span>
+                          <span>{product.images.length}</span>
+                        </div>
+                      )}
                       
                       {isOutOfStock ? (
                         <div className="absolute inset-0 bg-black/70 flex items-center justify-center">

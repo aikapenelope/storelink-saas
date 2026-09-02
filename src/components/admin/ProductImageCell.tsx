@@ -32,6 +32,12 @@ export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
     );
   }
 
+  const count =
+    (Array.isArray(cellData) && cellData.filter(Boolean).length) ||
+    (Array.isArray(rowData?.imageUrls) && rowData.imageUrls.filter(Boolean).length) ||
+    (Array.isArray(rowData?.images) && rowData.images.length) ||
+    1;
+
   return (
     <div className="w-9 h-9 bg-zinc-950 border border-zinc-700 overflow-hidden rounded-none shrink-0 relative flex items-center justify-center">
       <Image
@@ -42,6 +48,14 @@ export function ProductImageCell({ cellData, rowData }: ProductImageCellProps) {
         className="object-cover rounded-none"
         onError={() => setHasError(true)}
       />
+      {count > 1 && (
+        <div
+          className="absolute bottom-0 right-0 bg-black/85 text-emerald-400 text-[9px] font-mono font-bold px-1 rounded-tl shadow-xs select-none"
+          title={`${count} fotos disponibles`}
+        >
+          +{count - 1}
+        </div>
+      )}
     </div>
   );
 }

@@ -168,6 +168,13 @@ export function ThemeVercelCommerce({
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
 
+                    {product.images && product.images.length > 1 && (
+                      <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-md border border-neutral-800 text-white text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+                        <span>📷</span>
+                        <span>{product.images.length}</span>
+                      </div>
+                    )}
+
                     {/* Vercel Style Price Tag Badge (Bottom Left overlay) */}
                     <div className="absolute bottom-3 left-3 bg-black/90 backdrop-blur-md border border-neutral-800 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-xl">
                       <span className="text-xs sm:text-sm font-bold text-white font-mono">

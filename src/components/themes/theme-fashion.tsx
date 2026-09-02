@@ -215,6 +215,13 @@ export function ThemeFashionBoutique({
                       </span>
                     </div>
 
+                    {product.images && product.images.length > 1 && (
+                      <div className="absolute top-3 right-3 bg-[#1e1b18]/80 backdrop-blur-md text-white text-[9px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                        <span>📷</span>
+                        <span>{product.images.length}</span>
+                      </div>
+                    )}
+
                     {/* Color Swatch Dots Overlay */}
                     <div className="absolute bottom-3 left-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-full">
                       <span className="w-2.5 h-2.5 rounded-full bg-black border border-white"></span>

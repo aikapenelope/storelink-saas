@@ -31,6 +31,12 @@ export const ALLOWED_IMAGE_HOST_SUFFIXES = [
   'images.unsplash.com',
   'supabase.co',
   'r2.cloudflarestorage.com',
+  'r2.dev',
+  'martes.app',
+  'googleusercontent.com',
+  'cloudinary.com',
+  'imgur.com',
+  'shopify.com',
   'vercel.app',
 ] as const;
 
@@ -56,4 +62,34 @@ export function isAllowedImageUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Normaliza URLs de imágenes frecuentes.
+ * Si el usuario pega un enlace de compartir de Google Drive (que es un visor HTML
+ * y no un archivo de imagen directo), lo transforma automáticamente a la URL CDN
+ * de transmisión directa de Google (lh3.googleusercontent.com/d/<id>),
+ * la cual está en la whitelist y devuelve directamente los bytes de la imagen.
+ */
+export function normalizeProductImageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === 'drive.google.com') {
+      const fileMatch = parsed.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileMatch?.[1]) {
+        return `https://lh3.googleusercontent.com/d/${fileMatch[1]}`;
+      }
+      const idParam = parsed.searchParams.get('id');
+      if (idParam) {
+        return `https://lh3.googleusercontent.com/d/${idParam}`;
+      }
+    }
+  } catch {
+    // Si no es URL válida, se devuelve tal cual para que la validación estándar actúe
+  }
+
+  return trimmed;
 }

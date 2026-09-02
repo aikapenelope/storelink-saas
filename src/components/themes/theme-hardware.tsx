@@ -205,6 +205,12 @@ export function ThemeHardwareStore({
                           OFERTA
                         </div>
                       )}
+                      {product.images && product.images.length > 1 && (
+                        <div className={`absolute ${product.featured ? 'top-10' : 'top-3'} right-3 bg-slate-950/90 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm`}>
+                          <span>📷</span>
+                          <span>{product.images.length}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Content Details */}

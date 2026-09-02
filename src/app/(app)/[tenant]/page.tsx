@@ -191,12 +191,44 @@ export default async function TenantStorefrontPage({
               }))
             : [],
           // Fase 1 (expand): imageUrls es el campo principal.
-          // El fallback a images (upload legacy) se mantiene mientras haya
-          // productos sin backfill — se eliminará en la migración contract (Fase 2).
-          images:
-            Array.isArray(prod.imageUrls) && prod.imageUrls.length > 0
-              ? prod.imageUrls.map((url) => ({ url }))
-              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }],
+          // Cadena de resolución resiliente:
+          // 1. prod.imageUrls (text hasMany, campo principal multi-foto)
+          // 2. prod.imageUrl (string histórico previo a la migración)
+          // 3. prod.images (relación upload legacy a Media)
+          // 4. DEFAULT_PRODUCT_IMAGE_URL (fallback de seguridad si no hay fotos)
+          images: (() => {
+            const urls: string[] = [];
+
+            if (Array.isArray(prod.imageUrls)) {
+              for (const u of prod.imageUrls) {
+                if (typeof u === 'string' && u.trim().length > 0) {
+                  urls.push(u.trim());
+                }
+              }
+            }
+
+            if (urls.length === 0 && typeof prod.imageUrl === 'string' && prod.imageUrl.trim().length > 0) {
+              urls.push(prod.imageUrl.trim());
+            }
+
+            if (urls.length === 0 && Array.isArray(prod.images)) {
+              for (const img of prod.images) {
+                if (
+                  typeof img.image === 'object' &&
+                  img.image &&
+                  'url' in img.image &&
+                  typeof img.image.url === 'string' &&
+                  img.image.url.trim().length > 0
+                ) {
+                  urls.push(img.image.url.trim());
+                }
+              }
+            }
+
+            return urls.length > 0
+              ? urls.map((url) => ({ url }))
+              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }];
+          })(),
         };
       });
 
