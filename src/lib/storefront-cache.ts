@@ -71,13 +71,16 @@ export async function getCachedProducts(
   });
 
   const rawProducts = productsResult.docs as Product[];
-  const products: Product[] = rawProducts.map((p) => ({
-    ...p,
-    imageUrls: Array.isArray(p.imageUrls)
-      ? p.imageUrls.map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u) : u))
-      : p.imageUrls,
-    imageUrl: typeof p.imageUrl === 'string' ? normalizeProductImageUrl(p.imageUrl) : p.imageUrl,
-  }));
+  const products: Product[] = rawProducts.map((p) => {
+    const legacyUrl = (p as { imageUrl?: unknown }).imageUrl;
+    return {
+      ...p,
+      imageUrls: Array.isArray(p.imageUrls)
+        ? p.imageUrls.map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u) : u))
+        : p.imageUrls,
+      ...(typeof legacyUrl === 'string' ? { imageUrl: normalizeProductImageUrl(legacyUrl) } : {}),
+    };
+  });
 
   // 4. Guardar en caché memoria
   inMemoryCache.set(cacheKey, { data: products, timestamp: now });

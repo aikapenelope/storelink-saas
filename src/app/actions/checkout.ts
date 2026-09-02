@@ -3,7 +3,7 @@
 import { generateDeliveryNotePDF } from '@/lib/pdf';
 import { resolveExchangeRateVES } from '@/lib/exchange-rate';
 import { uploadDeliveryNotePdf, getDeliveryNoteUrl } from '@/lib/delivery-note';
-import { getPayload, type Payload } from 'payload';
+import { getPayload, type Payload, APIError } from 'payload';
 import config from '@payload-config';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
@@ -409,27 +409,36 @@ async function upsertCustomerCrm({
       .join(', ');
     
     const purchaseHistoryEntry = {
-      orderId: orderDoc.id,
+      orderId: Number(orderDoc.id),
       amount: total,
       date: now.toISOString().split('T')[0], // YYYY-MM-DD
       itemsSummary,
-      deliveryType: customer.deliveryType || 'delivery',
+      deliveryType: (customer.deliveryType === 'pickup' ? 'pickup' : 'delivery') as 'delivery' | 'pickup',
     };
 
     const updatePreferences = {
-      preferredPaymentMethod: customer.paymentDetails?.methodKey || customer.paymentMethod,
-      preferredDeliveryType: customer.deliveryType || 'none',
+      preferredPaymentMethod: customer.paymentDetails?.methodKey || customer.paymentMethod || null,
+      preferredDeliveryType: (customer.deliveryType === 'delivery' || customer.deliveryType === 'pickup'
+        ? customer.deliveryType
+        : 'none') as 'delivery' | 'pickup' | 'none',
     };
 
     if (existingCust) {
       await applyOrderToCustomerSql(existingCust);
       
       // Actualizar historial y preferencias vía Payload API
-      // Type cast temporal hasta que los tipos se regeneren con la migración
-      const currentHistory = Array.isArray((existingCust as any).purchaseHistory) ? (existingCust as any).purchaseHistory : [];
+      const currentHistory = (Array.isArray(existingCust.purchaseHistory) ? existingCust.purchaseHistory : [])
+        .map((entry) => ({
+          orderId: typeof entry.orderId === 'object' && entry.orderId !== null ? entry.orderId.id : (entry.orderId ? Number(entry.orderId) : null),
+          amount: entry.amount,
+          date: entry.date,
+          itemsSummary: entry.itemsSummary,
+          deliveryType: entry.deliveryType,
+          id: entry.id,
+        }));
       const updatedHistory = [purchaseHistoryEntry, ...currentHistory].slice(0, 50); // Mantener últimos 50
       
-      const currentPrefs = (existingCust as any).preferences || {};
+      const currentPrefs = existingCust.preferences || {};
       const mergedPrefs = { ...currentPrefs, ...updatePreferences };
       
       // Calcular nuevo valor promedio
@@ -441,21 +450,19 @@ async function upsertCustomerCrm({
         collection: 'customers',
         id: existingCust.id,
         overrideAccess: true,
-        // Cast temporal hasta que los tipos se regeneren con la migración
         data: {
           purchaseHistory: updatedHistory,
           preferences: {
             ...mergedPrefs,
             averageOrderValue: newAvgOrderValue,
           },
-        } as any,
+        },
       });
     } else {
       try {
         await payload.create({
           collection: 'customers',
           overrideAccess: true,
-          // Cast temporal hasta que los tipos se regeneren con la migración
           data: {
             name: customer.name,
             phone: cleanPhone,
@@ -470,7 +477,7 @@ async function upsertCustomerCrm({
               ...updatePreferences,
               averageOrderValue: total,
             },
-          } as any,
+          },
         });
       } catch (createErr) {
         // Carrera concurrente: índice único compuesto customers_tenant_phone_unique
@@ -767,6 +774,15 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       }
     } catch (orderErr) {
       console.error('Order creation error:', orderErr);
+      if (
+        orderErr instanceof APIError ||
+        (orderErr instanceof Error && orderErr.message.includes('Stock insuficiente'))
+      ) {
+        return {
+          success: false,
+          error: orderErr.message,
+        };
+      }
       return {
         success: false,
         error: 'No se pudo registrar tu pedido. Por favor inténtalo de nuevo.',

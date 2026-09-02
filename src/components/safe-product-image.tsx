@@ -60,8 +60,8 @@ export function SafeProductImage({
     const fillStyle: React.CSSProperties | undefined = fill
       ? { position: 'absolute', inset: 0, width: '100%', height: '100%', ...((props.style as React.CSSProperties) ?? {}) }
       : (props.style as React.CSSProperties | undefined);
-    // eslint-disable-next-line @next/next/no-img-element
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={currentSrc}
         alt={alt || 'Producto'}
