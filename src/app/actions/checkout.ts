@@ -671,22 +671,20 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           totalAmount: total,
           currency: currency || 'USD',
           exchangeRateVES: vesRate ?? undefined,
-          crmCounted: true,
-        } as never,
+        },
       });
 
       // ------------------------------------------------------------------
-      // 8. Upsert Customer in CRM Collection (Atomic Postgres SQL)
+      // 8. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
       // ------------------------------------------------------------------
-      // Auditoría final 2026-09-01 (P2): el CRM es BEST-EFFORT y NO comparte
-      // transacción con el pedido (cada op Local API es su propia tx). Antes,
-      // si el upsert fallaba DESPUÉS de crear la orden, el catch devolvía
-      // "No se pudo registrar tu pedido" con la orden YA registrada y el
-      // stock YA descontado → el cliente reintentaba → pedido duplicado +
-      // doble descuento de stock + job nunca encolado (pedido sin despacho).
-      // Ahora el fallo del CRM se registra y continúa: el pedido y su
-      // despacho a Trello/email son la parte crítica; el CRM se repara con
-      // los datos de la orden (totalSpent/totalOrders siempre derivables).
+      // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
+      // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
+      // exitoso — nunca durante la creación de la orden. Si el CRM falla, la
+      // flag queda false → la cancelación NO resta (no se resta un incremento
+      // que nunca pasó). Si el CRM succeed pero el update de la flag falla,
+      // se loguea para reconciliación (el incremento es real, la flag no lo
+      // refleja → inflación en cancel; caso raro, no bloquea el checkout).
+      let crmUpsertSucceeded = false;
       try {
         await upsertCustomerCrm({
           payload,
@@ -699,17 +697,35 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           orderDoc: { id: orderDoc.id as number },
           verifiedItems,
         });
+        crmUpsertSucceeded = true;
       } catch (crmErr) {
-        // Observabilidad (review Graphify #65): reportamos éxito al cliente
-        // (el pedido es real) pero NO silenciamos la pérdida de datos del CRM.
-        // Log estructurado con prefijo accionable para que un script de
-        // reconciliación pueda volver a derivar totalSpent/totalOrders desde
-        // la orden. Causa conocida: drift de schema de Customers (P0-B) o
-        // fallo transitorio.
+        // CRM upsert falló → la flag crmCounted queda false (default) →
+        // la cancelación NO restará un incremento que nunca existió.
         console.error(
           `[storelink][crm][checkout] CRM upsert falló para orden ${orderDoc.id} (orderNumber ${orderNumber}); pedido registrado y en despacho. Reconciliar CRM desde esta orden.`,
           crmErr
         );
+      }
+
+      if (crmUpsertSucceeded) {
+        try {
+          await payload.update({
+            collection: 'orders',
+            id: orderDoc.id as number,
+            overrideAccess: true,
+            context: { skipInventoryHook: true },
+            data: { crmCounted: true } as never,
+          });
+        } catch (flagErr) {
+          // Opposite partial failure: CRM increment committeó pero la flag no
+          // se pudo actualizar. El incremento es real; si la orden se cancela
+          // después, no se restará (flag false) → inflación en el CRM.
+          // Se loguea para reconciliación manual. No bloquea el checkout.
+          console.error(
+            `[storelink][crm][checkout] CRM increment OK pero crmCounted flag update falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
+            flagErr
+          );
+        }
       }
 
       // Despacho asíncrono vía Jobs Queue oficial

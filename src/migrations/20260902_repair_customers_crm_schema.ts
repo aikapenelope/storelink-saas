@@ -58,12 +58,27 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
-  await db.execute(sql`ALTER TABLE "customers" ' -- handled by up backfill DEFAULT '[]'::jsonb;`);
-  await db.execute(sql`UPDATE "customers" SET "preferences" = jsonb_build_object('preferredPaymentMethod', "preferences_preferred_payment_method", 'preferredDeliveryType', "preferences_preferred_delivery_type"::text, 'averageOrderValue', "preferences_average_order_value") WHERE "preferences_preferred_payment_method" IS NOT NULL;`);
+  // 1. Recrear columnas JSONB legacy con sus defaults originales
+  await db.execute(sql`ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "preferences" jsonb DEFAULT '{}'::jsonb;`);
+  await db.execute(sql`ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "purchase_history" jsonb DEFAULT '[]'::jsonb;`);
+
+  // 2. Backfill preferences desde columnas aplanadas + tabla de categorías
+  await db.execute(sql`UPDATE "customers" SET "preferences" = jsonb_build_object('preferredPaymentMethod', "preferences_preferred_payment_method", 'preferredDeliveryType', "preferences_preferred_delivery_type"::text, 'averageOrderValue', "preferences_average_order_value", 'preferredCategories', COALESCE((SELECT jsonb_agg(jsonb_build_object('category', pc."category") ORDER BY pc."_order") FROM "customers_preferences_preferred_categories" pc WHERE pc."_parent_id" = "customers"."id"), '[]'::jsonb)) WHERE "preferences_preferred_payment_method" IS NOT NULL OR "preferences_average_order_value" IS NOT NULL;`);
+
+  // 3. Backfill purchase_history desde la tabla hija
+  await db.execute(sql`UPDATE "customers" SET "purchase_history" = COALESCE((SELECT jsonb_agg(jsonb_build_object('orderId', ph."order_id_id", 'amount', ph."amount", 'date', ph."date", 'itemsSummary', ph."items_summary", 'deliveryType', ph."delivery_type"::text) ORDER BY ph."_order") FROM "customers_purchase_history" ph WHERE ph."_parent_id" = "customers"."id"), '[]'::jsonb) WHERE EXISTS (SELECT 1 FROM "customers_purchase_history" ph WHERE ph."_parent_id" = "customers"."id");`);
+
+  // 4. Drop de tablas hijas (FK dependencies)
   await db.execute(sql`DROP TABLE IF EXISTS "customers_purchase_history";`);
   await db.execute(sql`DROP TABLE IF EXISTS "customers_preferences_preferred_categories";`);
+
+  // 5. Drop de columnas aplanadas
   await db.execute(sql`ALTER TABLE "customers" DROP COLUMN IF EXISTS "preferences_preferred_payment_method", DROP COLUMN IF EXISTS "preferences_preferred_delivery_type", DROP COLUMN IF EXISTS "preferences_average_order_value";`);
+
+  // 6. Drop de crm_counted
   await db.execute(sql`ALTER TABLE "orders" DROP COLUMN IF EXISTS "crm_counted";`);
+
+  // 7. Drop de enums
   await db.execute(sql`DROP TYPE IF EXISTS "enum_customers_preferences_preferred_delivery_type";`);
   await db.execute(sql`DROP TYPE IF EXISTS "enum_customers_purchase_history_delivery_type";`);
 }
