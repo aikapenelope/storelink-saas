@@ -52,16 +52,25 @@ export function SafeProductImage({
 
   // Host fuera de la whitelist → <img> nativo: el throw de render de
   // next/image es imposible de atrapar; con <img> el fallback funciona.
+  // Fix review Devin (P0 #63): preservar el contrato de layout — con `fill`
+  // replicamos el posicionamiento absoluto que next/image aplicaría, para que
+  // la imagen no se desborde del contenedor `relative` de temas y modal.
   if (!isAllowedImageUrl(currentSrc)) {
+    const { fill, ...restProps } = props;
+    const fillStyle: React.CSSProperties | undefined = fill
+      ? { position: 'absolute', inset: 0, width: '100%', height: '100%', ...((props.style as React.CSSProperties) ?? {}) }
+      : (props.style as React.CSSProperties | undefined);
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={currentSrc}
         alt={alt || 'Producto'}
         onError={handleError}
-        className={props.className}
-        style={props.style as React.CSSProperties | undefined}
-        loading="lazy"
+        className={restProps.className}
+        style={fillStyle}
+        loading={restProps.loading ?? 'lazy'}
+        {...(restProps.width != null ? { width: restProps.width } : {})}
+        {...(restProps.height != null ? { height: restProps.height } : {})}
       />
     );
   }
