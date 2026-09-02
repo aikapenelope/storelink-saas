@@ -9,6 +9,7 @@ import { APIError } from 'payload';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
+import { invalidateProductsCache } from '@/lib/storefront-cache';
 import type { Product } from '@/payload-types';
 
 /**
@@ -315,6 +316,15 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
         delta: qtyToRestore,
       });
     }
+  }
+
+  // Auditoría final 2026-09-01 (P1): si llegamos aquí hubo descuento o
+  // reposición de stock — invalidar el caché Redis/memoria del storefront
+  // para que el stock visible no quede obsoleto hasta 3 min tras la venta.
+  // Antes solo se llamaba revalidatePath (ISR), pero el HTML regenerado
+  // leía el caché Redis viejo vía getCachedProducts.
+  if (tenantId != null && Number.isFinite(Number(tenantId))) {
+    invalidateProductsCache(Number(tenantId));
   }
 
   return doc;

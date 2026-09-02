@@ -299,10 +299,24 @@ const orderCreatedWorkflow: WorkflowConfig<'order-created'> = {
   inputSchema: [{ name: 'orderId', type: 'number', required: true }],
   handler: async ({ job, tasks }) => {
     const orderId = job.input.orderId as number;
-    // Email primero, Trello después: si Trello falla de forma persistente,
-    // el email ya se envió (tareas independientes, como antes con try/catch).
-    await tasks.sendOrderConfirmationEmail('send-email', { input: { orderId } });
+    // Auditoría final 2026-09-01 (P1): Trello PRIMERO y email NO bloqueante.
+    // Antes corría email → Trello en secuencia: un fallo persistente de Resend
+    // (cuota agotada, clave BYOK inválida, dominio sin verificar) mataba el
+    // workflow tras 3 reintentos y la tarjeta de Trello NUNCA se creaba — el
+    // pedido quedaba registrado pero invisible en el tablero del comercio.
+    // Trello es el canal operativo de despacho; el email al cliente es
+    // secundario. Si el email falla, se registra y se reintenta en la próxima
+    // pasada del runner externo sin impedir el despacho.
     await tasks.trelloDispatchOrder('dispatch-trello', { input: { orderId } });
+    try {
+      await tasks.sendOrderConfirmationEmail('send-email', { input: { orderId } });
+    } catch (emailTaskErr) {
+      console.error(
+        `[storelink][order-created] email del pedido ${orderId} falló; el despacho a Trello ya se completó. El runner externo lo reintentará:`,
+        emailTaskErr
+      );
+      throw emailTaskErr; // marca el job como fallido SOLO para reintentar el email
+    }
   },
 };
 

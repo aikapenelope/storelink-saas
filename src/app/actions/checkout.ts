@@ -11,6 +11,7 @@ import type { Tenant, Product, Customer } from '@/payload-types';
 import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
+import { checkTenantRateLimit } from '@/lib/rate-limit';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 
@@ -518,6 +519,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       overrideAccess: true,
     });
 
+
     const tenantDoc = tenantResult?.docs?.[0] as Tenant | undefined;
     const tenantId = tenantDoc?.id;
 
@@ -527,6 +529,18 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     if (!tenantDoc.whatsappPhone) {
       return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
+    }
+
+    // Auditoría final 2026-09-01 (P1): segunda capa anti-abuso POR TENANT
+    // (50/min, ya definida en lib/rate-limit.ts pero nunca cableada). El
+    // rate-limit por IP+tenant no detiene un ataque distribuido (botnet con
+    // miles de IPs) contra UNA tienda; este contador compartido sí.
+    const tenantRl = await checkTenantRateLimit(tenantId, 'checkout');
+    if (!tenantRl.allowed) {
+      return {
+        success: false,
+        error: 'La tienda está recibiendo demasiados pedidos ahora mismo. Inténtalo de nuevo en un minuto.',
+      };
     }
 
     // ------------------------------------------------------------------

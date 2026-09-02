@@ -6,7 +6,7 @@ import { after } from 'next/server';
 // assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { validateCsvLimits, parseCSVLine } from '@/lib/csv';
-import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
+import { checkAdminRouteRateLimit, checkTenantRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +59,17 @@ export async function POST(
     }
 
     const tenantId = tenantResult.docs[0].id;
+
+    // Auditoría final 2026-09-01 (P1): cota por TENANT además de la de
+    // usuario — 5 importaciones/min por tienda (definida en lib/rate-limit.ts
+    // pero nunca cableada). La importación es la ruta más pesada del sistema.
+    const tenantRl = await checkTenantRateLimit(tenantId, 'import-csv');
+    if (!tenantRl.allowed) {
+      return NextResponse.json(
+        { error: 'Esta tienda ya está importando con demasiada frecuencia. Espera un minuto.' },
+        { status: 429 }
+      );
+    }
 
     // 2. Read CSV content (either as multipart form-data or raw text)
     let csvText = '';

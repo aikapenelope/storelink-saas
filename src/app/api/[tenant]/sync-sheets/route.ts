@@ -6,7 +6,7 @@ import { after } from 'next/server';
 // assertTenantAccess eliminado: Sprint 2 — la autorización la gestiona
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { validateCsvLimits, parseCSVLine } from '@/lib/csv';
-import { checkAdminRouteRateLimit } from '@/lib/rate-limit';
+import { checkAdminRouteRateLimit, checkTenantRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +57,18 @@ export async function POST(
     }
 
     const tenantId = tenantResult.docs[0].id;
+
+    // Auditoría final 2026-09-01 (P1): cota por TENANT además de la de
+    // usuario — 10 sincronizaciones/min por tienda (la función ya existía en
+    // lib/rate-limit.ts pero nunca se invocaba). Protege la API de Google
+    // Sheets y la BD si varias sesiones del mismo comercio sincronizan a la vez.
+    const tenantRl = await checkTenantRateLimit(tenantId, 'sync-sheets');
+    if (!tenantRl.allowed) {
+      return NextResponse.json(
+        { error: 'Esta tienda ya está sincronizando con demasiada frecuencia. Espera un minuto.' },
+        { status: 429 }
+      );
+    }
 
     const body = await request.json().catch(() => ({}));
     let sheetUrl = body.url || body.sheetsUrl;

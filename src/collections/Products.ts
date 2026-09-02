@@ -3,6 +3,7 @@ import type { CollectionAfterChangeHook, CollectionConfig, TextField } from 'pay
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname } from '@/lib/image-hosts';
+import { invalidateProductsCache } from '@/lib/storefront-cache';
 
 /**
  * Hook afterChange para revalidar el caché ISR del storefront (/[tenantSlug])
@@ -44,6 +45,17 @@ const revalidateProductStorefront: CollectionAfterChangeHook = async ({ doc, req
     } catch {
       // Non-blocking en entornos fuera de peticiones HTTP de Next.js
     }
+  }
+
+  // Auditoría final 2026-09-01 (P1): invalidar también el caché Redis/memoria
+  // del storefront — revalidatePath regenera el HTML, pero éste lee de
+  // getCachedProducts y podía servir datos viejos hasta 3 min (TTL Redis).
+  const tenantIdForCache =
+    doc.tenant && typeof doc.tenant === 'object'
+      ? (doc.tenant as { id?: number | string }).id
+      : (doc.tenant as number | string | undefined);
+  if (tenantIdForCache != null && Number.isFinite(Number(tenantIdForCache))) {
+    invalidateProductsCache(Number(tenantIdForCache));
   }
 
   return doc;
