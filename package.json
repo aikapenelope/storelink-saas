@@ -39,7 +39,7 @@
     "graphql": "^16.8.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.32.0",
-    "next": "15.4.11",
+    "next": "15.5.25",
     "payload": "^3.88.0",
     "pg": "^8.23.0",
     "postcss": "^8.5.26",
@@ -60,13 +60,16 @@
     "@types/react-dom": "^19.2.4",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "15.4.11",
+    "eslint-config-next": "15.5.25",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },
   "pnpm": {
     "overrides": {
-      "@aws-sdk/types": "3.974.4"
+      "@aws-sdk/types": "3.974.4",
+      "fast-uri": "^3.1.7",
+      "postcss": "^8.5.18",
+      "dompurify": "^3.4.12"
     },
     "onlyBuiltDependencies": [
       "esbuild",
