@@ -38,4 +38,5 @@ export const RESERVED_TENANT_SLUGS = new Set([
   // Rutas estáticas reales de src/app/(app)/ (nunca un tenant real)
   'demo',
   'templates',
+  'privacidad',
 ]);
