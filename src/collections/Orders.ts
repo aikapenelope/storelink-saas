@@ -74,12 +74,13 @@ const applyVariantStockDelta = async ({
     // Auditoría 2026-09-04 (P2): al agotarse el stock por venta, la fila pasa
     // a out_of_stock (antes solo el import CSV lo hacía) — sin esto el
     // catálogo seguía mostrando el producto disponible y el checkout lo
-    // rechazaba en el último paso. NULL-safe: stock_quantity null → case →
-    // rama else ('in_stock') solo si la comparación es true; con null no aplica.
+    // rechazaba en el último paso. El ELSE ancla al valor de la columna para
+    // que el CASE resuelva al tipo de stock_status (VARCHAR en prod, ENUM en
+    // BDs pusheadas) sin cast duro.
     const res = (await executor.execute(sql`
       update ${sql.identifier(tableName)}
       set stock_quantity = stock_quantity + ${delta},
-          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else 'in_stock' end
+          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else stock_status end
       where _parent_id = ${productId}
         and _order = ${variantRowNumber(variantIndex)}
         and (stock_quantity is null or stock_quantity >= ${requiredQty})
@@ -129,7 +130,7 @@ const applyBaseProductStockDelta = async ({
     const res = (await executor.execute(sql`
       update ${sql.identifier(tableName)}
       set stock_quantity = stock_quantity + ${delta},
-          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else 'in_stock' end
+          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else stock_status end
       where id = ${productId}
         and (track_stock is not true or stock_quantity is null or stock_quantity >= ${requiredQty})
       returning id

@@ -273,6 +273,23 @@ abierto a propósito. No cambiado en este PR para no romper consumidores sin dec
 solo está en `20260902_alter_orders_exchange_rate_numeric.ts:34-42`; el resto confía en que la
 conexión de runtime sea la correcta. Generalizar el guard a helper compartido.
 
+**24bis. [P1 — DR] Sin migración baseline, la base de datos NO es reconstruible desde cero · [VERIFICADO] ⚠️ ACCIÓN OWNER (S, en entorno con BD)**
+- Descubierto al activar la suite de paridad en CI: la primera migración (`20260819_add_theme…`)
+  es un `ALTER TABLE tenants` sobre tablas que asume preexistentes, y el backfill CRM
+  (`20260902_repair_customers_crm_schema.ts:48-51`) referencia columnas JSONB legacy — la cadena
+  no puede reconstruir el schema ni desde una BD vacía ni sobre un push del schema actual. Además
+  un fallo de `prodMigrations` termina en `process.exit(1)` dentro del adapter de Payload.
+- Consecuencia: ante pérdida total de la BD de Supabase, el schema no se puede regenerar desde el
+  repo (los backups de datos no incluyen la definición del schema; el push está desactivado en prod).
+  La suite de paridad (que hubiera detectado esto) **nunca llegó a ejecutarse en CI**: nació el
+  02-sep junto al fallo de typecheck que la tapaba.
+- En este PR: la suite se ejecuta con detección estática de baseline — sin baseline, se salta con
+  aviso explícito (CI verde con señal, no silencio); con baseline, corre en modo completo
+  automáticamente.
+- Acción del owner: generar el baseline con `pnpm migrate:create` contra una BD Postgres vacía en
+  un entorno local (el CLI no puede cargar la config en serverless/este entorno — `ERR_REQUIRE_
+  ASYNC_MODULE` documentado) y registrarlo PRIMERO en `src/migrations/index.ts`.
+
 **25. CI sin lint, build, audit ni Dependabot · [VERIFICADO] ✅ FIX** — `tests.yml` solo corría
 typecheck+test; los errores que solo detecta el build llegaban a Vercel y los 39 advisories no
 tenían señal. Fix: steps de Lint/Build/Audit + `.github/dependabot.yml`.
@@ -365,6 +382,8 @@ además de `pdfUrl` — se mantiene por diseño (fallback local del drawer), doc
 5. Acción owner: activar `SUPABASE_CA_CERT` en Vercel; verificar que R2 no sirve `delivery-notes/`
    público (hallazgo 15); decidir hallazgo 23 (REST público del catálogo).
 6. e2e en CI (job nocturno con el servicio Postgres ya definido) (M).
+7. Generar la migración baseline y registrarla primera (hallazgo 24bis) — la suite de paridad
+   pasará a modo completo automáticamente (S, requiere entorno local con BD).
 
 **60 días (deuda estructural):**
 7. Descomposición cart-drawer/checkout/Orders según sección 6 (M-L, con e2e ya en CI como red).
@@ -403,7 +422,7 @@ además de `pdfUrl` — se mantiene por diseño (fallback local del drawer), doc
 | `pnpm install --frozen-lockfile` | ✅ exit 0 (6m11s en el bump de deps) |
 | `pnpm lint` | ✅ «No ESLint warnings or errors» en ambos estados |
 | `npx tsc --noEmit` | ❌ ANTES: `TS2305 ProductVariant` (tests/unit/order-inventory.test.ts:7) · ✅ DESPUÉS: 0 errores |
-| `pnpm test` | ✅ ANTES: 119 passed / 11 skipped (int sin `TEST_DATABASE_URI`) · ✅ DESPUÉS: 119 passed / 11 skipped |
+| `pnpm test` | ✅ ANTES (sin BD): 119 passed / 11 skipped · ✅ DESPUÉS: 126 passed / 4 skipped — y con Postgres real (TEST_DATABASE_URI, 18/18 archivos verdes): **126 passed / 4 skipped** (la suite de paridad se salta sola sin baseline, ver 24bis) |
 | `pnpm audit --prod` | ❌ ANTES: 39 vulns (18 high, 17 moderate, 4 low) · ✅ DESPUÉS: **2 moderate** (payload GHSA-jg8r-5jh2-v2xj sin parche publicado + dompurify residual de admin UI) |
 | `pnpm build` | ✅ 0 errores en ambos estados (build incluye typecheck de la app) |
 | `gh run list` (CI) | ❌ ANTES: `tests.yml` en failure desde 2026-09-02 (TS2305) · DESPUÉS: pendiente del run de este PR |

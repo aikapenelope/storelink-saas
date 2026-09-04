@@ -22,6 +22,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/privacidad`, changeFrequency: 'yearly', priority: 0.2 },
   ];
 
+  // Sin BD configurada (build local/CI): no intentar conectar — el runtime de
+  // producción (con DATABASE_URI) es el que regenera el sitemap con tenants.
+  if (!process.env.DATABASE_URI && !process.env.POSTGRES_URL) {
+    return staticRoutes;
+  }
+
   try {
     const payload = await getPayload({ config });
     const tenants = await payload.find({
