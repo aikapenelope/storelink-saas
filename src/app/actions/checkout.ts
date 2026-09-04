@@ -13,6 +13,7 @@ import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
 import { applyCustomerCrmDelta } from '@/collections/Orders';
+import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 
@@ -75,13 +76,20 @@ export interface CheckoutResponse {
   emailSent?: boolean;
   /** URL firmada (R2) de la Nota de Entrega, válida 7 días (máx permitido por firma sigv4) */
   pdfUrl?: string;
+  // Auditoría 2026-09-04 (P1 parcial): totales confirmados por el SERVIDOR.
+  // La tasa embebida en el HTML ISR puede diferir de la resuelta en vivo al
+  // momentar del checkout (ventana de hasta 300s); el drawer muestra estos
+  // valores en la pantalla de éxito como referencia oficial del pedido.
+  totalUSD?: number;
+  totalVES?: number;
+  exchangeRateVES?: number;
   error?: string;
 }
 
 // R9 (plan v2): acota el tamaño máximo del pedido. Con el lookup en bloque
 // (un solo find), limita también el radio de la query y evita carritos
 // gigantes usados como DoS de latencia sin afectar la compra normal.
-const MAX_CHECKOUT_ITEMS = 30;
+// Única fuente canónica: src/lib/constants.ts (antes estaba duplicado aquí).
 
 /**
  * Validación runtime estricta en la frontera del Server Action
@@ -162,6 +170,17 @@ async function verifyAndPriceItems({
 
   const verifiedItems: CheckoutItemData[] = [];
 
+  // Auditoría 2026-09-04 (P2): validar el stock contra la cantidad AGREGADA
+  // por SKU, no por línea. El carrito puede generar dos líneas del mismo SKU
+  // (mismo producto con distintos modificadores): validar por línea dejaba
+  // pasar un pedido cuya suma excedía el stock, que luego fallaba completa en
+  // el hook de inventario (falso "sin stock" tras todo el formulario).
+  const qtyBySku = new Map<string, number>();
+  for (const item of rawItems) {
+    if (!item.sku) continue;
+    qtyBySku.set(item.sku, (qtyBySku.get(item.sku) || 0) + (Number(item.quantity) || 0));
+  }
+
   for (const item of rawItems) {
     const qty = Number(item.quantity);
     if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
@@ -177,6 +196,13 @@ async function verifyAndPriceItems({
       return { ok: false, error: 'Producto no disponible en el catálogo.' };
     }
 
+    // Auditoría 2026-09-04 (P2): respetar el estado manual del comerciante.
+    // Un producto marcado "Agotado" era comprable si trackStock estaba apagado
+    // o le quedaba stock residual: el checkout solo miraba la cantidad.
+    if (dbProd.stockStatus === 'out_of_stock') {
+      return { ok: false, error: `Disculpe, "${dbProd.title}" está agotado.` };
+    }
+
     let basePrice = Number(dbProd.price) || 0;
     let stockAvailable: number | null =
       dbProd.trackStock && typeof dbProd.stockQuantity === 'number' ? dbProd.stockQuantity : null;
@@ -186,6 +212,12 @@ async function verifyAndPriceItems({
     if (matchedVariant) {
       if (typeof matchedVariant.price === 'number') basePrice = matchedVariant.price;
       if (typeof matchedVariant.stockQuantity === 'number') stockAvailable = matchedVariant.stockQuantity;
+      if (matchedVariant.stockStatus === 'out_of_stock') {
+        return {
+          ok: false,
+          error: `Disculpe, "${matchedVariant.name || dbProd.title}" está agotado.`,
+        };
+      }
     }
 
     let modifiersDelta = 0;
@@ -204,11 +236,14 @@ async function verifyAndPriceItems({
 
     const finalPrice = basePrice + modifiersDelta;
 
-    if (stockAvailable !== null && stockAvailable < qty) {
-      return {
-        ok: false,
-        error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
-      };
+    if (stockAvailable !== null) {
+      const totalQtyForSku = qtyBySku.get(item.sku) || qty;
+      if (stockAvailable < totalQtyForSku) {
+        return {
+          ok: false,
+          error: `Disculpe, solo quedan ${stockAvailable} unidades disponibles de "${dbProd.title}".`,
+        };
+      }
     }
 
     verifiedItems.push({
@@ -231,12 +266,19 @@ async function verifyAndPriceItems({
  * Generador robusto de número de pedido único con control de colisiones
  */
 async function generateUniqueOrderNumber(payload: Payload): Promise<string | null> {
-  const now = new Date();
+  // Auditoría 2026-09-04 (P3): YYMMDD en America/Caracas — getFullYear()/
+  // getMonth()/getDate() usaban la TZ del proceso (UTC en Vercel), así que
+  // los pedidos entre 20:00 y 24:00 Caracas salían con fecha del día siguiente.
+  const caracasDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Caracas',
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()); // "YY-MM-DD"
+  const datePrefix = caracasDate.split('-').join(''); // YYMMDD, formato original
   for (let attempt = 0; attempt < 5; attempt++) {
     const randomSuffix = randomInt(100000, 1000000);
-    const candidate = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1)
-      .toString()
-      .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${randomSuffix}`;
+    const candidate = `${datePrefix}-${randomSuffix}`;
     const clash = await payload.find({
       collection: 'orders',
       where: { orderNumber: { equals: candidate } },
@@ -566,10 +608,24 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     const { verifiedItems, itemsSubtotal } = verifyResult;
 
-    // Tarifa fija de delivery configurada por el comercio en Payload
+    // Tarifa de delivery configurada por el comercio en Payload.
+    // Auditoría 2026-09-04 (P2): si el tenant define tarifa por ZONA
+    // (deliveryConfig.zones[].priceDelivery) y el cliente seleccionó un
+    // municipio con tarifa, se cobra ESA tarifa — antes se ignoraba y se
+    // cobraba siempre la fija aunque la UI anunciara "(+$X)" en el selector.
+    const deliveryZones = Array.isArray(tenantDoc.deliveryConfig?.zones)
+      ? tenantDoc.deliveryConfig!.zones
+      : [];
+    const selectedZone = customer.deliveryDetails?.municipality
+      ? deliveryZones.find((z) => z.name === customer.deliveryDetails?.municipality)
+      : undefined;
+    const zonePrice =
+      selectedZone && typeof selectedZone.priceDelivery === 'number'
+        ? selectedZone.priceDelivery
+        : null;
     const deliveryFee =
       customer.deliveryType === 'delivery'
-        ? Number(tenantDoc.deliveryConfig?.fixedPrice || 0)
+        ? (zonePrice ?? Number(tenantDoc.deliveryConfig?.fixedPrice || 0))
         : 0;
 
     const total = itemsSubtotal + deliveryFee;
@@ -586,8 +642,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       return { success: false, error: 'No se pudo generar un número de pedido único. Intenta de nuevo.' };
     }
 
+    // Auditoría 2026-09-04 (P3): la fecha del PDF usaba la TZ del proceso
+    // (UTC en Vercel) — la constitución exige America/Caracas (UTC-4). El
+    // prefijo de fecha del orderNumber se genera en generateUniqueOrderNumber,
+    // también en Caracas.
     const now = new Date();
     const dateFormatted = now.toLocaleDateString('es-ES', {
+      timeZone: 'America/Caracas',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -773,7 +834,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         console.error('Jobs queue error:', queueErr);
       }
     } catch (orderErr) {
-      console.error('Order creation error:', orderErr);
+      // Auditoría 2026-09-04 (P2): NO loguear el objeto de error crudo — los
+      // errores de validación de Payload adjuntan el `data` enviado, que
+      // incluye PII del cliente (nombre, teléfono, email, dirección). Basta
+      // el mensaje para diagnóstico; el detalle vive en el resultado HTTP.
+      console.error(
+        '[storelink][checkout] Order creation error:',
+        orderErr instanceof Error ? orderErr.message : 'unknown error'
+      );
       // Propagar únicamente mensajes controlados de inventario ("Stock insuficiente para [Producto]")
       // No exponer raw APIError ni detalles internos de backend a usuarios no autenticados (review Devin #69)
       if (orderErr instanceof Error && orderErr.message.includes('Stock insuficiente')) {
@@ -806,9 +874,17 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       pdfBase64,
       pdfUrl,
       emailSent: false,
+      // Totales confirmados por el servidor (fuente oficial del pedido).
+      totalUSD: total,
+      totalVES: showVESEffective ? totalVES : undefined,
+      exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
     };
   } catch (err: unknown) {
-    console.error('Unhandled processOrder error:', err);
+    // Higiene de PII (auditoría 2026-09-04): solo el mensaje, nunca el objeto.
+    console.error(
+      '[storelink][checkout] Unhandled processOrder error:',
+      err instanceof Error ? err.message : 'unknown error'
+    );
     return {
       success: false,
       error: 'Error inesperado al procesar el pedido',
