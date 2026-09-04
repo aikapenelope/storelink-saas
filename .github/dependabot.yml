@@ -1,0 +1,19 @@
+# Auditoría 2026-09-04 (P2): sin señal automatizada de updates — los 39
+# advisories del audit llegaron sin aviso previo. Dependabot propone updates
+# semanales de deps y de las actions de GitHub.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

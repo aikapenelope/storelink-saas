@@ -1,4 +1,5 @@
 import React from 'react';
+import { headers } from 'next/headers';
 import { getPayload } from 'payload';
 import config from '@payload-config';
 import { Clock, AlertCircle, CheckCircle } from 'lucide-react';
@@ -15,7 +16,24 @@ type JobStatus = {
 
 export async function JobsStatusView() {
   const payload = await getPayload({ config });
-  
+
+  // Auditoría 2026-09-04 (P3): la vista leía payload-jobs vía payload.db
+  // (bypass de access control) SIN filtro de tenant — un tenant-admin veía los
+  // jobs (orderIds, errores) de TODA la plataforma. El dashboard es global:
+  // solo super-admin.
+  const authResult = await payload.auth({ headers: await headers() });
+  const viewerRole = (authResult?.user as { role?: string } | undefined)?.role;
+  if (viewerRole !== 'super-admin') {
+    return (
+      <section className="border border-zinc-800 bg-zinc-950 p-5 shadow-xl rounded-none">
+        <div className="flex items-center gap-2 text-zinc-400 text-sm">
+          <AlertCircle className="w-4 h-4" />
+          <span className="text-xs">El estado de la cola de jobs solo está disponible para el administrador de la plataforma.</span>
+        </div>
+      </section>
+    );
+  }
+
   try {
     // Acceder a la colección interna de Payload Jobs
     const jobsRes = await (payload.db as unknown as { 
