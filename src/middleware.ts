@@ -23,6 +23,10 @@ const MAX_MAP_ENTRIES = 5_000; // acota la memoria del mapa en abuse sustained
 const hits = new Map<string, { count: number; resetAt: number }>();
 
 function clientIp(req: NextRequest): string {
+  // En Vercel, x-forwarded-for/x-real-ip son GESTIONADOS POR LA PLATAFORMA
+  // (Vercel sobrescribe los que lleguen del cliente), así que no son
+  // spoofables en este entorno — review Devin #73. En self-hosted detrás de
+  // un proxy propio, confiar en estos headers exige sanitizarlos en el proxy.
   return (
     req.headers.get('x-real-ip') ||
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -34,6 +38,14 @@ function pruneExpired(now: number): void {
   if (hits.size < MAX_MAP_ENTRIES) return;
   for (const [key, entry] of hits) {
     if (entry.resetAt <= now) hits.delete(key);
+  }
+  // Review Devin #73: si aun así no bajó del cap (5000 IPs ACTIVAS en la
+  // ventana), expulsa las entradas más antiguas (inserción) para que el mapa
+  // tenga cota de memoria dura y los nuevos clientes igual queden limitados.
+  while (hits.size >= MAX_MAP_ENTRIES) {
+    const oldest = hits.keys().next().value;
+    if (oldest === undefined) break;
+    hits.delete(oldest);
   }
 }
 
