@@ -73,6 +73,14 @@ export interface CheckoutRequest {
   checkoutNonce: string;
   honeypotWebsite?: string;
   formRenderedAtMs?: number;
+  /**
+   * Review Devin #74: token de intención del checkout generado por el carrito
+   * (crypto.randomUUID). Estable durante un intento (sobrevive reintentos de
+   * transporte del mismo body) y distinto en cada compra nueva. Opcional y
+   * sanitizado en el servidor: si falta o es inválido, la idempotencia cae al
+   * fingerprint de contenido.
+   */
+  idempotencyToken?: string;
 }
 
 export interface CheckoutResponse {
@@ -538,6 +546,11 @@ async function upsertCustomerCrm({
 }
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
+  // Declarados al tope de la función para que el catch externo pueda liberar
+  // la reserva sin TDZ aunque el fallo ocurra antes de la sección 3bis
+  // (review Devin #74: toda salida fallida antes de crear la orden libera).
+  let idempotencyKey: string | null = null;
+  let orderCreated = false;
   try {
     const { tenantSlug, storeName, currency, showVES, customer, items } = request;
 
@@ -619,17 +632,32 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // 3bis. Idempotencia (auditoría 2026-09-04, P1-2): el nonce NO es
     // single-use, así que un doble clic / reenvío / reintento del navegador
     // creaba dos órdenes idénticas (stock doble, dos WhatsApp, doble CRM).
-    // La clave determinista reserva el pedido en Upstash: el duplicado recibe
-    // la respuesta del primero. Fail-open si Redis no está disponible
-    // (misma decisión de disponibilidad documentada en rate-limit.ts).
-    // ------------------------------------------------------------------
-    const idempotencyKey = buildIdempotencyKey({
+    // La clave reserva el pedido en Upstash: el duplicado recibe la respuesta
+    // del primero. Fail-open si Redis no está disponible (misma decisión de
+    // disponibilidad documentada en rate-limit.ts).
+    //
+    // Review Devin #74: la clave incluye (a) un token de intención generado
+    // por el carrito — un reintento de transporte reenvía el MISMO body con el
+    // MISMO token y recibe la respuesta del dueño, pero una compra nueva
+    // intencional genera otro token y crea su propia orden — y (b) dirección y
+    // método de pago, que también definen el pedido. Token inválido → se
+    // ignora (retrocompatible con clientes sin token).
+    // Declaradas al tope de la función (catch externo las referencia sin TDZ).
+    const attemptToken =
+      typeof request.idempotencyToken === 'string' &&
+      /^[A-Za-z0-9_-]{8,64}$/.test(request.idempotencyToken.trim())
+        ? request.idempotencyToken.trim()
+        : null;
+    idempotencyKey = buildIdempotencyKey({
       tenantId,
       items,
       customerPhone: customer.phone,
       customerEmail: customer.email ?? '',
       deliveryType: customer.deliveryType,
       municipality: customer.deliveryDetails?.municipality,
+      customerAddress: customer.address ?? '',
+      paymentMethod: customer.paymentMethod ?? '',
+      attemptToken,
     });
     const reserved = await tryReserveCheckout(idempotencyKey);
     if (!reserved) {
@@ -778,6 +806,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           exchangeRateVES: vesRate ?? undefined,
         },
       });
+      // La orden EXISTE: a partir de aquí la reserva de idempotencia ya no se
+      // libera (la respuesta final se guarda en la clave al terminar).
+      orderCreated = true;
 
       // ------------------------------------------------------------------
       // 8. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
@@ -870,9 +901,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         console.error('Jobs queue error:', queueErr);
       }
     } catch (orderErr) {
-      // El pedido NO se creó: liberar la reserva para que el usuario pueda
-      // reintentar con el mismo carrito sin esperar el TTL de idempotencia.
-      await releaseCheckoutReservation(idempotencyKey);
+      // El pedido NO se creó (orderCreated=false): liberar la reserva para que
+      // el usuario pueda reintentar con el mismo carrito sin esperar el TTL de
+      // idempotencia (review Devin #74: TODA salida fallida antes de la
+      // creación debe liberar, no solo este catch).
+      if (!orderCreated) {
+        await releaseCheckoutReservation(idempotencyKey);
+      }
       // Auditoría 2026-09-04 (P2): NO loguear el objeto de error crudo — los
       // errores de validación de Payload adjuntan el `data` enviado, que
       // incluye PII del cliente (nombre, teléfono, email, dirección). Basta
@@ -925,6 +960,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     return successResponse;
   } catch (err: unknown) {
+    // Review Devin #74: un fallo ANTES de crear la orden (tasa, numeración,
+    // PDF, mensaje de WhatsApp) también debe liberar la reserva — si no, el
+    // mismo carrito quedaría bloqueado 15 min con "pedido idéntico en proceso"
+    // sin que exista orden alguna. Si la orden sí se creó, la reserva se
+    // conserva (contiene la respuesta final para los duplicados).
+    if (idempotencyKey && !orderCreated) {
+      await releaseCheckoutReservation(idempotencyKey);
+    }
     // Higiene de PII (auditoría 2026-09-04): solo el mensaje, nunca el objeto.
     console.error(
       '[storelink][checkout] Unhandled processOrder error:',

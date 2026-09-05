@@ -9,13 +9,21 @@ import { Redis } from '@upstash/redis';
  * pestaña o el reintento del navegador tras un timeout creaban DOS órdenes
  * (stock deducido dos veces, dos WhatsApp, dos tarjetas Trello, CRM doble).
  *
- * Mecanismo: clave determinista = SHA-256 de (tenant, items normalizados,
- * datos del cliente). Antes de crear la orden se hace `SET NX EX`:
+ * Mecanismo: clave = SHA-256 de (tenant, items normalizados, datos del
+ * cliente + TOKEN DE INTENCIÓN del carrito, review Devin #74). Antes de crear
+ * la orden se hace `SET NX EX`:
  *  - NX ok  → este request es el "dueño" del pedido; al terminar se guarda la
  *             respuesta final en la misma clave para que el duplicado la
  *             reciba tal cual (pantalla de éxito, no error).
  *  - NX dup → esperar brevemente la respuesta del dueño y devolverla; si no
  *             aparece a tiempo, error claro (nunca segunda orden).
+ *
+ * El token de intención lo genera el carrito (crypto.randomUUID) al abrir el
+ * checkout y se regenera tras cada respuesta terminal (éxito o error): un
+ * reintento de transporte (mismo body HTTP) conserva el token y recibe la
+ * respuesta del dueño, pero una compra NUEVA intencional produce un token
+ * distinto y crea su propia orden. Sin token (clientes legacy/API), la clave
+ * cae al fingerprint de contenido puro.
  *
  * Fail-open por diseño (misma decisión documentada en src/lib/rate-limit.ts):
  * si Upstash no está configurado o falla, el checkout sigue sin idempotencia
@@ -45,6 +53,18 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+/**
+ * Inyección del cliente para tests (simula la deserialización automática de
+ * Upstash sin necesitar UPSTASH_* en el entorno de CI).
+ */
+export function __setRedisClientForTests(client: unknown): void {
+  redis = client as Redis;
+}
+
+export function __resetRedisClientForTests(): void {
+  redis = undefined;
+}
+
 /** Forma normalizada y estable de los datos que definen "el mismo pedido". */
 export interface IdempotencyOrderData {
   tenantId: number | string;
@@ -57,12 +77,25 @@ export interface IdempotencyOrderData {
   customerEmail: string;
   deliveryType?: string | null;
   municipality?: string | null;
+  /** Review Devin #74: la dirección forma parte de la identidad del pedido. */
+  customerAddress?: string | null;
+  /** Review Devin #74: el método/etiqueta de pago también. */
+  paymentMethod?: string | null;
+  /**
+   * Token de intención generado por el cliente (uuid) estable durante un
+   * intento de checkout: distingue un reintento de transporte de una compra
+   * nueva. Sanitizado en el server action; si falta o es inválido se ignora.
+   */
+  attemptToken?: string | null;
 }
 
+/** El token debe ser uuid/slug seguro; cualquier otra cosa se ignora. */
+const ATTEMPT_TOKEN_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
 /**
- * Clave determinista del pedido. Determinismo verificado en
- * tests/unit/checkout-idempotency.test.ts: mismo carrito → misma clave;
- * cualquier cambio de item/cantidad/modificadores/cliente → clave distinta.
+ * Clave del pedido. Con token de intención: SHA-256 del token + fingerprint
+ * de contenido (reintentos del MISMO body → misma clave; compra nueva → otra).
+ * Sin token: fingerprint de contenido puro (determinista, retrocompatible).
  * El prefijo incluye la versión del algoritmo para poder rotarlo sin colisiones.
  */
 export function buildIdempotencyKey(data: IdempotencyOrderData): string {
@@ -76,6 +109,11 @@ export function buildIdempotencyKey(data: IdempotencyOrderData): string {
     .map((item) => `${item.sku}x${item.quantity}+${item.modifiers}`)
     .join(';');
 
+  const token =
+    typeof data.attemptToken === 'string' && ATTEMPT_TOKEN_RE.test(data.attemptToken.trim())
+      ? data.attemptToken.trim()
+      : '';
+
   const fingerprint = [
     String(data.tenantId),
     normalizedItems,
@@ -83,9 +121,13 @@ export function buildIdempotencyKey(data: IdempotencyOrderData): string {
     data.customerEmail.trim().toLowerCase(),
     data.deliveryType ?? '',
     data.municipality ?? '',
+    // Review Devin #74: campos que definen el pedido y antes se omitían.
+    (data.customerAddress ?? '').trim().toLowerCase(),
+    (data.paymentMethod ?? '').trim().toLowerCase(),
+    token ? `token:${token}` : 'token:none',
   ].join('¦');
 
-  return `storelink:idem:v1:${createHash('sha256').update(fingerprint).digest('hex')}`;
+  return `storelink:idem:v2:${createHash('sha256').update(fingerprint).digest('hex')}`;
 }
 
 /**
@@ -119,7 +161,9 @@ export async function releaseCheckoutReservation(key: string): Promise<void> {
 
   try {
     // Solo borra si sigue siendo 'reserved' (no la respuesta ya guardada).
-    const current = await client.get<string>(key);
+    // Nota: 'reserved' no es JSON válido → Upstash lo devuelve como string
+    // aunque automaticDeserialization esté activo (default, doc oficial).
+    const current = await client.get<string | Record<string, unknown>>(key);
     if (current === 'reserved') {
       await client.del(key);
     }
@@ -146,6 +190,13 @@ export async function storeCheckoutResponse(
 /**
  * Espera la respuesta del request dueño del pedido. Devuelve null si no
  * aparece en la ventana de espera (el dueño sigue procesando o falló).
+ *
+ * Review Devin #74: el cliente oficial de Upstash DESERIALIZA automáticamente
+ * los valores JSON (automaticDeserialization activo por defecto, doc oficial:
+ * upstash.com/docs/redis/sdks/ts/advanced) — `get` puede devolver el objeto YA
+ * parseado o el string crudo según el valor. Alineamos ambos lados del
+ * contrato: aceptamos objeto parseado y hacemos JSON.parse solo si llegó
+ * string (sin lanzar si no es JSON).
  */
 export async function waitForCheckoutResponse(
   key: string,
@@ -158,10 +209,18 @@ export async function waitForCheckoutResponse(
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, DUPLICATE_POLL_MS));
     try {
-      const raw = await client.get<string>(key);
-      if (raw && raw !== 'reserved') {
-        return JSON.parse(raw) as unknown;
+      const raw = await client.get<string | Record<string, unknown>>(key);
+      if (raw === null || raw === undefined || raw === 'reserved') continue;
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw) as unknown;
+        } catch {
+          // Valor corrupto no-JSON que no es el sentinel: no bloquear al duplicado.
+          return null;
+        }
       }
+      // Ya deserializado por Upstash (automaticDeserialization).
+      return raw as unknown;
     } catch (err) {
       console.warn('No se pudo leer la respuesta idempotente (fail-open):', err);
       return null;

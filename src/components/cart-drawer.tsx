@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ShoppingBag,
   Plus,
@@ -217,6 +217,21 @@ export function CartDrawer({
     totalVES?: number;
   } | null>(null);
 
+  // Review Devin #74: token de intención del checkout. Se genera en el primer
+  // submit del intento y se conserva hasta la respuesta terminal: un reintento
+  // de transporte del MISMO body reenvía el MISMO token y recibe la respuesta
+  // del dueño (idempotencia), mientras que una compra NUEVA intencional tras
+  // una respuesta terminal genera otro token y crea su propia orden.
+  const checkoutAttemptTokenRef = useRef<string | null>(null);
+
+  const newCheckoutAttemptToken = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Fallback sin crypto.randomUUID (contexts no seguros).
+    return `chk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  };
+
   const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
   // Auditoría 2026-09-04 (P2): tarifa por ZONA. Antes se mostraba "(+$X)" en
   // el selector de municipios pero el total siempre cobraba la tarifa fija.
@@ -318,6 +333,10 @@ export function CartDrawer({
         checkoutNonce: checkoutNonce ?? '',
         honeypotWebsite,
         formRenderedAtMs: formRenderedAtMs || undefined,
+        // Review Devin #74: token de intención estable durante este intento
+        // (ver comentario del ref arriba).
+        idempotencyToken:
+          checkoutAttemptTokenRef.current ?? (checkoutAttemptTokenRef.current = newCheckoutAttemptToken()),
         customer: {
           name: customer.name,
           phone: fullFormattedPhone,
@@ -371,7 +390,13 @@ export function CartDrawer({
       } else {
         alert(response.error || 'Hubo un error al procesar el pedido.');
       }
+      // Respuesta terminal (éxito o error): la siguiente compra es un intento
+      // nuevo → regenerar el token (review Devin #74).
+      checkoutAttemptTokenRef.current = null;
     } catch (err: unknown) {
+      // Fallo de transporte: el body pudo haberse procesado en el servidor sin
+      // respuesta — conservar el token para que el reintento del usuario reciba
+      // la respuesta del dueño en vez de duplicar la orden.
       console.error(err);
       alert('Error de conexión al procesar el pedido.');
     } finally {
