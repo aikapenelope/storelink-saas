@@ -8,6 +8,10 @@ import {
   tryReserveCheckout,
   waitForCheckoutResponse,
 } from '@/lib/checkout-idempotency';
+import {
+  buildCheckoutProcessingResponse,
+  isCheckoutProcessingResponse,
+} from '@/lib/checkout-response';
 
 /**
  * Tests de idempotencia del checkout (auditoría 2026-09-04, P1-2).
@@ -217,5 +221,73 @@ describe('replay con Upstash real (mock con automaticDeserialization)', () => {
     await expect(tryReserveCheckout(key)).resolves.toBe(true);
     await releaseCheckoutReservation(key);
     expect(mock.store.has(key)).toBe(false);
+  });
+});
+
+/**
+ * Review Devin #74 ("Slow retries create duplicate orders"): el resultado
+ * "en proceso" es ESTRUCTURADO (processing: true), nunca texto de error
+ * ambiguo. El carrito decide preservar el token de intención con el type
+ * guard — estos tests fijan el contrato que comparten server y cliente.
+ */
+describe('resultado "en proceso" estructurado (review Devin #74)', () => {
+  it('buildCheckoutProcessingResponse produce la respuesta con processing: true', () => {
+    const res = buildCheckoutProcessingResponse();
+    expect(res.success).toBe(false);
+    expect(res.processing).toBe(true);
+    expect(typeof res.error).toBe('string');
+    expect(res.error.length).toBeGreaterThan(0);
+  });
+
+  it('isCheckoutProcessingResponse distingue en-proceso de éxitos y fallos definitivos', () => {
+    expect(isCheckoutProcessingResponse(buildCheckoutProcessingResponse())).toBe(true);
+    // Éxito definitivo.
+    expect(isCheckoutProcessingResponse({ success: true, orderNumber: 'ORD-1' })).toBe(false);
+    // Fallo definitivo antes de crear la orden.
+    expect(isCheckoutProcessingResponse({ success: false, error: 'Stock insuficiente' })).toBe(false);
+    // Basura / valores no-objeto: nunca true.
+    expect(isCheckoutProcessingResponse(null)).toBe(false);
+    expect(isCheckoutProcessingResponse('processing')).toBe(false);
+    expect(isCheckoutProcessingResponse(undefined)).toBe(false);
+  });
+
+  it('flujo completo: duplicado agotado preserva la reserva; el reintento con el MISMO token recibe la respuesta del dueño', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:slow-retry';
+
+    // El dueño reserva y sigue procesando (sin respuesta aún).
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+
+    // El duplicado NO reserva y su espera corta → respuesta "en proceso"
+    // → el cliente PRESERVA el token (simulado: la respuesta es processing).
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const timedOut = await waitForCheckoutResponse(key, 300);
+    expect(timedOut).toBeNull();
+    const processingResponse = buildCheckoutProcessingResponse();
+    expect(isCheckoutProcessingResponse(processingResponse)).toBe(true);
+
+    // El dueño termina y guarda su respuesta final.
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-9' });
+
+    // El reintento del usuario (mismo token → misma clave) NO reserva pero
+    // SÍ recibe la respuesta del dueño: una sola orden, pantalla de éxito.
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const replay = await waitForCheckoutResponse(key, 500);
+    expect(replay).toEqual({ success: true, orderNumber: 'ORD-9' });
+    expect(isCheckoutProcessingResponse(replay)).toBe(false);
+  });
+
+  it('si el dueño falló (reserva liberada), el reintento con el mismo token se convierte en dueño', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:owner-failed';
+
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    // El dueño falla ANTES de crear la orden → libera la reserva.
+    await releaseCheckoutReservation(key);
+
+    // El reintento (mismo token → misma clave) obtiene el slot y procesa.
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
   });
 });

@@ -24,6 +24,7 @@ import {
 import { formatPrice } from '@/lib/utils';
 import type { ProductItem } from '@/components/storefront-client';
 import { processOrder } from '@/app/actions/checkout';
+import { isCheckoutProcessingResponse } from '@/lib/checkout-response';
 
 export interface CartItem extends ProductItem {
   quantity: number;
@@ -397,11 +398,22 @@ export function CartDrawer({
         // Open WhatsApp directly in new window / app
         window.open(response.whatsappUrl, '_blank');
         onClearCart();
+      } else if (isCheckoutProcessingResponse(response)) {
+        // Review Devin #74 ("Slow retries create duplicate orders"): otro
+        // request idéntico SIGUE en proceso — NO limpiar el token: el
+        // reintento del usuario debe recaer en la MISMA reserva de
+        // idempotencia y recibir la respuesta del dueño, no crear otra orden.
+        alert(response.error);
+        return;
       } else {
+        // Fallo DEFINITIVO antes de crear la orden (validación, stock, zona,
+        // guards…): la reserva ya fue liberada por el servidor y el siguiente
+        // envío es un intento nuevo → limpiar el token.
+        checkoutAttemptTokenRef.current = null;
         alert(response.error || 'Hubo un error al procesar el pedido.');
       }
-      // Respuesta terminal (éxito o error): la siguiente compra es un intento
-      // nuevo → regenerar el token (review Devin #74).
+      // Éxito definitivo: la siguiente compra es un intento nuevo →
+      // regenerar el token (review Devin #74).
       checkoutAttemptTokenRef.current = null;
     } catch (err: unknown) {
       // Fallo de transporte: el body pudo haberse procesado en el servidor sin

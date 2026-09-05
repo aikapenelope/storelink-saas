@@ -19,6 +19,7 @@ import {
   tryReserveCheckout,
   waitForCheckoutResponse,
 } from '@/lib/checkout-idempotency';
+import { buildCheckoutProcessingResponse } from '@/lib/checkout-response';
 import { applyCustomerCrmDelta } from '@/collections/Orders';
 import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
@@ -99,6 +100,15 @@ export interface CheckoutResponse {
   totalVES?: number;
   exchangeRateVES?: number;
   error?: string;
+  /**
+   * Review Devin #74 ("Slow retries create duplicate orders"): true SOLO en
+   * el resultado "en proceso" — un request duplicado agotó la espera de la
+   * respuesta del dueño, pero el dueño puede seguir procesando (PDF, R2,
+   * CRM, Trello). NO es un fallo definitivo: el carrito PRESERVA el token de
+   * intención para que el reintento se adhiere a la reserva existente.
+   * Ausente (undefined) en éxitos y en fallos definitivos.
+   */
+  processing?: boolean;
 }
 
 // R9 (plan v2): acota el tamaño máximo del pedido. Con el lookup en bloque
@@ -665,11 +675,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       if (duplicateResponse) {
         return duplicateResponse as unknown as CheckoutResponse;
       }
-      return {
-        success: false,
-        error:
-          'Ya estamos procesando un pedido idéntico tuyo. Espera unos segundos y revisa tu WhatsApp antes de volver a enviar.',
-      };
+      // Review Devin #74 ("Slow retries create duplicate orders"): la espera
+      // se agotó pero el dueño puede seguir procesando (PDF/R2, persistencia,
+      // CRM, Trello). Respuesta ESTRUCTURADA "en proceso" — el carrito
+      // preserva el token de intención y el reintento se adhiere a la reserva
+      // existente en vez de crear una segunda orden. Si el dueño terminó
+      // fallando, ya liberó la reserva y el reintento se convierte en dueño.
+      return buildCheckoutProcessingResponse();
     }
 
     // Tarifa de delivery configurada por el comercio en Payload.
