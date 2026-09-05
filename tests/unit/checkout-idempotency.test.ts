@@ -290,4 +290,38 @@ describe('resultado "en proceso" estructurado (review Devin #74)', () => {
     // El reintento (mismo token → misma clave) obtiene el slot y procesa.
     await expect(tryReserveCheckout(key)).resolves.toBe(true);
   });
+
+  it('DURABILIDAD: crash del dueño tras crear la orden pero antes de CRM/cola/respuesta final → el reintento RECUPERA la orden', async () => {
+    // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable"):
+    // el replay se persiste INMEDIATAMENTE después de payload.create
+    // (frontera de creación), ANTES de CRM, job queue, revalidación y
+    // escritura de la respuesta final. Simulamos: dueño reserva → crea la
+    // orden → persiste el replay → EL PROCESO MUERE (nada más se ejecuta).
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:durable';
+
+    // Dueño: reserva, crea la orden y persiste el replay en la frontera.
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    // (payload.create ocurriría aquí — representado por el replay inmediato)
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-CRASH' });
+    // El proceso muere: NUNCA llega a CRM, cola, revalidación ni a devolver
+    // la respuesta. La reserva fue REEMPLAZADA por el replay (no queda
+    // 'reserved' en la clave).
+    expect(mock.store.get(key)).not.toBe('reserved');
+
+    // Reintento del usuario (mismo token → misma clave): NO reserva, espera
+    // y RECUPERA la respuesta persistida — una sola orden, pantalla de éxito.
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const replay = await waitForCheckoutResponse(key, 500);
+    expect(replay).toEqual({ success: true, orderNumber: 'ORD-CRASH' });
+    // Ni el release de un fallo posterior ni otro request borran el replay.
+    await releaseCheckoutReservation(key);
+    const afterRelease = mock.store.get(key);
+    expect(afterRelease).not.toBe('reserved');
+    expect(JSON.parse(String(afterRelease))).toEqual({
+      success: true,
+      orderNumber: 'ORD-CRASH',
+    });
+  });
 });

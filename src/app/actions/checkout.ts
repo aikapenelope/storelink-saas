@@ -561,6 +561,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
   // (review Devin #74: toda salida fallida antes de crear la orden libera).
   let idempotencyKey: string | null = null;
   let orderCreated = false;
+  // Review Devin #74 (2ª ronda): se construye y persiste en la frontera de
+  // creación de la orden (7bis); el final de processOrder solo la retorna.
+  let successResponse: CheckoutResponse | null = null;
   try {
     const { tenantSlug, storeName, currency, showVES, customer, items } = request;
 
@@ -842,8 +845,40 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         },
       });
       // La orden EXISTE: a partir de aquí la reserva de idempotencia ya no se
-      // libera (la respuesta final se guarda en la clave al terminar).
+      // libera (la respuesta de replay ya está en la clave — ver abajo).
       orderCreated = true;
+
+      // ------------------------------------------------------------------
+      // 7bis. Replay DURADERO de idempotencia en la frontera de creación
+      // ------------------------------------------------------------------
+      // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable"):
+      // reemplazar ATÓMICAMENTE la reserva ('reserved') por la respuesta de
+      // replay INMEDIATAMENTE después de payload.create. Todo lo que compone
+      // la respuesta (orderNumber, WhatsApp, PDF/R2, totales) ya está
+      // calculado ANTES del create — el CRM, la cola y la revalidación son
+      // pasos posteriores no bloqueantes. Si el proceso serverless muere tras
+      // crear la orden pero antes de escribir la respuesta final, el reintento
+      // con el mismo token recupera ESTA respuesta y ve su pantalla de éxito
+      // en vez de crear una segunda orden. SET con EX es un reemplazo atómico
+      // (nunca convive con el sentinel 'reserved'); releaseCheckoutReservation
+      // solo borra valores 'reserved', así que jamás borra este replay.
+      // Endurecimiento futuro (opción A de Devin): clave idempotente en la
+      // orden con constraint UNIQUE en BD — requiere migración del owner
+      // (anotado en el roadmap, Sprint 1 PR 2).
+      const builtResponse: CheckoutResponse = {
+        success: true,
+        orderNumber,
+        whatsappUrl,
+        pdfBase64,
+        pdfUrl,
+        emailSent: false,
+        // Totales confirmados por el servidor (fuente oficial del pedido).
+        totalUSD: total,
+        totalVES: showVESEffective ? totalVES : undefined,
+        exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
+      };
+      successResponse = builtResponse;
+      await storeCheckoutResponse(idempotencyKey, builtResponse);
 
       // ------------------------------------------------------------------
       // 8. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
@@ -976,23 +1011,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       // Non-blocking in dev
     }
 
-    const successResponse: CheckoutResponse = {
-      success: true,
-      orderNumber,
-      whatsappUrl,
-      pdfBase64,
-      pdfUrl,
-      emailSent: false,
-      // Totales confirmados por el servidor (fuente oficial del pedido).
-      totalUSD: total,
-      totalVES: showVESEffective ? totalVES : undefined,
-      exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
-    };
-
-    // Idempotencia: guardar la respuesta final — los reintentos idénticos
-    // reciben ESTA respuesta (pantalla de éxito) en vez de duplicar la orden.
-    await storeCheckoutResponse(idempotencyKey, successResponse);
-
+    // Review Devin #74 (2ª ronda): la respuesta ya fue PERSISTIDA como replay
+    // en la frontera de creación de la orden (7bis) — los reintentos con el
+    // mismo token la recuperan aunque este proceso muera a partir de aquí.
+    if (!successResponse) {
+      // Inalcanzable: solo se llega aquí tras crear la orden y persistir el
+      // replay. Fail-loud por si el flujo cambia en el futuro.
+      throw new Error('Internal: checkout success response missing after order creation');
+    }
     return successResponse;
   } catch (err: unknown) {
     // Review Devin #74: un fallo ANTES de crear la orden (tasa, numeración,
