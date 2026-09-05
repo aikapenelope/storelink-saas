@@ -18,6 +18,14 @@ jobs:
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/payload-jobs/run?queue=default"
 
+      - name: Verificar salud de la cola (auditoria 2026-09-04, P1-13)
+        # 503 si hay jobs fallidos o un pendiente con >30min: falla el step ->
+        # email de GitHub (la unica alerta push disponible sin infra extra).
+        run: |
+          curl -fsS -m 60 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/admin/jobs-health"
+
       - name: Purgar jobs fallidos antiguos (>30d, plan v2 R2)
         run: |
           curl -fsS -m 120 -X POST \
