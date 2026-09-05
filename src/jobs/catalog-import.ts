@@ -111,6 +111,16 @@ const catalogImportRows: TaskConfig = {
 
       if (!title) continue;
 
+      // Auditoría 2026-09-04 (P3): `parseFloat || 0` convertía celdas vacías o
+      // basura en precio 0 → producto "gratis" en el catálogo (el checkout solo
+      // rechaza si TODA la orden es 0). Una fila sin precio válido es un error
+      // de datos: se cuenta como error y no se importa.
+      if (!(price > 0)) {
+        console.warn(`[storelink][catalog-import] fila ${i + 1} inválida: precio "${cols[priceIdx]}"`);
+        errorCount++;
+        continue;
+      }
+
       try {
         let categoryId: number | undefined;
         if (rawCategory) {
@@ -152,9 +162,19 @@ const catalogImportRows: TaskConfig = {
               description,
               category: categoryId,
               imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
-              stockQuantity,
-              trackStock: stockQuantity !== undefined,
-              stockStatus: stockQuantity === 0 ? 'out_of_stock' : 'in_stock',
+              // Auditoría 2026-09-04 (P2): si la hoja NO trae columna de stock
+              // (stockQuantity === undefined), NO tocar trackStock/stockQuantity:
+              // antes un re-sync sin columna stock ponía trackStock:false en
+              // TODO el catálogo existente y desactivaba el control de
+              // inventario en silencio (overselling). Solo se sobreescriben
+              // cuando el CSV trae el dato. Payload ignora campos undefined.
+              ...(stockQuantity !== undefined
+                ? {
+                    stockQuantity,
+                    trackStock: true,
+                    stockStatus: stockQuantity === 0 ? ('out_of_stock' as const) : ('in_stock' as const),
+                  }
+                : {}),
             },
           });
           productBySku.set(sku, updated as Product);

@@ -46,8 +46,23 @@ jobs:
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
+      # Auditoría 2026-09-04 (P2): antes solo typecheck + test. Sin lint ni
+      # build en CI, errores de boundary server/client y del importMap del
+      # admin llegaban directo al deploy de Vercel, y los advisories de deps
+      # no tenían señal automatizada.
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
       - name: Tests unitarios + integración
         run: pnpm test
+
+      # El build en CI permite PAYLOAD_SECRET de prueba: el fallback del secreto
+      # solo se permite en fase de build (NEXT_PHASE), nunca en runtime prod.
+      - name: Build de producción
+        run: pnpm build
+
+      - name: Audit de dependencias (prod)
+        run: pnpm audit --prod --audit-level high

@@ -1,6 +1,7 @@
 import type {
   CollectionConfig,
   CollectionAfterChangeHook,
+  CollectionAfterDeleteHook,
   Payload,
   PayloadRequest,
   Where,
@@ -70,9 +71,16 @@ const applyVariantStockDelta = async ({
 
   if (checkStock && delta < 0) {
     const requiredQty = -delta;
+    // Auditoría 2026-09-04 (P2): al agotarse el stock por venta, la fila pasa
+    // a out_of_stock (antes solo el import CSV lo hacía) — sin esto el
+    // catálogo seguía mostrando el producto disponible y el checkout lo
+    // rechazaba en el último paso. El ELSE ancla al valor de la columna para
+    // que el CASE resuelva al tipo de stock_status (VARCHAR en prod, ENUM en
+    // BDs pusheadas) sin cast duro.
     const res = (await executor.execute(sql`
       update ${sql.identifier(tableName)}
-      set stock_quantity = stock_quantity + ${delta}
+      set stock_quantity = stock_quantity + ${delta},
+          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else stock_status end
       where _parent_id = ${productId}
         and _order = ${variantRowNumber(variantIndex)}
         and (stock_quantity is null or stock_quantity >= ${requiredQty})
@@ -81,9 +89,15 @@ const applyVariantStockDelta = async ({
     return Boolean(res.rows && res.rows.length > 0);
   }
 
+  // Review Devin #73: al REPONER no se fuerza 'in_stock' en bloque — solo
+  // cuando la fila estaba en stock_quantity = 0 (agotamiento automático por
+  // venta). Un out_of_stock MANUAL del comerciante con stock > 0 se preserva.
   await executor.execute(sql`
     update ${sql.identifier(tableName)}
-    set stock_quantity = stock_quantity + ${delta}
+    set stock_quantity = stock_quantity + ${delta},
+        stock_status = case
+          when stock_quantity = 0 and (stock_quantity + ${delta}) > 0 then 'in_stock'
+          else stock_status end
     where _parent_id = ${productId} and _order = ${variantRowNumber(variantIndex)}
   `);
   return true;
@@ -115,9 +129,13 @@ const applyBaseProductStockDelta = async ({
 
   if (checkStock && delta < 0) {
     const requiredQty = -delta;
+    // Auditoría 2026-09-04 (P2): idem variante — marcar out_of_stock al llegar
+    // a cero por venta. `stock_quantity + delta` referencia al valor VIEJO de
+    // la fila (semántica UPDATE de Postgres), es decir el nuevo stock.
     const res = (await executor.execute(sql`
       update ${sql.identifier(tableName)}
-      set stock_quantity = stock_quantity + ${delta}
+      set stock_quantity = stock_quantity + ${delta},
+          stock_status = case when (stock_quantity + ${delta}) <= 0 then 'out_of_stock' else stock_status end
       where id = ${productId}
         and (track_stock is not true or stock_quantity is null or stock_quantity >= ${requiredQty})
       returning id
@@ -125,10 +143,15 @@ const applyBaseProductStockDelta = async ({
     return Boolean(res.rows && res.rows.length > 0);
   }
 
+  // Review Devin #73: al REPONER no se fuerza 'in_stock' en bloque — solo
+  // cuando la fila estaba en stock_quantity = 0 (agotamiento automático por
+  // venta). Un out_of_stock MANUAL del comerciante con stock > 0 se preserva.
   await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set stock_quantity = stock_quantity + ${delta},
-        stock_status = case when ${delta} > 0 then 'in_stock' else stock_status end
+        stock_status = case
+          when stock_quantity = 0 and (stock_quantity + ${delta}) > 0 then 'in_stock'
+          else stock_status end
     where id = ${productId}
   `);
   return true;
@@ -137,31 +160,20 @@ const applyBaseProductStockDelta = async ({
 /**
  * Reconciliación CRM cancel↔activo (auditoría 2026-09-01 + review Devin #65).
  *
- * ⚠️ GATEADA por CRM_RECONCILIATION_ENABLED. Hoy = false:
- *   - Hallazgos Devin #65 §1 y §3: el upsert del checkout (upsertCustomerCrm)
- *     y este delta dependen del schema de Customers, que en producción está en
- *     DRIFT: la migración 20260901_2_customers_crm_expansion guardó el grupo
- *     `preferences` como JSONB, pero Payload 3.88 aplana los grupos en
- *     columnas (preferences_*) y crea tablas para los arrays. Cualquier op
- *     Local API sobre customers falla ahí. Este delta ya NO escribe a
- *     `preferences_average_order_value` (columna inexistente → tx ABORTED →
- *     cancelación revertida en silencio): usa SOLO columnas reales
- *     (total_orders, total_spent, tag) sobre un EJECUTOR AISLADO de la
- *     transacción del request (adapter.drizzle, no la sesión de la tx) — así
- *     un fallo del CRM no puede abortar el pedido ni el inventario.
- *   - Hallazgo Devin #65 §2 (aún abierto): orders creadas fuera del checkout
- *     nunca incrementan el CRM; restar en cancelación descontaría compras no
- *     contadas. ANTES de poner la flag en true hay que resolverlo (track
- *     persistido `crmCounted` en orders o centralizar el incremento del CRM
- *     en el hook para TODOS los canales de creación), junto con la migración
- *     de reparación del schema.
+ * GATEADA por CRM_RECONCILIATION_ENABLED. Hoy = true (activada en PR #67
+ * tras aplicar la migración de reparación P0-B del schema de Customers,
+ * commit c6f95d5/a4609ed): la flag `crmCounted` en orders garantiza que solo
+ * se resta un incremento CRM que realmente committeó en el checkout, y el
+ * delta usa SOLO columnas reales (total_orders, total_spent, tag) sobre un
+ * EJECUTOR AISLADO de la transacción del request (adapter.drizzle, no la
+ * sesión de la tx) — así un fallo del CRM no puede abortar el pedido ni la
+ * reposición de stock.
  *
- * Al activar (P0-B):
- *   1. Migración de reparación de Customers (generar con `migrate:create` en
- *      local): drop de preferences/purchase_history JSONB → columnas
- *      aplanadas + tablas + backfill.
+ * Historial de la activación (P0-B):
+ *   1. Migración de reparación de Customers (drop de preferences/purchase_history
+ *      JSONB → columnas aplanadas + tablas + backfill).
  *   2. Track de órdenes contadas en orders (`crmCounted`).
- *   3. Establecer CRM_RECONCILIATION_ENABLED = true.
+ *   3. CRM_RECONCILIATION_ENABLED = true (estado actual).
  *
  * El tag se recalcula con los MISMOS umbrales de upsertCustomerCrm
  * (orders >= 3 || spent >= 50 → vip; si no frecuente; 0 → inactivo).
@@ -206,6 +218,242 @@ export const applyCustomerCrmDelta = async ({
   // crudo sobre el JSONB incurre en el riesgo de naming documentado en
   // AGENTS.md. Se recalcula en la migración P0-B (backfill) y en upsertCustomerCrm
   // (que corre vía Local API y pasa por la transformación oficial de Payload).
+};
+
+/** Cantidades agregadas por SKU (los ítems sin SKU legacy no son ajustables). */
+const qtyBySkuOf = (
+  items: Array<{ sku?: string | null; quantity?: number | null }> | null | undefined,
+): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const item of items ?? []) {
+    if (!item.sku) continue;
+    const qty = Number(item.quantity) || 0;
+    map.set(item.sku, (map.get(item.sku) || 0) + qty);
+  }
+  return map;
+};
+
+/**
+ * Resolvedor de productos por SKU compartido por los tres caminos del hook
+ * (alta/cancelación/edición): UN solo payload.find para todos los SKUs y
+ * mapas O(1), mismo patrón que checkout.ts §verifyAndPriceItems. Items sin
+ * SKU (legacy) caen al fallback individual por título.
+ */
+const fetchProductResolver = async ({
+  payload,
+  req,
+  tenantId,
+  items,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  tenantId: number | string | null | undefined;
+  items: Array<{ sku?: string | null; title?: string | null }>;
+}): Promise<{
+  getProduct: (item: { sku?: string | null; title?: string | null }) => Promise<Product | null>;
+}> => {
+  const skus = items
+    .map((i) => i.sku)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+
+  const batchRes = skus.length > 0
+    ? await payload.find({
+        collection: 'products',
+        where: {
+          and: [
+            ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+            { or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }] },
+          ],
+        },
+        limit: Math.max(skus.length, 1),
+        depth: 0,
+        overrideAccess: true,
+        req,
+      })
+    : { docs: [] as Product[] };
+
+  const baseBySku = new Map<string, Product>();
+  const variantOwnerBySku = new Map<string, Product>();
+  for (const p of batchRes.docs as Product[]) {
+    if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
+    for (const v of Array.isArray(p.variants) ? p.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
+    }
+  }
+
+  const getProduct = async (
+    item: { sku?: string | null; title?: string | null },
+  ): Promise<Product | null> => {
+    if (item.sku) {
+      return baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku) ?? null;
+    }
+    if (!item.title) return null;
+    // Fallback: título sin SKU — una query individual (caso legacy infrecuente)
+    const whereQuery: Where = {
+      and: [
+        ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+        { title: { equals: item.title } },
+      ],
+    };
+    const productRes = await payload.find({
+      collection: 'products',
+      where: whereQuery,
+      limit: 1,
+      overrideAccess: true,
+      req,
+    });
+    return (productRes.docs[0] as Product) ?? null;
+  };
+
+  return { getProduct };
+};
+
+/**
+ * Reposición de stock (sin checkStock) compartida por la cancelación y el
+ * borrado de órdenes activas. Simétrica a la deducción del alta.
+ */
+const restoreStockForItems = async ({
+  payload,
+  req,
+  tenantId,
+  items,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  tenantId: number | string | null | undefined;
+  items: Array<{ sku?: string | null; title?: string | null; quantity?: number | null }>;
+}): Promise<void> => {
+  const { getProduct } = await fetchProductResolver({ payload, req, tenantId, items });
+  for (const item of items) {
+    const prod = await getProduct(item);
+    if (!prod) continue;
+
+    const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
+    const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
+
+    if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
+      const qtyToRestore = Number(item.quantity) || 1;
+      await applyVariantStockDelta({
+        payload,
+        req,
+        productId: prod.id,
+        variantIndex,
+        delta: qtyToRestore,
+      });
+      continue;
+    }
+
+    if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
+
+    const qtyToRestore = Number(item.quantity) || 1;
+    await applyBaseProductStockDelta({
+      payload,
+      req,
+      productId: prod.id,
+      delta: qtyToRestore,
+    });
+  }
+};
+
+/**
+ * Delta de stock por EDICIÓN de ítems de una orden activa (auditoría
+ * 2026-09-04, P1): antes, editar la cantidad de una orden no ajustaba stock y
+ * la cancelación posterior reponía la cantidad EDITADA (no la deducida
+ * original) → deriva de inventario silenciosa en ambas direcciones. Ahora el
+ * delta por SKU entre previousDoc.items y doc.items deduce los aumentos (con
+ * checkStock: la edición se rechaza si no hay inventario) y repone las
+ * disminuciones. Ítems sin SKU (legacy) no son ajustables.
+ */
+const applyStockDeltasForEdit = async ({
+  payload,
+  req,
+  tenantId,
+  previousItems,
+  newItems,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  tenantId: number | string | null | undefined;
+  previousItems: Array<{ sku?: string | null; quantity?: number | null }>;
+  newItems: Array<{ sku?: string | null; quantity?: number | null }>;
+}): Promise<boolean> => {
+  const oldQty = qtyBySkuOf(previousItems);
+  const newQty = qtyBySkuOf(newItems);
+
+  // Convención de applyBaseProductStockDelta/applyVariantStockDelta:
+  // delta POSITIVO repone stock, NEGATIVO deduce. El alta ya dedujo oldQty,
+  // así que frente a newQty: aumentar cantidad = deducción ADICIONAL (delta
+  // negativo por la diferencia); disminuir/eliminar = reposición PARCIAL o
+  // total (delta positivo). Review Devin #73: el signo estaba invertido en
+  // ambas direcciones y CADA edición corrompía el inventario.
+  const deltas: Array<{ sku: string; delta: number }> = [];
+  for (const [sku, qty] of newQty) {
+    const diff = (oldQty.get(sku) || 0) - qty;
+    if (diff !== 0) deltas.push({ sku, delta: diff });
+  }
+  for (const [sku, qty] of oldQty) {
+    if (!newQty.has(sku) && qty !== 0) deltas.push({ sku, delta: qty });
+  }
+  if (deltas.length === 0) return false;
+
+  const { getProduct } = await fetchProductResolver({
+    payload,
+    req,
+    tenantId,
+    items: deltas.map(({ sku }) => ({ sku })),
+  });
+
+  for (const { sku, delta } of deltas) {
+    const prod = await getProduct({ sku });
+    if (!prod) continue;
+
+    const variantIndex = findVariantIndexBySku(prod.variants, sku);
+    const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
+
+    if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
+      if (delta < 0) {
+        const success = await applyVariantStockDelta({
+          payload,
+          req,
+          productId: prod.id,
+          variantIndex,
+          delta,
+          checkStock: true,
+        });
+        if (!success) {
+          throw new APIError(
+            `Stock insuficiente para "${matchedVariant.name || prod.title}". No quedan unidades disponibles.`,
+            400,
+          );
+        }
+      } else {
+        await applyVariantStockDelta({ payload, req, productId: prod.id, variantIndex, delta });
+      }
+      continue;
+    }
+
+    if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
+
+    if (delta < 0) {
+      const success = await applyBaseProductStockDelta({
+        payload,
+        req,
+        productId: prod.id,
+        delta,
+        checkStock: true,
+      });
+      if (!success) {
+        throw new APIError(
+          `Stock insuficiente para "${prod.title}". No quedan unidades disponibles.`,
+          400,
+        );
+      }
+    } else {
+      await applyBaseProductStockDelta({ payload, req, productId: prod.id, delta });
+    }
+  }
+
+  return true;
 };
 
 /**
@@ -258,63 +506,42 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // 2. Pedido cancelado -> Reponer inventario
   const isCancelled = previousStatus && previousStatus !== 'cancelled' && currentStatus === 'cancelled';
 
-  // Si no hay transición de inventario relevante, salimos sin tocar la BD.
-  if (!isNewlyCreatedActive && !isReactivated && !isCancelled) return doc;
-
-  // Sprint 3 — batch fetch: UN solo payload.find para todos los SKUs del pedido,
-  // igual que checkout.ts §verifyAndPriceItems. Evita N queries secuenciales.
-  const skus = (doc.items as Array<{ sku?: string | null }>)
-    .map((i) => i.sku)
-    .filter((s): s is string => typeof s === 'string' && s.length > 0);
-
-  const batchRes = skus.length > 0
-    ? await payload.find({
-        collection: 'products',
-        where: {
-          and: [
-            ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
-            { or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }] },
-          ],
-        },
-        limit: Math.max(skus.length, 1),
-        depth: 0,
-        overrideAccess: true,
+  // Si no hay transición de inventario relevante, puede ser una EDICIÓN de
+  // ítems (auditoría 2026-09-04, P1): ajustar stock por delta de cantidad.
+  // Aumento → deducción con checkStock (rechaza la edición si no hay stock,
+  // dentro de la misma tx); disminución → reposición. Si nada cambió, salir
+  // sin tocar la BD.
+  // Review Devin #73: una edición sobre una orden CANCELADA (cancelled→
+  // cancelled) NO ajusta inventario — sus cantidades ya fueron repuestas y no
+  // están reservadas; tocarlas corrumpía el stock en ambas direcciones.
+  if (!isNewlyCreatedActive && !isReactivated && !isCancelled) {
+    if (operation === 'update' && currentStatus !== 'cancelled') {
+      const adjusted = await applyStockDeltasForEdit({
+        payload,
         req,
-      })
-    : { docs: [] as Product[] };
-
-  // Mapas para lookup O(1) por SKU base y SKU de variante.
-  const baseBySku = new Map<string, Product>();
-  const variantOwnerBySku = new Map<string, Product>();
-  for (const p of batchRes.docs as Product[]) {
-    if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
-    for (const v of Array.isArray(p.variants) ? p.variants : []) {
-      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
+        tenantId,
+        previousItems: (previousDoc?.items ?? []) as Array<{
+          sku?: string | null;
+          quantity?: number | null;
+        }>,
+        newItems: doc.items as Array<{ sku?: string | null; quantity?: number | null }>,
+      });
+      if (!adjusted) return doc;
+      // Stock ajustado: continuar hasta la invalidación de caché del final
+      // del hook (el storefront debe reflejar el nuevo stock).
+    } else {
+      return doc;
     }
   }
 
-  // Lookup O(1) para items con SKU; fallback individual por título (legacy).
-  const getProduct = async (item: { sku?: string | null; title?: string | null }): Promise<Product | null> => {
-    if (item.sku) {
-      return baseBySku.get(item.sku) ?? variantOwnerBySku.get(item.sku) ?? null;
-    }
-    if (!item.title) return null;
-    // Fallback: título sin SKU — una query individual (caso legacy infrecuente)
-    const whereQuery: Where = {
-      and: [
-        ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
-        { title: { equals: item.title } },
-      ],
-    };
-    const productRes = await payload.find({
-      collection: 'products',
-      where: whereQuery,
-      limit: 1,
-      overrideAccess: true,
-      req,
-    });
-    return (productRes.docs[0] as Product) ?? null;
-  };
+  // Sprint 3 — batch fetch: UN solo payload.find para todos los SKUs del pedido
+  // (helper compartido, mismo patrón que checkout.ts §verifyAndPriceItems).
+  const { getProduct } = await fetchProductResolver({
+    payload,
+    req,
+    tenantId,
+    items: doc.items as Array<{ sku?: string | null; title?: string | null }>,
+  });
 
   if (isNewlyCreatedActive || isReactivated) {
     for (const item of doc.items) {
@@ -362,35 +589,16 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       }
     }
   } else if (isCancelled) {
-    for (const item of doc.items) {
-      const prod = await getProduct(item);
-      if (!prod) continue;
-
-      const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
-      const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
-
-      if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
-        const qtyToRestore = Number(item.quantity) || 1;
-        await applyVariantStockDelta({
-          payload,
-          req,
-          productId: prod.id,
-          variantIndex,
-          delta: qtyToRestore,
-        });
-        continue;
-      }
-
-      if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
-
-      const qtyToRestore = Number(item.quantity) || 1;
-      await applyBaseProductStockDelta({
-        payload,
-        req,
-        productId: prod.id,
-        delta: qtyToRestore,
-      });
-    }
+    await restoreStockForItems({
+      payload,
+      req,
+      tenantId,
+      items: doc.items as Array<{
+        sku?: string | null;
+        title?: string | null;
+        quantity?: number | null;
+      }>,
+    });
   }
 
   // Reconciliación CRM cancel↔activo (review Devin #65 → flag CRM_RECONCILIATION_ENABLED).
@@ -477,6 +685,91 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   return doc;
 };
 
+/**
+ * Auditoría 2026-09-04 (P1): borrar una orden ACTIVA no reponía el stock —
+ * no existía afterDelete y la deducción del alta quedaba permanente (pérdida
+ * de inventario irreversible, sin traza). Misma semántica que la cancelación
+ * (reposición sin checkStock).
+ *
+ * Review Devin #73 (2 fixes):
+ * 1. La reposición corre DENTRO de la transacción del request (misma sesión
+ *    Postgres vía req.transactionID): si falla, se RELANZA el error → Payload
+ *    hace rollback del borrado (la orden sigue existiendo) y el admin ve el
+ *    fallo en pantalla. Antes el catch suprimía el error tras borrar la orden
+ *    y el inventario quedaba deducido sin fuente de reintento.
+ * 2. Borrar una orden activa con crmCounted=true resta el delta del CRM
+ *    (best-effort, mismo criterio que la cancelación) — antes el total del
+ *    cliente quedaba inflado para siempre.
+ */
+const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, req }) => {
+  if (req.context?.skipInventoryHook) return doc;
+
+  const status = doc?.status || 'pending';
+  if (status === 'cancelled') return doc;
+  if (!doc?.items || !Array.isArray(doc.items) || doc.items.length === 0) return doc;
+
+  const { payload } = req;
+  const tenantId = typeof doc.tenant === 'object' ? doc.tenant?.id : doc.tenant;
+
+  // Reconciliación CRM del borrado (review Devin #73): solo órdenes activas
+  // con incremento CRM REALMENTE committeado. Best-effort: un fallo se loguea
+  // para reconciliación manual pero NO aborta el borrado (misma política que
+  // la cancelación — applyCustomerCrmDelta usa ejecutor aislado de la tx).
+  const customerPhone =
+    doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
+  const totalAmount = Number(doc.totalAmount);
+  if (
+    CRM_RECONCILIATION_ENABLED &&
+    tenantId != null &&
+    customerPhone &&
+    Number.isFinite(totalAmount) &&
+    totalAmount > 0 &&
+    (doc as unknown as { crmCounted?: boolean }).crmCounted === true
+  ) {
+    try {
+      await applyCustomerCrmDelta({
+        payload,
+        tenantId,
+        phone: customerPhone,
+        totalAmount,
+        sign: -1,
+      });
+    } catch (crmErr) {
+      console.error(
+        `[storelink][orders][${doc.id}] reconciliación CRM en borrado falló (non-blocking):`,
+        crmErr
+      );
+    }
+  }
+
+  // SIN try/catch: si la reposición falla, el error sube y Payload revierte el
+  // borrado (la orden sigue existiendo y se puede reintentar). Lanzar APIError
+  // con mensaje accionable para el admin; el detalle técnico queda logueado.
+  try {
+    await restoreStockForItems({
+      payload,
+      req,
+      tenantId,
+      items: doc.items as Array<{
+        sku?: string | null;
+        title?: string | null;
+        quantity?: number | null;
+      }>,
+    });
+  } catch (err) {
+    console.error(
+      `[storelink][orders][${doc.id}] reposición de stock en borrado falló → rollback del borrado:`,
+      err
+    );
+    throw new APIError(
+      'No se pudo liberar el inventario asociado a esta orden. El borrado fue cancelado; reintenta en unos segundos.',
+      500
+    );
+  }
+
+  return doc;
+};
+
 export const Orders: CollectionConfig = {
   slug: 'orders',
   admin: {
@@ -487,6 +780,8 @@ export const Orders: CollectionConfig = {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
     afterChange: [manageOrderInventoryHook],
+    // Auditoría 2026-09-04 (P1): reponer stock al borrar una orden activa.
+    afterDelete: [restoreInventoryOnDeleteHook],
   },
   access: {
     // Audit fix: sin tenants asignados no se puede leer/escribir pedidos

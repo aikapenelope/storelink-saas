@@ -25,6 +25,9 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Auditoría 2026-09-04 (P2 SEO): sin metadataBase, las URLs de OG/canonical
+  // relativas se resuelven mal en el HTML final.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'),
   title: 'Flow by Martes — Tu negocio vendiendo 24/7 en piloto automático | 0% Comisiones',
   description:
     'Flow by Martes — Tu negocio vendiendo 24/7 en piloto automático con agentes de IA oficiales, catálogo interactivo y e-commerce de estándar internacional. 0% comisiones.',
@@ -39,8 +42,8 @@ export const viewport: Viewport = {
   themeColor: '#7c3aed',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Auditoría 2026-09-04 (a11y): se eliminan maximumScale/userScalable:false —
+  // bloquear el zoom falla WCAG 1.4.4 (Resize Text) y penaliza en Lighthouse.
 };
 
 export default function AppLayout({

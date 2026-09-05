@@ -65,7 +65,7 @@ export async function getOrderKpis(
       COALESCE(SUM(total_amount) FILTER (WHERE status != 'cancelled' OR status IS NULL), 0)::float8 AS total_usd,
       COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} AND (status != 'cancelled' OR status IS NULL)) AS today_count,
       COALESCE(SUM(total_amount) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ} AND (status != 'cancelled' OR status IS NULL)), 0)::float8 AS today_usd,
-      COUNT(*) FILTER (WHERE status IN ('pending', 'preparing', 'in_delivery') OR status IS NULL) AS pending_count
+      COUNT(*) FILTER (WHERE status IN ('pending', 'confirmed', 'preparing', 'in_delivery') OR status IS NULL) AS pending_count
     FROM ${ordersTable}
     WHERE 1=1 ${t}
   `);

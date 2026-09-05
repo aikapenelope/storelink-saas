@@ -64,6 +64,11 @@ export async function generateMetadata({
       return {
         title,
         description,
+        // Auditoría 2026-09-04 (P1 SEO): canonical explícito — sin él, URLs con
+        // parámetros o variantes de ruta se indexan como contenido duplicado.
+        alternates: {
+          canonical: `/${doc.slug || tenantSlug}`,
+        },
         openGraph: {
           title,
           description,
@@ -169,14 +174,19 @@ export default async function TenantStorefrontPage({
             : undefined,
           stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
           trackStock: Boolean(prod.trackStock),
-          stockQuantity: prod.stockQuantity ? Number(prod.stockQuantity) : undefined,
+          // Auditoría 2026-09-04 (P2): `prod.stockQuantity ?` convertía el 0
+          // (falsy) en undefined y el catálogo mostraba "disponible" para
+          // productos exactamente agotados. Chequeo por tipo.
+          stockQuantity:
+            typeof prod.stockQuantity === 'number' ? Number(prod.stockQuantity) : undefined,
           featured: Boolean(prod.featured),
           variants: Array.isArray(prod.variants)
             ? prod.variants.map((v) => ({
                 name: v.name,
                 sku: v.sku || undefined,
                 price: Number(v.price) || 0,
-                stockQuantity: v.stockQuantity ? Number(v.stockQuantity) : undefined,
+                stockQuantity:
+                  typeof v.stockQuantity === 'number' ? Number(v.stockQuantity) : undefined,
                 stockStatus: (v.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
               }))
             : [],
@@ -247,16 +257,58 @@ export default async function TenantStorefrontPage({
     if (errorObject?.digest?.startsWith('NEXT_NOT_FOUND') || errorObject?.message === 'NEXT_NOT_FOUND') {
       throw err;
     }
-    console.error('Error fetching tenant products from Payload:', err);
+    // Higiene de logs (auditoría 2026-09-04): el error crudo puede traer PII;
+    // se loguea el digest para correlacionar con Vercel y el tenant afectado.
+    console.error(
+      `[storelink][storefront] Error cargando productos del tenant "${tenantSlug}":`,
+      errorObject?.digest ?? errorObject?.message ?? 'unknown error'
+    );
     notFound();
   }
 
+  // Auditoría 2026-09-04 (P1 SEO): JSON-LD estructurado (schema.org ItemList →
+  // Product/Offer). Un e-commerce sin rich results pierde precio/disponibilidad
+  // en el buscador; los datos ya están en el RSC, el costo es un <script>.
+  // `</` se escapa para que un título con "</script>" no rompa el HTML.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `Catálogo de ${tenantConfig.name}`,
+    numberOfItems: products.length,
+    itemListElement: products.slice(0, 50).map((p, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      item: {
+        '@type': 'Product',
+        name: p.title,
+        sku: p.sku,
+        image: p.images?.[0]?.url,
+        offers: {
+          '@type': 'Offer',
+          price: p.price.toFixed(2),
+          priceCurrency: 'USD',
+          availability:
+            p.stockStatus === 'out_of_stock'
+              ? 'https://schema.org/OutOfStock'
+              : 'https://schema.org/InStock',
+        },
+      },
+    })),
+  };
+  const jsonLdScript = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+
   return (
-    <StorefrontClient
-      tenant={tenantConfig!}
-      products={products}
-      categories={categories}
-      checkoutNonce={issueCheckoutNonce(tenantConfig!.slug)}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript }}
+      />
+      <StorefrontClient
+        tenant={tenantConfig!}
+        products={products}
+        categories={categories}
+        checkoutNonce={issueCheckoutNonce(tenantConfig!.slug)}
+      />
+    </>
   );
 }

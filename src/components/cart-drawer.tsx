@@ -205,14 +205,29 @@ export function CartDrawer({
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  // Auditoría 2026-09-04 (P1 privacidad): el checkout recolecta nombre,
+  // teléfono, email y dirección sin aviso ni consentimiento. Checkbox
+  // obligatorio + enlace al Aviso de Privacidad (/privacidad).
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<{
     orderNumber: string;
     whatsappUrl: string;
     pdfBase64?: string;
+    totalUSD?: number;
+    totalVES?: number;
   } | null>(null);
 
   const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
-  const deliveryFee = deliveryType === 'delivery' ? Number(deliveryConfig?.fixedPrice || 0) : 0;
+  // Auditoría 2026-09-04 (P2): tarifa por ZONA. Antes se mostraba "(+$X)" en
+  // el selector de municipios pero el total siempre cobraba la tarifa fija.
+  // Espejo exacto de la resolución server-side en checkout.ts (la fuente de
+  // verdad sigue siendo el servidor; esto evita que el cliente vea un total
+  // distinto al que se le cobra).
+  const selectedZone = deliveryConfig?.zones?.find((z) => z.name === customer.municipality);
+  const zoneDeliveryPrice =
+    selectedZone && typeof selectedZone.priceDelivery === 'number' ? selectedZone.priceDelivery : null;
+  const deliveryFee =
+    deliveryType === 'delivery' ? (zoneDeliveryPrice ?? Number(deliveryConfig?.fixedPrice || 0)) : 0;
   const total = itemsSubtotal + deliveryFee;
   const totalVES = total * exchangeRateVES;
 
@@ -257,6 +272,11 @@ export function CartDrawer({
         alert('Por favor completa los tres campos obligatorios de la dirección de delivery.');
         return;
       }
+    }
+
+    if (!acceptedPrivacy) {
+      alert('Por favor acepta el Aviso de Privacidad para continuar con tu pedido.');
+      return;
     }
 
     // Format payment details label for backend & WhatsApp
@@ -340,6 +360,9 @@ export function CartDrawer({
           orderNumber: response.orderNumber,
           whatsappUrl: response.whatsappUrl,
           pdfBase64: response.pdfBase64,
+          // Totales confirmados por el servidor (fuente oficial del pedido).
+          totalUSD: response.totalUSD,
+          totalVES: response.totalVES,
         });
 
         // Open WhatsApp directly in new window / app
@@ -398,7 +421,22 @@ export function CartDrawer({
               </div>
               <h3 className="text-xl font-black text-slate-900 mb-1">¡Pedido Registrado con Éxito!</h3>
               <p className="text-xs text-slate-500 font-mono mb-4">N° de Orden: #{completedOrder.orderNumber}</p>
-              
+
+              {/* Totales confirmados por el SERVIDOR (auditoría 2026-09-04): la
+                  tasa mostrada durante el armado del carrito venía del HTML
+                  ISR (hasta 5 min de antigüedad); el pedido usa la resuelta en
+                  vivo. Este monto es el oficial que cobra el comercio. */}
+              {typeof completedOrder.totalUSD === 'number' && (
+                <p className="text-sm font-black text-slate-900 mb-4">
+                  Monto confirmado: {formatPrice(completedOrder.totalUSD, currency)}
+                  {typeof completedOrder.totalVES === 'number' && completedOrder.totalVES > 0 && (
+                    <span className="block text-xs text-slate-600 font-mono font-bold mt-0.5">
+                      Bs. {completedOrder.totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </p>
+              )}
+
               {/* Friendly Reminder Box */}
               <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 text-left text-xs text-amber-950 space-y-2 mb-6 w-full shadow-xs">
                 <div className="flex items-center gap-2 font-black text-amber-900">
@@ -1424,6 +1462,33 @@ export function CartDrawer({
                     className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs font-medium"
                   />
                 </div>
+
+                {/* Consentimiento de privacidad (auditoría 2026-09-04, P1):
+                    el checkout recolecta PII (nombre, teléfono, email,
+                    dirección) sin aviso previo. Checkbox obligatorio antes del
+                    submit con enlace al aviso completo. */}
+                <label className="flex items-start gap-2 text-[11px] text-slate-600 leading-snug pt-1">
+                  <input
+                    type="checkbox"
+                    checked={acceptedPrivacy}
+                    onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                    className="mt-0.5 accent-emerald-600 flex-shrink-0"
+                  />
+                  <span>
+                    Acepto que la tienda trate mis datos (nombre, teléfono, correo y dirección) para
+                    gestionar este pedido, conforme al{' '}
+                    <a
+                      href="/privacidad"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline font-semibold text-emerald-700"
+                    >
+                      Aviso de Privacidad
+                    </a>
+                    . Parte de la información se comparte vía WhatsApp y con el operador de despacho
+                    de la tienda.
+                  </span>
+                </label>
               </form>
             </>
           )}
@@ -1439,7 +1504,7 @@ export function CartDrawer({
                   <span className="font-mono text-slate-800 font-bold">{formatPrice(itemsSubtotal, currency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-500 font-medium">
-                  <span>Tarifa Fija Delivery:</span>
+                  <span>Tarifa Delivery:</span>
                   <span className="font-mono text-emerald-600 font-bold">+{formatPrice(deliveryFee, currency)}</span>
                 </div>
               </div>
