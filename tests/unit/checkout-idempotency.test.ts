@@ -85,7 +85,6 @@ describe('buildIdempotencyKey', () => {
 
   // Review Devin #74: el pedido también lo definen dirección y pago.
   it('cambiar dirección o método de pago cambia la clave', () => {
-    const base = buildIdempotencyKey(baseOrder);
     expect(
       buildIdempotencyKey({ ...baseOrder, customerAddress: 'Av. Principal, Casa 5' })
     ).not.toBe(buildIdempotencyKey({ ...baseOrder, customerAddress: 'Otra dirección' }));
