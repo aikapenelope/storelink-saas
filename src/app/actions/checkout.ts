@@ -613,28 +613,42 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // (deliveryConfig.zones[].priceDelivery) y el cliente seleccionó un
     // municipio con tarifa, se cobra ESA tarifa — antes se ignoraba y se
     // cobraba siempre la fija aunque la UI anunciara "(+$X)" en el selector.
-    // Review Devin #73: si hay zonas y el municipio NO coincide con ninguna
-    // (p.ej. página ISR desactualizada tras renombrar una zona), la tarifa NO
-    // puede caer a la fija/0 — se cobra el piso: la zona MÁS BARATA. Siempre
-    // es preferible cobrar de menos a un comercio que cobrar de más o gratis.
+    //
+    // Review Devin #73 (2ª ronda): cuando el tenant tiene zonas, el selector
+    // del carrito SOLO ofrece nombres de zona. Un municipio que no coincide
+    // con ninguna zona (default del drawer sin tocar, o ISR desactualizada
+    // tras renombrar zonas) se RECHAZA con error controlado pidiendo
+    // re-selección — nunca se inventa un precio (piso de zona mínima) ni se
+    // cae a la fija/0, porque la orden guardaría un total distinto al que el
+    // cliente vio. Cliente y servidor solo aceptan casos con montos idénticos:
+    //   - tenant SIN zonas → fixedPrice (idéntico en ambos lados)
+    //   - tenant CON zonas + municipio válido → priceDelivery de la zona
+    //     (o fixedPrice si la zona matchea sin precio numérico — también
+    //     idéntico al espejo del drawer)
     const deliveryZones = Array.isArray(tenantDoc.deliveryConfig?.zones)
       ? tenantDoc.deliveryConfig!.zones
       : [];
-    const zonePrices = deliveryZones
-      .map((z) => (typeof z.priceDelivery === 'number' ? z.priceDelivery : null))
-      .filter((p): p is number => p !== null);
-    const minZonePrice = zonePrices.length > 0 ? Math.min(...zonePrices) : null;
-    const selectedZone = customer.deliveryDetails?.municipality
-      ? deliveryZones.find((z) => z.name === customer.deliveryDetails?.municipality)
-      : undefined;
+    const selectedMunicipality = customer.deliveryDetails?.municipality?.trim() ?? '';
+    let selectedZone: (typeof deliveryZones)[number] | undefined;
+    if (customer.deliveryType === 'delivery' && deliveryZones.length > 0) {
+      selectedZone = selectedMunicipality
+        ? deliveryZones.find((z) => z.name === selectedMunicipality)
+        : undefined;
+      if (!selectedZone) {
+        return {
+          success: false,
+          error:
+            'Tu zona de entrega ya no es válida para esta tienda. Por favor selecciona nuevamente tu municipio e inténtalo de nuevo.',
+        };
+      }
+    }
     const zonePrice =
       selectedZone && typeof selectedZone.priceDelivery === 'number'
         ? selectedZone.priceDelivery
         : null;
     const deliveryFee =
       customer.deliveryType === 'delivery'
-        ? (zonePrice ??
-          (minZonePrice !== null ? minZonePrice : Number(tenantDoc.deliveryConfig?.fixedPrice || 0)))
+        ? (zonePrice ?? Number(tenantDoc.deliveryConfig?.fixedPrice || 0))
         : 0;
 
     const total = itemsSubtotal + deliveryFee;

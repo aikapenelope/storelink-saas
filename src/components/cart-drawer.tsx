@@ -195,12 +195,22 @@ export function CartDrawer({
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Review Devin #73 (2ª ronda): cuando el tenant define zonas, el estado
+  // inicial del municipio debe ser una zona VÁLIDA (la primera) — el default
+  // fijo "Municipio Chacao" no coincide con ninguna opción del selector y el
+  // envío sin tocar el select sería rechazado por el servidor con un total
+  // mostrado distinto. Sin zonas se mantiene el default de Caracas.
+  const initialMunicipality =
+    deliveryConfig?.zones && deliveryConfig.zones.length > 0
+      ? (deliveryConfig.zones.find((z) => z.name)?.name ?? 'Municipio Chacao')
+      : 'Municipio Chacao';
+
   const [customer, setCustomer] = useState({
     name: '',
     email: '',
     address: '',
     buildingHouse: '',
-    municipality: 'Municipio Chacao',
+    municipality: initialMunicipality,
     notes: '',
   });
 
