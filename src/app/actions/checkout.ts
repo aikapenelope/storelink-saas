@@ -613,9 +613,17 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // (deliveryConfig.zones[].priceDelivery) y el cliente seleccionó un
     // municipio con tarifa, se cobra ESA tarifa — antes se ignoraba y se
     // cobraba siempre la fija aunque la UI anunciara "(+$X)" en el selector.
+    // Review Devin #73: si hay zonas y el municipio NO coincide con ninguna
+    // (p.ej. página ISR desactualizada tras renombrar una zona), la tarifa NO
+    // puede caer a la fija/0 — se cobra el piso: la zona MÁS BARATA. Siempre
+    // es preferible cobrar de menos a un comercio que cobrar de más o gratis.
     const deliveryZones = Array.isArray(tenantDoc.deliveryConfig?.zones)
       ? tenantDoc.deliveryConfig!.zones
       : [];
+    const zonePrices = deliveryZones
+      .map((z) => (typeof z.priceDelivery === 'number' ? z.priceDelivery : null))
+      .filter((p): p is number => p !== null);
+    const minZonePrice = zonePrices.length > 0 ? Math.min(...zonePrices) : null;
     const selectedZone = customer.deliveryDetails?.municipality
       ? deliveryZones.find((z) => z.name === customer.deliveryDetails?.municipality)
       : undefined;
@@ -625,7 +633,8 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         : null;
     const deliveryFee =
       customer.deliveryType === 'delivery'
-        ? (zonePrice ?? Number(tenantDoc.deliveryConfig?.fixedPrice || 0))
+        ? (zonePrice ??
+          (minZonePrice !== null ? minZonePrice : Number(tenantDoc.deliveryConfig?.fixedPrice || 0)))
         : 0;
 
     const total = itemsSubtotal + deliveryFee;
