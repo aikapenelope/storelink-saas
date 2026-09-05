@@ -226,6 +226,28 @@ export function StorefrontClient({
     }
   }, [cart, hasHydrated, storageKey]);
 
+  // Review Devin #74 (2ª ronda): sincronización MULTI-Pestaña del carrito.
+  // Si otra pestaña compra (vacía el carrito) o lo modifica, esta pestaña
+  // refleja el estado persistido — evita ofrecer una compra vieja y garantiza
+  // que un reintento desde otra pestaña use el MISMO token de intención
+  // (ver src/lib/checkout-intent-token.ts) mientras el carrito representa la
+  // misma compra.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== storageKey) return;
+      try {
+        const stored = e.newValue ?? localStorage.getItem(storageKey);
+        const parsed: unknown = stored ? JSON.parse(stored) : [];
+        setCart(Array.isArray(parsed) ? (parsed as CartItem[]) : []);
+      } catch {
+        setCart([]);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [storageKey]);
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);

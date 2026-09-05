@@ -24,6 +24,11 @@ import {
 import { formatPrice } from '@/lib/utils';
 import type { ProductItem } from '@/components/storefront-client';
 import { processOrder } from '@/app/actions/checkout';
+import { isCheckoutProcessingResponse } from '@/lib/checkout-response';
+import {
+  clearCheckoutIntentToken,
+  getOrCreateCheckoutIntentToken,
+} from '@/lib/checkout-intent-token';
 
 export interface CartItem extends ProductItem {
   quantity: number;
@@ -227,7 +232,29 @@ export function CartDrawer({
     totalVES?: number;
   } | null>(null);
 
+  // Review Devin #74 (2ª ronda): el token de intención ya NO vive en un ref
+  // (perdía el vínculo con la reserva al recargar o abrir otra pestaña con el
+  // mismo carrito → token nuevo → clave nueva → segunda orden). Vive en
+  // localStorage junto al ciclo de vida del carrito del tenant:
+  //  - getOrCreate al submit: recarga/2ª pestaña → MISMO token → MISMA clave
+  //    → el reintento se adhiere a la reserva existente.
+  //  - clear tras resultado TERMINAL (éxito/fallo definitivo) o carrito
+  //    vaciado (compra nueva intencional — mismo momento en que
+  //    StorefrontClient borra su storage).
+  //  - PRESERVADO en "en proceso" y fallo de transporte.
+  const checkoutIntentStorage = (): Storage | null =>
+    typeof window === 'undefined' ? null : window.localStorage;
+
   const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+
+  // Review Devin #74 (2ª ronda): el carrito vaciado (éxito con onClearCart o
+  // el usuario eliminando todo) es una COMPRA NUEVA INTENCIONAL → rota el
+  // token para que el próximo intento tenga su propia reserva de idempotencia.
+  useEffect(() => {
+    if (items.length === 0) {
+      clearCheckoutIntentToken(checkoutIntentStorage(), tenantSlug);
+    }
+  }, [items, tenantSlug]);
   // Auditoría 2026-09-04 (P2): tarifa por ZONA. Antes se mostraba "(+$X)" en
   // el selector de municipios pero el total siempre cobraba la tarifa fija.
   // Espejo exacto de la resolución server-side en checkout.ts (la fuente de
@@ -309,6 +336,11 @@ export function CartDrawer({
 
     setIsLoading(true);
 
+    // Review Devin #74 (2ª ronda): token persistido en localStorage — un
+    // reload o una segunda pestaña con el mismo carrito obtienen el MISMO
+    // token y recaen en la MISMA reserva de idempotencia.
+    const intentToken = getOrCreateCheckoutIntentToken(checkoutIntentStorage(), tenantSlug);
+
     // Audit fix: la dirección de pickup viene de la config del tenant
     // (prop pickupConfig), nunca hardcodeada de una sola tienda.
     const pickupText = `[RETIRO EN TIENDA / PICKUP] ${pickupLoc}${pickupSched ? ` (Horario: ${pickupSched})` : ''}`;
@@ -328,6 +360,9 @@ export function CartDrawer({
         checkoutNonce: checkoutNonce ?? '',
         honeypotWebsite,
         formRenderedAtMs: formRenderedAtMs || undefined,
+        // Review Devin #74 (2ª ronda): token persistido con el carrito del
+        // tenant (ver comentario arriba) — recarga/2ª pestaña → mismo token.
+        idempotencyToken: intentToken,
         customer: {
           name: customer.name,
           phone: fullFormattedPhone,
@@ -378,10 +413,28 @@ export function CartDrawer({
         // Open WhatsApp directly in new window / app
         window.open(response.whatsappUrl, '_blank');
         onClearCart();
+      } else if (isCheckoutProcessingResponse(response)) {
+        // Review Devin #74 ("Slow retries create duplicate orders"): otro
+        // request idéntico SIGUE en proceso — NO limpiar el token: el
+        // reintento del usuario debe recaer en la MISMA reserva de
+        // idempotencia y recibir la respuesta del dueño, no crear otra orden.
+        alert(response.error);
+        return;
       } else {
+        // Fallo DEFINITIVO antes de crear la orden (validación, stock, zona,
+        // guards…): la reserva ya fue liberada por el servidor y el siguiente
+        // envío es un intento nuevo → ROTAR el token (resultado terminal).
+        clearCheckoutIntentToken(checkoutIntentStorage(), tenantSlug);
         alert(response.error || 'Hubo un error al procesar el pedido.');
       }
+      // Éxito definitivo (resultado terminal): el onClearCart de arriba vacía
+      // el carrito y el efecto de items.length === 0 rota el token; se limpia
+      // aquí también por si el clear del carrito llegara a fallar.
+      clearCheckoutIntentToken(checkoutIntentStorage(), tenantSlug);
     } catch (err: unknown) {
+      // Fallo de transporte: el body pudo haberse procesado en el servidor sin
+      // respuesta — conservar el token para que el reintento del usuario reciba
+      // la respuesta del dueño en vez de duplicar la orden.
       console.error(err);
       alert('Error de conexión al procesar el pedido.');
     } finally {

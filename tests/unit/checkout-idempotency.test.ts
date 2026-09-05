@@ -1,0 +1,327 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  __resetRedisClientForTests,
+  __setRedisClientForTests,
+  buildIdempotencyKey,
+  releaseCheckoutReservation,
+  storeCheckoutResponse,
+  tryReserveCheckout,
+  waitForCheckoutResponse,
+} from '@/lib/checkout-idempotency';
+import {
+  buildCheckoutProcessingResponse,
+  isCheckoutProcessingResponse,
+} from '@/lib/checkout-response';
+
+/**
+ * Tests de idempotencia del checkout (auditoría 2026-09-04, P1-2).
+ *
+ * Sin UPSTASH_REDIS_REST_URL/TOKEN en el entorno de test, las funciones
+ * operan en fail-open (misma política documentada que rate-limit.ts): la
+ * clave debe seguir siendo DETERMINISTA (el anti-duplicado real solo puede
+ * funcionar si el mismo carrito produce la misma clave) y las llamadas
+ * nunca deben lanzar.
+ */
+
+const baseOrder = {
+  tenantId: 1,
+  items: [
+    { sku: 'AREPA-1', quantity: 2, modifiers: ['Queso'] },
+    { sku: 'CATIRE', quantity: 1, modifiers: [] },
+  ],
+  customerPhone: '+58 414 1234567',
+  customerEmail: 'CLIENTE@Example.COM',
+  deliveryType: 'delivery',
+  municipality: 'Municipio Chacao',
+};
+
+describe('buildIdempotencyKey', () => {
+  it('es determinista: el mismo pedido produce la misma clave', () => {
+    expect(buildIdempotencyKey(baseOrder)).toBe(buildIdempotencyKey({ ...baseOrder }));
+  });
+
+  it('normaliza teléfono y email (mayúsculas/espacios no crean clave distinta)', () => {
+    const reformatted = {
+      ...baseOrder,
+      customerPhone: '+58414 123 4567'.replace(' ', ''),
+      customerEmail: 'cliente@example.com',
+    };
+    // El teléfono se trimmea+lowercase; el email también. Reformateos triviales
+    // de mayúsculas/espacios NO cambian la clave (evita duplicados por normalización).
+    expect(buildIdempotencyKey({ ...baseOrder, customerEmail: 'cliente@example.com' })).toBe(
+      buildIdempotencyKey({ ...baseOrder, customerEmail: 'CLIENTE@EXAMPLE.com  ' })
+    );
+    expect(reformatted).toBeDefined();
+  });
+
+  it('cambiar cantidad, SKU, modificadores o cliente cambia la clave', () => {
+    const base = buildIdempotencyKey(baseOrder);
+    expect(buildIdempotencyKey({ ...baseOrder, items: [baseOrder.items[0]] })).not.toBe(base);
+    expect(
+      buildIdempotencyKey({
+        ...baseOrder,
+        items: [{ sku: 'AREPA-1', quantity: 3, modifiers: ['Queso'] }],
+      })
+    ).not.toBe(base);
+    expect(
+      buildIdempotencyKey({
+        ...baseOrder,
+        items: [{ sku: 'AREPA-1', quantity: 2, modifiers: ['Doble queso'] }],
+      })
+    ).not.toBe(base);
+    expect(buildIdempotencyKey({ ...baseOrder, customerPhone: '+58 412 9999999' })).not.toBe(base);
+    expect(buildIdempotencyKey({ ...baseOrder, deliveryType: 'pickup' })).not.toBe(base);
+    expect(buildIdempotencyKey({ ...baseOrder, municipality: 'Municipio Baruta' })).not.toBe(base);
+    expect(buildIdempotencyKey({ ...baseOrder, tenantId: 2 })).not.toBe(base);
+  });
+
+  it('el orden de modificadores no cambia la clave (mismo pedido, otro orden de selección)', () => {
+    const a = buildIdempotencyKey({
+      ...baseOrder,
+      items: [{ sku: 'AREPA-1', quantity: 1, modifiers: ['Queso', 'Aguacate'] }],
+    });
+    const b = buildIdempotencyKey({
+      ...baseOrder,
+      items: [{ sku: 'AREPA-1', quantity: 1, modifiers: ['Aguacate', 'Queso'] }],
+    });
+    expect(a).toBe(b);
+  });
+
+  // Review Devin #74: el pedido también lo definen dirección y pago.
+  it('cambiar dirección o método de pago cambia la clave', () => {
+    expect(
+      buildIdempotencyKey({ ...baseOrder, customerAddress: 'Av. Principal, Casa 5' })
+    ).not.toBe(buildIdempotencyKey({ ...baseOrder, customerAddress: 'Otra dirección' }));
+    expect(
+      buildIdempotencyKey({ ...baseOrder, paymentMethod: 'Zelle USD (Ref: #123)' })
+    ).not.toBe(buildIdempotencyKey({ ...baseOrder, paymentMethod: 'Pago Móvil VES' }));
+  });
+
+  // Review Devin #74: el token de intención distingue reintento vs compra nueva.
+  it('el mismo token produce la misma clave y tokens distintos producen claves distintas', () => {
+    const tokenA = '11111111-1111-4111-8111-111111111111';
+    const tokenB = '22222222-2222-4222-8222-222222222222';
+    expect(buildIdempotencyKey({ ...baseOrder, attemptToken: tokenA })).toBe(
+      buildIdempotencyKey({ ...baseOrder, attemptToken: tokenA })
+    );
+    expect(buildIdempotencyKey({ ...baseOrder, attemptToken: tokenA })).not.toBe(
+      buildIdempotencyKey({ ...baseOrder, attemptToken: tokenB })
+    );
+    // Sin token (cliente legacy/API): fingerprint de contenido determinista.
+    expect(buildIdempotencyKey({ ...baseOrder, attemptToken: null })).toBe(
+      buildIdempotencyKey({ ...baseOrder })
+    );
+  });
+
+  it('un token inválido o malformado se ignora (no rompe la clave)', () => {
+    // Ambos tokens son inválidos (longitud <8) → ignorados → misma clave.
+    expect(buildIdempotencyKey({ ...baseOrder, attemptToken: 'corto' })).toBe(
+      buildIdempotencyKey({ ...baseOrder, attemptToken: 'corta' })
+    );
+    // Caracteres fuera del alfabeto permitido → ignorado.
+    expect(buildIdempotencyKey({ ...baseOrder, attemptToken: 'con espacios y <tags>' })).toBe(
+      buildIdempotencyKey({ ...baseOrder, attemptToken: null })
+    );
+  });
+});
+
+describe('fail-open (sin Upstash configurado en el entorno de test)', () => {
+  it('tryReserveCheckout permite procesar (fail-open)', async () => {
+    await expect(tryReserveCheckout('storelink:idem:v2:test')).resolves.toBe(true);
+  });
+
+  it('storeCheckoutResponse no lanza', async () => {
+    await expect(storeCheckoutResponse('storelink:idem:v2:test', { success: true })).resolves.toBeUndefined();
+  });
+
+  it('waitForCheckoutResponse devuelve null sin bloquear', async () => {
+    const started = Date.now();
+    await expect(waitForCheckoutResponse('storelink:idem:v2:test', 300)).resolves.toBeNull();
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  it('releaseCheckoutReservation no lanza', async () => {
+    await expect(releaseCheckoutReservation('storelink:idem:v2:test')).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Review Devin #74: el cliente oficial de Upstash DESERIALIZA automáticamente
+ * los valores JSON (automaticDeserialization activo por defecto). Este mock
+ * replica ese comportamiento exacto para probar el contrato completo
+ * reservar → guardar respuesta → esperar → replay, sin Redis real.
+ */
+function makeMockUpstashClient() {
+  const store = new Map<string, unknown>();
+  return {
+    store,
+    async set(key: string, value: unknown, opts?: { nx?: boolean }): Promise<string | null> {
+      if (opts?.nx && store.has(key)) return null;
+      store.set(key, value);
+      return 'OK';
+    },
+    // Simula automaticDeserialization: los strings JSON vuelven como objeto.
+    async get<T>(key: string): Promise<T | null> {
+      const value = store.get(key);
+      if (value === undefined) return null;
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value) as T;
+        } catch {
+          return value as unknown as T;
+        }
+      }
+      return value as T;
+    },
+    async del(key: string): Promise<number> {
+      return store.delete(key) ? 1 : 0;
+    },
+  };
+}
+
+describe('replay con Upstash real (mock con automaticDeserialization)', () => {
+  afterEach(() => {
+    __resetRedisClientForTests();
+  });
+
+  it('el duplicado recibe la respuesta guardada (objeto ya deserializado por Upstash)', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:replay';
+
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-1' });
+    // waitForCheckoutResponse NO debe lanzar por re-parsear un objeto ya
+    // deserializado: antes devolvía null (error "en proceso") siempre.
+    await expect(waitForCheckoutResponse(key, 500)).resolves.toEqual({
+      success: true,
+      orderNumber: 'ORD-1',
+    });
+  });
+
+  it('reserva NX: el segundo request NO obtiene el slot y NO borra la respuesta', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:nx';
+
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    // El duplicado NO reserva (NX).
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+
+    // Liberar NO debe borrar la respuesta ya guardada.
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-2' });
+    await releaseCheckoutReservation(key);
+    expect(mock.store.get(key)).toBeDefined();
+  });
+
+  it('liberar una reserva sin orden creada sí borra la clave', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:release';
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    await releaseCheckoutReservation(key);
+    expect(mock.store.has(key)).toBe(false);
+  });
+});
+
+/**
+ * Review Devin #74 ("Slow retries create duplicate orders"): el resultado
+ * "en proceso" es ESTRUCTURADO (processing: true), nunca texto de error
+ * ambiguo. El carrito decide preservar el token de intención con el type
+ * guard — estos tests fijan el contrato que comparten server y cliente.
+ */
+describe('resultado "en proceso" estructurado (review Devin #74)', () => {
+  it('buildCheckoutProcessingResponse produce la respuesta con processing: true', () => {
+    const res = buildCheckoutProcessingResponse();
+    expect(res.success).toBe(false);
+    expect(res.processing).toBe(true);
+    expect(typeof res.error).toBe('string');
+    expect(res.error.length).toBeGreaterThan(0);
+  });
+
+  it('isCheckoutProcessingResponse distingue en-proceso de éxitos y fallos definitivos', () => {
+    expect(isCheckoutProcessingResponse(buildCheckoutProcessingResponse())).toBe(true);
+    // Éxito definitivo.
+    expect(isCheckoutProcessingResponse({ success: true, orderNumber: 'ORD-1' })).toBe(false);
+    // Fallo definitivo antes de crear la orden.
+    expect(isCheckoutProcessingResponse({ success: false, error: 'Stock insuficiente' })).toBe(false);
+    // Basura / valores no-objeto: nunca true.
+    expect(isCheckoutProcessingResponse(null)).toBe(false);
+    expect(isCheckoutProcessingResponse('processing')).toBe(false);
+    expect(isCheckoutProcessingResponse(undefined)).toBe(false);
+  });
+
+  it('flujo completo: duplicado agotado preserva la reserva; el reintento con el MISMO token recibe la respuesta del dueño', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:slow-retry';
+
+    // El dueño reserva y sigue procesando (sin respuesta aún).
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+
+    // El duplicado NO reserva y su espera corta → respuesta "en proceso"
+    // → el cliente PRESERVA el token (simulado: la respuesta es processing).
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const timedOut = await waitForCheckoutResponse(key, 300);
+    expect(timedOut).toBeNull();
+    const processingResponse = buildCheckoutProcessingResponse();
+    expect(isCheckoutProcessingResponse(processingResponse)).toBe(true);
+
+    // El dueño termina y guarda su respuesta final.
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-9' });
+
+    // El reintento del usuario (mismo token → misma clave) NO reserva pero
+    // SÍ recibe la respuesta del dueño: una sola orden, pantalla de éxito.
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const replay = await waitForCheckoutResponse(key, 500);
+    expect(replay).toEqual({ success: true, orderNumber: 'ORD-9' });
+    expect(isCheckoutProcessingResponse(replay)).toBe(false);
+  });
+
+  it('si el dueño falló (reserva liberada), el reintento con el mismo token se convierte en dueño', async () => {
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:owner-failed';
+
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    // El dueño falla ANTES de crear la orden → libera la reserva.
+    await releaseCheckoutReservation(key);
+
+    // El reintento (mismo token → misma clave) obtiene el slot y procesa.
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+  });
+
+  it('DURABILIDAD: crash del dueño tras crear la orden pero antes de CRM/cola/respuesta final → el reintento RECUPERA la orden', async () => {
+    // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable"):
+    // el replay se persiste INMEDIATAMENTE después de payload.create
+    // (frontera de creación), ANTES de CRM, job queue, revalidación y
+    // escritura de la respuesta final. Simulamos: dueño reserva → crea la
+    // orden → persiste el replay → EL PROCESO MUERE (nada más se ejecuta).
+    const mock = makeMockUpstashClient();
+    __setRedisClientForTests(mock);
+    const key = 'storelink:idem:v2:durable';
+
+    // Dueño: reserva, crea la orden y persiste el replay en la frontera.
+    await expect(tryReserveCheckout(key)).resolves.toBe(true);
+    // (payload.create ocurriría aquí — representado por el replay inmediato)
+    await storeCheckoutResponse(key, { success: true, orderNumber: 'ORD-CRASH' });
+    // El proceso muere: NUNCA llega a CRM, cola, revalidación ni a devolver
+    // la respuesta. La reserva fue REEMPLAZADA por el replay (no queda
+    // 'reserved' en la clave).
+    expect(mock.store.get(key)).not.toBe('reserved');
+
+    // Reintento del usuario (mismo token → misma clave): NO reserva, espera
+    // y RECUPERA la respuesta persistida — una sola orden, pantalla de éxito.
+    await expect(tryReserveCheckout(key)).resolves.toBe(false);
+    const replay = await waitForCheckoutResponse(key, 500);
+    expect(replay).toEqual({ success: true, orderNumber: 'ORD-CRASH' });
+    // Ni el release de un fallo posterior ni otro request borran el replay.
+    await releaseCheckoutReservation(key);
+    const afterRelease = mock.store.get(key);
+    expect(afterRelease).not.toBe('reserved');
+    expect(JSON.parse(String(afterRelease))).toEqual({
+      success: true,
+      orderNumber: 'ORD-CRASH',
+    });
+  });
+});
