@@ -89,10 +89,15 @@ const applyVariantStockDelta = async ({
     return Boolean(res.rows && res.rows.length > 0);
   }
 
+  // Review Devin #73: al REPONER no se fuerza 'in_stock' en bloque — solo
+  // cuando la fila estaba en stock_quantity = 0 (agotamiento automático por
+  // venta). Un out_of_stock MANUAL del comerciante con stock > 0 se preserva.
   await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set stock_quantity = stock_quantity + ${delta},
-        stock_status = case when ${delta} > 0 then 'in_stock' else stock_status end
+        stock_status = case
+          when stock_quantity = 0 and (stock_quantity + ${delta}) > 0 then 'in_stock'
+          else stock_status end
     where _parent_id = ${productId} and _order = ${variantRowNumber(variantIndex)}
   `);
   return true;
@@ -138,10 +143,15 @@ const applyBaseProductStockDelta = async ({
     return Boolean(res.rows && res.rows.length > 0);
   }
 
+  // Review Devin #73: al REPONER no se fuerza 'in_stock' en bloque — solo
+  // cuando la fila estaba en stock_quantity = 0 (agotamiento automático por
+  // venta). Un out_of_stock MANUAL del comerciante con stock > 0 se preserva.
   await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set stock_quantity = stock_quantity + ${delta},
-        stock_status = case when ${delta} > 0 then 'in_stock' else stock_status end
+        stock_status = case
+          when stock_quantity = 0 and (stock_quantity + ${delta}) > 0 then 'in_stock'
+          else stock_status end
     where id = ${productId}
   `);
   return true;
@@ -370,13 +380,19 @@ const applyStockDeltasForEdit = async ({
   const oldQty = qtyBySkuOf(previousItems);
   const newQty = qtyBySkuOf(newItems);
 
+  // Convención de applyBaseProductStockDelta/applyVariantStockDelta:
+  // delta POSITIVO repone stock, NEGATIVO deduce. El alta ya dedujo oldQty,
+  // así que frente a newQty: aumentar cantidad = deducción ADICIONAL (delta
+  // negativo por la diferencia); disminuir/eliminar = reposición PARCIAL o
+  // total (delta positivo). Review Devin #73: el signo estaba invertido en
+  // ambas direcciones y CADA edición corrompía el inventario.
   const deltas: Array<{ sku: string; delta: number }> = [];
   for (const [sku, qty] of newQty) {
-    const diff = qty - (oldQty.get(sku) || 0);
+    const diff = (oldQty.get(sku) || 0) - qty;
     if (diff !== 0) deltas.push({ sku, delta: diff });
   }
   for (const [sku, qty] of oldQty) {
-    if (!newQty.has(sku) && qty !== 0) deltas.push({ sku, delta: -qty });
+    if (!newQty.has(sku) && qty !== 0) deltas.push({ sku, delta: qty });
   }
   if (deltas.length === 0) return false;
 
@@ -495,8 +511,11 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // Aumento → deducción con checkStock (rechaza la edición si no hay stock,
   // dentro de la misma tx); disminución → reposición. Si nada cambió, salir
   // sin tocar la BD.
+  // Review Devin #73: una edición sobre una orden CANCELADA (cancelled→
+  // cancelled) NO ajusta inventario — sus cantidades ya fueron repuestas y no
+  // están reservadas; tocarlas corrumpía el stock en ambas direcciones.
   if (!isNewlyCreatedActive && !isReactivated && !isCancelled) {
-    if (operation === 'update') {
+    if (operation === 'update' && currentStatus !== 'cancelled') {
       const adjusted = await applyStockDeltasForEdit({
         payload,
         req,
@@ -670,9 +689,17 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
  * Auditoría 2026-09-04 (P1): borrar una orden ACTIVA no reponía el stock —
  * no existía afterDelete y la deducción del alta quedaba permanente (pérdida
  * de inventario irreversible, sin traza). Misma semántica que la cancelación
- * (reposición sin checkStock). afterDelete no tiene transacción de rollback
- * del pedido (ya se borró): los fallos se loguean y quedan en reconciliación
- * manual, sin bloquear el borrado.
+ * (reposición sin checkStock).
+ *
+ * Review Devin #73 (2 fixes):
+ * 1. La reposición corre DENTRO de la transacción del request (misma sesión
+ *    Postgres vía req.transactionID): si falla, se RELANZA el error → Payload
+ *    hace rollback del borrado (la orden sigue existiendo) y el admin ve el
+ *    fallo en pantalla. Antes el catch suprimía el error tras borrar la orden
+ *    y el inventario quedaba deducido sin fuente de reintento.
+ * 2. Borrar una orden activa con crmCounted=true resta el delta del CRM
+ *    (best-effort, mismo criterio que la cancelación) — antes el total del
+ *    cliente quedaba inflado para siempre.
  */
 const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, req }) => {
   if (req.context?.skipInventoryHook) return doc;
@@ -684,6 +711,40 @@ const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, re
   const { payload } = req;
   const tenantId = typeof doc.tenant === 'object' ? doc.tenant?.id : doc.tenant;
 
+  // Reconciliación CRM del borrado (review Devin #73): solo órdenes activas
+  // con incremento CRM REALMENTE committeado. Best-effort: un fallo se loguea
+  // para reconciliación manual pero NO aborta el borrado (misma política que
+  // la cancelación — applyCustomerCrmDelta usa ejecutor aislado de la tx).
+  const customerPhone =
+    doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
+  const totalAmount = Number(doc.totalAmount);
+  if (
+    CRM_RECONCILIATION_ENABLED &&
+    tenantId != null &&
+    customerPhone &&
+    Number.isFinite(totalAmount) &&
+    totalAmount > 0 &&
+    (doc as unknown as { crmCounted?: boolean }).crmCounted === true
+  ) {
+    try {
+      await applyCustomerCrmDelta({
+        payload,
+        tenantId,
+        phone: customerPhone,
+        totalAmount,
+        sign: -1,
+      });
+    } catch (crmErr) {
+      console.error(
+        `[storelink][orders][${doc.id}] reconciliación CRM en borrado falló (non-blocking):`,
+        crmErr
+      );
+    }
+  }
+
+  // SIN try/catch: si la reposición falla, el error sube y Payload revierte el
+  // borrado (la orden sigue existiendo y se puede reintentar). Lanzar APIError
+  // con mensaje accionable para el admin; el detalle técnico queda logueado.
   try {
     await restoreStockForItems({
       payload,
@@ -697,8 +758,12 @@ const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, re
     });
   } catch (err) {
     console.error(
-      `[storelink][orders][${doc.id}] reposición de stock en borrado falló (reconciliar manualmente):`,
+      `[storelink][orders][${doc.id}] reposición de stock en borrado falló → rollback del borrado:`,
       err
+    );
+    throw new APIError(
+      'No se pudo liberar el inventario asociado a esta orden. El borrado fue cancelado; reintenta en unos segundos.',
+      500
     );
   }
 
