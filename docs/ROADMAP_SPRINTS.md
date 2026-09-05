@@ -4,6 +4,11 @@ Derivado de `docs/AUDITORIA_INTEGRAL_2026-09-04.md` (5.8/10 NO-GO remediable →
 Cada sprint = 2 semanas, 1–3 PRs, con criterios de aceptación verificables. El PR #73 (remediación
 de la auditoría) cierra los fixes transversales; este roadmap organiza lo restante.
 
+**Criterio de alcance (decisión del dueño, 2026-09-05):** entra lo que haga la plataforma
+más ROBUSTA (que funcione, no se caiga, no corrompa datos, se pueda operar). Quedan FUERA los
+ítems regulatorios/de-producto sin impacto en funcionamiento (derecho al olvido, aviso de
+privacidad como feature, métricas de negocio) — quedan anotados al final como backlog opcional.
+
 **Trayectoria de puntaje proyectada:**
 
 | Sprint | Enfoque | Score proyectado |
@@ -26,13 +31,11 @@ de la auditoría) cierra los fixes transversales; este roadmap organiza lo resta
 | Ítem | Hallazgo | Detalle |
 |---|---|---|
 | Idempotencia de checkout | P1-2 | Clave SHA-256 (tenant+items+cliente) con `SET NX` en Upstash; reintento/doble-clic devuelve la respuesta del primer pedido en vez de duplicar la orden. Fail-open documentado (misma decisión que rate-limit). |
-| Derecho al olvido | P1-12 | `POST /api/admin/customers/[id]/anonymize`: anonimiza PII (nombre/email/teléfono/direcciones/historial/notas), preserva agregados monetarios, borra los PDF de Notas de Entrega del cliente en R2. Auth por sesión + rate-limit admin. |
-| Retención de delivery-notes | P1-12 | `POST /api/admin/purge-delivery-notes` (cron-protected) purga PDFs >180d vía workflow diario `jobs-daily.yml`. |
-| Alertas de jobs | P1-13 (parcial) | `GET /api/admin/jobs-health` (cron-protected): fallidos>0 o job pendiente >30min → 503; `jobs-runner.yml` falla el step → email de GitHub. |
+| Alertas de jobs | P1-13 (parcial) | `GET /api/admin/jobs-health` (cron-protected): fallidos>0 o job pendiente >30min → 503; `jobs-runner.yml` falla el step → email de GitHub. Cubre el riesgo de que el schedule de GitHub muera en silencio a los 60 días. |
 | Roadmap de sprints | — | Este documento. |
 
-**Aceptación:** tests unitarios de idempotencia (determinismo + fail-open) y de shaping de
-anonimización (nunca deja PII en el doc resultante); `pnpm build`/`lint`/`tsc` verdes; CI verde.
+**Aceptación:** tests unitarios de idempotencia (determinismo + fail-open); `pnpm build`/`lint`/
+`tsc` verdes; suite de integración con Postgres real verde; CI verde.
 
 ### PR 2 — Baseline + índice único SKU (requiere owner con BD local)
 | Ítem | Hallazgo | Detalle |
@@ -52,12 +55,11 @@ público del catálogo (P2-23). 5. Backups: drill de restauración de Supabase.
 
 | Ítem | Hallazgo | PR |
 |---|---|---|
-| Error tracking | P1-13 | PR 3: `@sentry/nextjs` con `onRequestError` + `beforeSend` que strippee PII (DSN del owner; sin DSN queda no-op). Alternativa contrastada: log drain de Vercel a Better Stack. |
-| Webhook Resend | P1-13/P2 | PR 3: `src/app/api/webhooks/resend/route.ts` con verificación de firma svix → bounce/complaint marca `emailConfirmationSent` + log estructurado (cierra la doc sin implementar de RESEND_MONITORING.md). |
-| Runbook de incidentes | Checklist ❌ | PR 4: `docs/RUNBOOK.md` (schema drift, Upstash caído, tasa congelada, colas atascadas, fuga de secretos) + plantilla de post-mortem. |
-| Métricas de negocio | Fase 9 | PR 4: job diario que registra KPIs (pedidos/día por tenant) en log estructurado para el drain. |
+| Error tracking | P1-13 | PR 3: `@sentry/nextjs` con `onRequestError` (robustez operacional: VER que un checkout falló en producción en vez de descubrirlo por un cliente). Sin DSN del owner queda no-op. Alternativa contrastada: log drain de Vercel a Better Stack. |
+| Runbook de incidentes | Checklist ❌ | PR 4: `docs/RUNBOOK.md` (schema drift, Upstash caído, tasa congelada, colas atascadas, fuga de secretos) — reducir el tiempo de reparación cuando algo falle. |
 
-**Aceptación:** un `throw` en preview llega a Sentry en <1min; un bounce de Resend queda registrado; runbook revisado.
+**Aceptación:** un `throw` en preview llega a Sentry en <1min; runbook revisado y probado
+(simulacro de Upstash caído).
 
 ## Sprint 3 — Deuda estructural I: `cart-drawer.tsx` (semanas 5–6)
 
@@ -111,3 +113,15 @@ Descomposición según auditoría §6 (bloques con rangos verificados). PRs pequ
 **Reglas transversales (constitución):** cada PR rebasado sobre main, `pnpm build` 0 errores antes
 de abrir, commits atómicos, migraciones solo con `migrate:create` (owner), nunca merge automático.
 Stack de PRs permitido mientras #73 no esté mergeado (base = rama padre), rebasar al mergear.
+
+---
+
+## Backlog opcional (FUERA del roadmap por decisión del dueño)
+
+Ítems regulatorios/de-producto sin impacto directo en el funcionamiento. Si algún día hacen
+falta (clientes internacionales, exigencia legal), están especificados en el informe de
+auditoría (§4, hallazgos 11/12 y §7):
+
+- Derecho al olvido (anonimización de clientes + purga de delivery-notes >180d).
+- Webhook de bounces de Resend.
+- Métricas de negocio programáticas.
