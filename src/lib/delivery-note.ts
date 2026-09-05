@@ -1,4 +1,11 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /**
@@ -95,5 +102,94 @@ export async function getDeliveryNoteUrl(
   } catch (err) {
     console.error('R2 presign delivery note failed:', err);
     return null;
+  }
+}
+// ---------------------------------------------------------------------------
+// Derecho al olvido y retención (auditoría 2026-09-04, P1-12): los PDF de
+// Notas de Entrega contienen PII (nombre, teléfono, dirección) y antes vivían
+// en R2 indefinidamente — la URL firmada expira, el objeto no.
+// ---------------------------------------------------------------------------
+
+
+/** Retención máxima de Notas de Entrega (regulatory-safe para Venezuela; sin ley integral de datos, 180d es el estándar conservador de e-commerce). */
+export const DELIVERY_NOTE_RETENTION_DAYS = 180;
+
+function r2Configured(): boolean {
+  return Boolean(
+    process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET
+  );
+}
+
+/** Borra el PDF de una Nota de Entrega (usado por la anonimización de clientes). */
+export async function deleteDeliveryNotePdf(orderNumber: string): Promise<boolean> {
+  if (!r2Configured()) return false;
+  try {
+    await r2Client().send(
+      new DeleteObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: keyFor(orderNumber),
+      })
+    );
+    return true;
+  } catch (err) {
+    console.error('R2 delete delivery note failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Purga masiva de Notas de Entrega más viejas que `maxAgeDays`. Best-effort:
+ * R2 (S3 API) no soporta List con filtro de fecha, así que lista por prefijo
+ * y borra por lotes las que superan la retención. Corre diaria vía
+ * /api/admin/purge-delivery-notes (workflow jobs-daily.yml, cron-protected).
+ */
+export async function purgeOldDeliveryNotes(
+  maxAgeDays: number = DELIVERY_NOTE_RETENTION_DAYS
+): Promise<{ purged: number; skipped: boolean }> {
+  if (!r2Configured()) {
+    return { purged: 0, skipped: true };
+  }
+
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+  let purged = 0;
+  let continuationToken: string | undefined;
+
+  try {
+    do {
+      const listed = await r2Client().send(
+        new ListObjectsV2Command({
+          Bucket: process.env.R2_BUCKET,
+          Prefix: 'delivery-notes/',
+          MaxKeys: 1000,
+          ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+        })
+      );
+
+      const expired = (listed.Contents ?? [])
+        .filter((obj) => obj.Key && obj.LastModified && obj.LastModified < cutoff)
+        .map((obj) => ({ Key: obj.Key as string }));
+
+      // DeleteObjects acepta lotes de hasta 1000 keys.
+      for (let i = 0; i < expired.length; i += 1000) {
+        const batch = expired.slice(i, i + 1000);
+        await r2Client().send(
+          new DeleteObjectsCommand({
+            Bucket: process.env.R2_BUCKET,
+            Delete: { Objects: batch, Quiet: true },
+          })
+        );
+        purged += batch.length;
+      }
+
+      continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    if (purged > 0) {
+      console.log(`[storelink][privacy] delivery-notes >${maxAgeDays}d purgadas: ${purged}`);
+    }
+    return { purged, skipped: false };
+  } catch (err) {
+    console.error('R2 purge old delivery notes failed:', err);
+    return { purged, skipped: false };
   }
 }
