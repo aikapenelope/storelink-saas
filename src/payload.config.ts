@@ -130,6 +130,18 @@ const devOrigins =
     ? []
     : ['http://localhost:3000', 'http://localhost:3001'];
 
+// Review Devin #73: aviso visible en producción mientras la verificación de
+// identidad TLS de Supabase siga transitoria (con SUPABASE_CA_CERT ausente el
+// pool opera con rejectUnauthorized: false — decisión del owner activar la CA).
+if (
+  !process.env.SUPABASE_CA_CERT &&
+  (process.env.VERCEL || process.env.NODE_ENV === 'production')
+) {
+  console.warn(
+    '[storelink][db] SUPABASE_CA_CERT no configurada: TLS sin verificación de identidad (rejectUnauthorized: false). Activar la CA en Vercel para verify-full.'
+  );
+}
+
 export default buildConfig({
   // Endurecimiento según docs/production/preventing-abuse.mdx (patrones
   // oficiales de Payload contra abuso en producción):
@@ -249,13 +261,31 @@ export default buildConfig({
     // cualquier entorno no-Vercel: un deploy self-hosted/staging sin la var
     // arrancaba con un secreto público del repo (suplantación de sesiones,
     // incluido super-admin). Ahora se exige en TODO runtime de producción
-    // (Vercel o self-hosted). Se permite solo en fase de build de Next
-    // (NEXT_PHASE) y en dev/test, que definen su propia var.
+    // (Vercel o self-hosted). Se permite solo en dev/test y en build local,
+    // que no firman material persistente.
+    // Review Devin #73: en el BUILD de VERCEL el fallback público ya no se
+    // acepta — VERCEL=1 lo confirma la plataforma y PAYLOAD_SECRET está
+    // disponible también en build (misma env que el runtime); si falta ahí es
+    // un error de configuración del deploy y debe FALLAR RUIDOSO, no firmar
+    // sesiones/nonces con una clave pública. En build local (sin VERCEL) el
+    // fallback se mantiene: este entorno no tiene .env y next build solo
+    // compila assets.
     const isNextBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
-    if (!secret && !isNextBuildPhase && (process.env.VERCEL || process.env.NODE_ENV === 'production')) {
+    const isVercel = Boolean(process.env.VERCEL);
+    const isProdRuntime = process.env.NODE_ENV === 'production';
+    if (!secret && isVercel) {
+      throw new Error(
+        'FATAL: PAYLOAD_SECRET environment variable is required on Vercel (build and runtime).'
+      );
+    }
+    if (!secret && isProdRuntime && !isNextBuildPhase) {
       throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on production runtimes.');
     }
-    return secret || 'flow-martes-build-secret-key-32chars-min';
+    if (!secret) {
+      // Solo dev/test/build local sin .env.
+      return 'flow-martes-build-secret-key-32chars-min';
+    }
+    return secret;
   })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
@@ -271,6 +301,9 @@ export default buildConfig({
       // dashboard: Database Settings → SSL Configuration) se verifica la CA;
       // sin ella se mantiene require (cifrado sin verificación) para no romper
       // entornos donde la var aún no esté configurada.
+      // Review Devin #73: el modo sin verificación es una decisión TRANSITORIA
+      // del owner (activar SUPABASE_CA_CERT en Vercel) — se avisa en logs
+      // (ver warn antes del adapter) para que no quede indefinida.
       ssl: process.env.SUPABASE_CA_CERT
         ? {
             rejectUnauthorized: true,
