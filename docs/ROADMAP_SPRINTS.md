@@ -46,6 +46,19 @@ privacidad como feature, métricas de negocio) — quedan anotados al final como
 
 **Aceptación:** paridad en modo completo verde en CI; e2e nocturno verde 5 días seguidos.
 
+### PR 3 — Robustez del catálogo a escala (Sprint 1, adelantado por análisis de escala 2026-09-05)
+
+Con ~1.000 productos por tenant este es el PRIMERO que rompe (es un límite de DATOS, no de tráfico):
+
+| Ítem | Detalle |
+|---|---|
+| `select` explícito | `getTenantBySlug` y `getCachedProducts` traen documentos completos (anti-patrón de la skill oficial de Payload: "use `select` to limit returned fields"). |
+| Truncado a 500 | `getCachedProducts` limita a 500 en silencio: con 1.000 productos, la mitad del catálogo desaparece de la tienda sin error ni log. Subir límite + paginar (`while hasNextPage`, tope razonable) + log/UI si `totalDocs > docs.length`. |
+| Peso de página | 1.000 productos serializados al RSC payload ≈ 0.5-1 MB por carga: paginación/carga perezosa por categoría en los temas. |
+| Import a escala | 1.000 filas fila-a-fila ≈ minutos de job; batch con Drizzle multi-row (los requisitos del Sprint 5 se adelantan aquí si llegan clientes con catálogos grandes). |
+
+**Aceptación:** storefront con 1.000 productos reales muestra los 1.000, carga <2s en 4G, import de 1.000 filas <2 min.
+
 ### Acciones del owner en paralelo (no código)
 1. **R2**: verificar que el bucket NO sirve `delivery-notes/` público (P1-15 — si está público, P0).
 2. `SUPABASE_CA_CERT` en Vercel (P2-27). 3. `vars.PROD_BASE_URL` en GitHub. 4. Decidir REST
@@ -93,8 +106,9 @@ Descomposición según auditoría §6 (bloques con rangos verificados). PRs pequ
 | Ítem | Hallazgo | PR |
 |---|---|---|
 | Batch import de catálogo | P2-31 | PR 15: insert/update multi-row vía Drizzle en `catalog-import` + paginar prefetch dedupe (>5000). |
-| Storefront `select` + truncado | P2-32 | PR 15: `select` explícito en `getTenantBySlug`/`getCachedProducts`; log + UI si `totalDocs > 500`. |
+| Storefront `select` + truncado | P2-32 | Adelantado a Sprint 1 (PR 3) — primer límite real a 1.000 productos/tenant. |
 | Guard anti-pooler generalizado | P2-24 | PR 16: helper compartido importado por las 20 migraciones + política `prodMigrations` documentada. |
+| Helper único `payload-jobs` | Revisión skill Payload 2026-09-05 | Los accesos crudos a la colección interna (healthcheck, cleanup, JobsStatusView) van por `payload.db` — Payload 4.0 cambia el schema de jobs. Centralizar en un módulo: un punto de cambio en vez de tres. |
 | CSP fase 2 | Riesgo aceptado | PR 16: quitar `unsafe-eval`, nonces para el admin; medir reportes antes de enforce. |
 | Tarea VES y redondeo | P3-15 | PR 16: `numeric(12,2)` para totales (migración; requiere owner para `migrate:create`). |
 
