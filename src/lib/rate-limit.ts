@@ -71,9 +71,6 @@ export const ADMIN_ROUTE_LIMITS = {
   'order-status': 30,
   'order-pdf': 30,
   'exchange-rate': 10,
-  // Derecho al olvido (auditoría 2026-09-04): operación destructiva de PII —
-  // cota estricta por usuario; 5/min sobra para uso legítimo del admin.
-  'anonymize-customer': 5,
 } as const;
 
 export type AdminRouteKey = keyof typeof ADMIN_ROUTE_LIMITS;
