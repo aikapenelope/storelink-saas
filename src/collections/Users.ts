@@ -12,6 +12,10 @@ export const Users: CollectionConfig = {
     // http://localhost (recomendación literal de docs/authentication/cookies).
     cookies: {
       secure: process.env.NODE_ENV === 'production',
+      // Auditoría 2026-09-04 (P3): sin este atributo el navegador aplica Lax
+      // por defecto. Fijarlo explícito documenta la política CSRF de la sesión
+      // (Lax ya bloquea POST cross-site) y blinda contra cambios de default.
+      sameSite: 'Lax',
     },
   },
   admin: {

@@ -4,12 +4,17 @@ import {
   findVariantIndexBySku,
   variantRowNumber,
 } from '@/collections/Orders';
-import type { ProductVariant } from '@/payload-types';
+import type { Product } from '@/payload-types';
 
 /**
  * Tests del fix V-H1: la venta por SKU de variante debe resolver la FILA
  * correcta de products_variants. Helpers puros, sin runtime de Payload.
+ *
+ * NOTA (auditoría 2026-09-04): `payload-types.ts` ya no exporta un tipo
+ * nombrado `ProductVariant` (las filas de variantes son un tipo inline dentro
+ * de Product). Se usa el tipo indexado — NO editar el archivo generado.
  */
+type ProductVariant = NonNullable<Product['variants']>[number];
 
 const variants: ProductVariant[] = [
   { name: 'M', sku: 'TSHIRT-M', price: 10, stockQuantity: 10, stockStatus: 'in_stock' },

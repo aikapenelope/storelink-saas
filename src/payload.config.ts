@@ -1,6 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { buildConfig, type Plugin } from 'payload';
+import { buildConfig, type Access, type Plugin } from 'payload';
 import { postgresAdapter } from '@payloadcms/db-postgres';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant';
@@ -43,6 +43,12 @@ const generateSeoDescription: GenerateDescription<SeoDoc> = ({ doc }) =>
 
 const generateSeoURL: GenerateURL<SeoDoc> = ({ doc }) =>
   `${process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app'}/${doc?.slug || ''}`;
+
+// Auditoría 2026-09-04 (P1): access de solo super-admin para la colección
+// interna `payload-jobs` (ver jobsCollectionOverrides más abajo). Mismo patrón
+// RBAC que el resto del repo (getUserRole), tipado con Access de Payload.
+const superAdminOnlyAccess: Access = ({ req: { user } }) =>
+  getUserRole(user as never) === 'super-admin';
 
 const plugins: Plugin[] = [
   multiTenantPlugin({
@@ -117,6 +123,25 @@ if (
   );
 }
 
+// Orígenes localhost solo en dev (auditoría 2026-09-04, P3): en producción
+// la lista de CORS/CSRF queda reducida al dominio real de la app.
+const devOrigins =
+  process.env.NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:3000', 'http://localhost:3001'];
+
+// Review Devin #73: aviso visible en producción mientras la verificación de
+// identidad TLS de Supabase siga transitoria (con SUPABASE_CA_CERT ausente el
+// pool opera con rejectUnauthorized: false — decisión del owner activar la CA).
+if (
+  !process.env.SUPABASE_CA_CERT &&
+  (process.env.VERCEL || process.env.NODE_ENV === 'production')
+) {
+  console.warn(
+    '[storelink][db] SUPABASE_CA_CERT no configurada: TLS sin verificación de identidad (rejectUnauthorized: false). Activar la CA en Vercel para verify-full.'
+  );
+}
+
 export default buildConfig({
   // Endurecimiento según docs/production/preventing-abuse.mdx (patrones
   // oficiales de Payload contra abuso en producción):
@@ -124,16 +149,16 @@ export default buildConfig({
   //   si está definido; se listan igual para dev con localhost).
   // - GraphQL deshabilitado: la app usa REST + Local API únicamente; los
   //   docs recomiendan deshabilitarlo si no se necesita.
-  // - maxDepth: default 10 → 5, el mayor uso real en el repo es depth 1.
+  // - maxDepth: default 10 → 3, el mayor uso real en el repo es depth 1.
+  // Auditoría 2026-09-04 (P3): los orígenes localhost solo existen en dev
+  // (ver devOrigins antes de buildConfig); en producción no aportan nada.
   cors: [
     process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app',
-    'http://localhost:3000',
-    'http://localhost:3001',
+    ...devOrigins,
   ],
   csrf: [
     process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app',
-    'http://localhost:3000',
-    'http://localhost:3001',
+    ...devOrigins,
   ],
   graphQL: {
     disable: true,
@@ -195,6 +220,27 @@ export default buildConfig({
     deleteJobOnComplete: true,
     tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
     workflows: orderJobs.workflows,
+    // Auditoría 2026-09-04 (P1): el CRUD REST de la colección interna
+    // `payload-jobs` quedaba en defaultAccess (Boolean(user)) — cualquier
+    // tenant-admin podía LEER los inputs de jobs de todos los tenants (el CSV
+    // completo del catálogo en catalogImportRows, orderIds ajenos) y ENCOLAR
+    // jobs arbitrarios con `input.tenantId` de otra tienda, que el runner
+    // ejecuta con overrideAccess (envenenamiento de catálogo cross-tenant).
+    // `jobs.access.run` solo protege /api/payload-jobs/run y /handle-schedules
+    // (el gate vive en el handler del endpoint, verificado en el core de
+    // Payload 3.88), no en las rutas CRUD estándar. La opción oficial
+    // jobsCollectionOverrides cierra read/create/update/delete a super-admin.
+    // El runner no pasa por este access (usa jobs.access.run + x-cron-secret).
+    jobsCollectionOverrides: ({ defaultJobsCollection }) => ({
+      ...defaultJobsCollection,
+      access: {
+        ...defaultJobsCollection.access,
+        read: superAdminOnlyAccess,
+        create: superAdminOnlyAccess,
+        update: superAdminOnlyAccess,
+        delete: superAdminOnlyAccess,
+      },
+    }),
     access: {
       // Secreto del runner verificado timing-safe (helper compartido con
       // /api/admin/cleanup-jobs).
@@ -210,10 +256,36 @@ export default buildConfig({
   editor: lexicalEditor(),
   secret: (() => {
     const secret = process.env.PAYLOAD_SECRET;
-    if (!secret && process.env.VERCEL) {
-      throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on Vercel deployments.');
+    // Auditoría 2026-09-04 (P1): el secreto firma los JWT de sesión y el HMAC
+    // del nonce de checkout. Antes el fallback hardcodeado se aplicaba en
+    // cualquier entorno no-Vercel: un deploy self-hosted/staging sin la var
+    // arrancaba con un secreto público del repo (suplantación de sesiones,
+    // incluido super-admin). Ahora se exige en TODO runtime de producción
+    // (Vercel o self-hosted). Se permite solo en dev/test y en build local,
+    // que no firman material persistente.
+    // Review Devin #73: en el BUILD de VERCEL el fallback público ya no se
+    // acepta — VERCEL=1 lo confirma la plataforma y PAYLOAD_SECRET está
+    // disponible también en build (misma env que el runtime); si falta ahí es
+    // un error de configuración del deploy y debe FALLAR RUIDOSO, no firmar
+    // sesiones/nonces con una clave pública. En build local (sin VERCEL) el
+    // fallback se mantiene: este entorno no tiene .env y next build solo
+    // compila assets.
+    const isNextBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+    const isVercel = Boolean(process.env.VERCEL);
+    const isProdRuntime = process.env.NODE_ENV === 'production';
+    if (!secret && isVercel) {
+      throw new Error(
+        'FATAL: PAYLOAD_SECRET environment variable is required on Vercel (build and runtime).'
+      );
     }
-    return secret || 'flow-martes-build-secret-key-32chars-min';
+    if (!secret && isProdRuntime && !isNextBuildPhase) {
+      throw new Error('FATAL: PAYLOAD_SECRET environment variable is required on production runtimes.');
+    }
+    if (!secret) {
+      // Solo dev/test/build local sin .env.
+      return 'flow-martes-build-secret-key-32chars-min';
+    }
+    return secret;
   })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
@@ -229,6 +301,9 @@ export default buildConfig({
       // dashboard: Database Settings → SSL Configuration) se verifica la CA;
       // sin ella se mantiene require (cifrado sin verificación) para no romper
       // entornos donde la var aún no esté configurada.
+      // Review Devin #73: el modo sin verificación es una decisión TRANSITORIA
+      // del owner (activar SUPABASE_CA_CERT en Vercel) — se avisa en logs
+      // (ver warn antes del adapter) para que no quede indefinida.
       ssl: process.env.SUPABASE_CA_CERT
         ? {
             rejectUnauthorized: true,

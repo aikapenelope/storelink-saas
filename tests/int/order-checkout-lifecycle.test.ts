@@ -20,6 +20,10 @@ import config from '../payload.config';
  * tests/int/order-workflow.test.ts).
  */
 vi.mock('../../src/lib/trello', () => ({
+  // resolveTrelloCredentials se añadió a lib/trello.ts después de este test
+  // (BYOK): sin esta exportación el mock incompleto tumba el task de Trello
+  // incluso en el camino de degradación sin listId.
+  resolveTrelloCredentials: vi.fn(() => ({ apiKey: 'test-trello-key', token: 'test-trello-token' })),
   createTrelloOrderCard: vi.fn(async (p: { orderNumber: string }) => ({
     success: true,
     cardId: `mock-card-${p.orderNumber}`,
