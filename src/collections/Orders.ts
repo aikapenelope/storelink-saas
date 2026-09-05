@@ -526,6 +526,68 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
         }>,
         newItems: doc.items as Array<{ sku?: string | null; quantity?: number | null }>,
       });
+      // Review Devin #73 (2ª ronda): una edición de una orden ACTIVA contada
+      // (crmCounted=true) que cambia totalAmount desincroniza el CRM — la
+      // cancelación posterior restaría el total EDITADO del ORIGINAL que fue
+      // incrementado. Reconciliar aquí el delta (best-effort, mismo criterio
+      // que cancelación/reactivación). CORRE DESPUÉS del ajuste de stock:
+      // si el stock lanza (sin inventario), la tx se revierte y el CRM nunca
+      // se toca (applyCustomerCrmDelta usa ejecutor aislado, no rollbackea).
+      const prevTotal = Number(previousDoc?.totalAmount);
+      const newTotal = Number(doc.totalAmount);
+      const editDelta = newTotal - prevTotal;
+      if (
+        CRM_RECONCILIATION_ENABLED &&
+        (doc as unknown as { crmCounted?: boolean }).crmCounted === true &&
+        tenantId != null &&
+        Number.isFinite(prevTotal) &&
+        Number.isFinite(newTotal) &&
+        newTotal > 0 &&
+        editDelta !== 0
+      ) {
+        const prevPhone =
+          previousDoc?.customer && typeof previousDoc.customer === 'object'
+            ? previousDoc.customer.phone
+            : undefined;
+        const newPhone =
+          doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
+        try {
+          if (prevPhone && newPhone && prevPhone !== newPhone) {
+            // Cambió el teléfono en la edición: revertir el incremento
+            // original en el teléfono anterior y aplicar el total nuevo en
+            // el actual (si no, el delta tocaría la fila equivocada).
+            if (prevTotal > 0) {
+              await applyCustomerCrmDelta({
+                payload,
+                tenantId,
+                phone: prevPhone,
+                totalAmount: prevTotal,
+                sign: -1,
+              });
+            }
+            await applyCustomerCrmDelta({
+              payload,
+              tenantId,
+              phone: newPhone,
+              totalAmount: newTotal,
+              sign: 1,
+            });
+          } else if (newPhone) {
+            await applyCustomerCrmDelta({
+              payload,
+              tenantId,
+              phone: newPhone,
+              totalAmount: Math.abs(editDelta),
+              sign: editDelta > 0 ? 1 : -1,
+            });
+          }
+        } catch (crmErr) {
+          console.error(
+            `[storelink][orders][${doc.id}] reconciliación CRM en edición falló (non-blocking):`,
+            crmErr
+          );
+        }
+      }
       if (!adjusted) return doc;
       // Stock ajustado: continuar hasta la invalidación de caché del final
       // del hook (el storefront debe reflejar el nuevo stock).
@@ -700,6 +762,9 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
  * 2. Borrar una orden activa con crmCounted=true resta el delta del CRM
  *    (best-effort, mismo criterio que la cancelación) — antes el total del
  *    cliente quedaba inflado para siempre.
+ *    Review Devin #73 (2ª ronda): el delta CRM corre DESPUÉS de la reposición
+ *    de stock — si la reposición falla y el borrado se revierte, el CRM queda
+ *    intacto (su ejecutor aislado no participa del rollback de la tx).
  */
 const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, req }) => {
   if (req.context?.skipInventoryHook) return doc;
@@ -711,10 +776,42 @@ const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, re
   const { payload } = req;
   const tenantId = typeof doc.tenant === 'object' ? doc.tenant?.id : doc.tenant;
 
-  // Reconciliación CRM del borrado (review Devin #73): solo órdenes activas
-  // con incremento CRM REALMENTE committeado. Best-effort: un fallo se loguea
+  // Review Devin #73 (2ª ronda): la reposición de stock VA PRIMERO. Si falla,
+  // el error sube y Payload revierte el borrado — el CRM no debe haberse
+  // tocado todavía (applyCustomerCrmDelta usa ejecutor aislado de la tx: un
+  // rollback NO lo deshace). Solo cuando el borrado es ya irreversible se
+  // aplica el delta CRM, best-effort con log para reconciliación manual.
+
+  // SIN try/catch en el stock: si la reposición falla, el error sube y
+  // Payload revierte el borrado (la orden sigue existiendo y se puede
+  // reintentar). APIError con mensaje accionable para el admin.
+  try {
+    await restoreStockForItems({
+      payload,
+      req,
+      tenantId,
+      items: doc.items as Array<{
+        sku?: string | null;
+        title?: string | null;
+        quantity?: number | null;
+      }>,
+    });
+  } catch (err) {
+    console.error(
+      `[storelink][orders][${doc.id}] reposición de stock en borrado falló → rollback del borrado:`,
+      err
+    );
+    throw new APIError(
+      'No se pudo liberar el inventario asociado a esta orden. El borrado fue cancelado; reintenta en unos segundos.',
+      500
+    );
+  }
+
+  // Reconciliación CRM del borrado: solo órdenes activas con incremento CRM
+  // REALMENTE committeado, y SOLO después de que la reposición de stock tuvo
+  // éxito (el borrado ya no se abortará). Best-effort: un fallo se loguea
   // para reconciliación manual pero NO aborta el borrado (misma política que
-  // la cancelación — applyCustomerCrmDelta usa ejecutor aislado de la tx).
+  // la cancelación).
   const customerPhone =
     doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
   const totalAmount = Number(doc.totalAmount);
@@ -740,31 +837,6 @@ const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, re
         crmErr
       );
     }
-  }
-
-  // SIN try/catch: si la reposición falla, el error sube y Payload revierte el
-  // borrado (la orden sigue existiendo y se puede reintentar). Lanzar APIError
-  // con mensaje accionable para el admin; el detalle técnico queda logueado.
-  try {
-    await restoreStockForItems({
-      payload,
-      req,
-      tenantId,
-      items: doc.items as Array<{
-        sku?: string | null;
-        title?: string | null;
-        quantity?: number | null;
-      }>,
-    });
-  } catch (err) {
-    console.error(
-      `[storelink][orders][${doc.id}] reposición de stock en borrado falló → rollback del borrado:`,
-      err
-    );
-    throw new APIError(
-      'No se pudo liberar el inventario asociado a esta orden. El borrado fue cancelado; reintenta en unos segundos.',
-      500
-    );
   }
 
   return doc;
