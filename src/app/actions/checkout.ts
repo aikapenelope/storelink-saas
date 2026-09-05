@@ -12,6 +12,13 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
+import {
+  buildIdempotencyKey,
+  releaseCheckoutReservation,
+  storeCheckoutResponse,
+  tryReserveCheckout,
+  waitForCheckoutResponse,
+} from '@/lib/checkout-idempotency';
 import { applyCustomerCrmDelta } from '@/collections/Orders';
 import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
@@ -608,6 +615,35 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     const { verifiedItems, itemsSubtotal } = verifyResult;
 
+    // ------------------------------------------------------------------
+    // 3bis. Idempotencia (auditoría 2026-09-04, P1-2): el nonce NO es
+    // single-use, así que un doble clic / reenvío / reintento del navegador
+    // creaba dos órdenes idénticas (stock doble, dos WhatsApp, doble CRM).
+    // La clave determinista reserva el pedido en Upstash: el duplicado recibe
+    // la respuesta del primero. Fail-open si Redis no está disponible
+    // (misma decisión de disponibilidad documentada en rate-limit.ts).
+    // ------------------------------------------------------------------
+    const idempotencyKey = buildIdempotencyKey({
+      tenantId,
+      items,
+      customerPhone: customer.phone,
+      customerEmail: customer.email ?? '',
+      deliveryType: customer.deliveryType,
+      municipality: customer.deliveryDetails?.municipality,
+    });
+    const reserved = await tryReserveCheckout(idempotencyKey);
+    if (!reserved) {
+      const duplicateResponse = await waitForCheckoutResponse(idempotencyKey);
+      if (duplicateResponse) {
+        return duplicateResponse as unknown as CheckoutResponse;
+      }
+      return {
+        success: false,
+        error:
+          'Ya estamos procesando un pedido idéntico tuyo. Espera unos segundos y revisa tu WhatsApp antes de volver a enviar.',
+      };
+    }
+
     // Tarifa de delivery configurada por el comercio en Payload.
     // Auditoría 2026-09-04 (P2): si el tenant define tarifa por ZONA
     // (deliveryConfig.zones[].priceDelivery) y el cliente seleccionó un
@@ -834,6 +870,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         console.error('Jobs queue error:', queueErr);
       }
     } catch (orderErr) {
+      // El pedido NO se creó: liberar la reserva para que el usuario pueda
+      // reintentar con el mismo carrito sin esperar el TTL de idempotencia.
+      await releaseCheckoutReservation(idempotencyKey);
       // Auditoría 2026-09-04 (P2): NO loguear el objeto de error crudo — los
       // errores de validación de Payload adjuntan el `data` enviado, que
       // incluye PII del cliente (nombre, teléfono, email, dirección). Basta
@@ -867,7 +906,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       // Non-blocking in dev
     }
 
-    return {
+    const successResponse: CheckoutResponse = {
       success: true,
       orderNumber,
       whatsappUrl,
@@ -879,6 +918,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       totalVES: showVESEffective ? totalVES : undefined,
       exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
     };
+
+    // Idempotencia: guardar la respuesta final — los reintentos idénticos
+    // reciben ESTA respuesta (pantalla de éxito) en vez de duplicar la orden.
+    await storeCheckoutResponse(idempotencyKey, successResponse);
+
+    return successResponse;
   } catch (err: unknown) {
     // Higiene de PII (auditoría 2026-09-04): solo el mensaje, nunca el objeto.
     console.error(
