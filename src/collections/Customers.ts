@@ -7,18 +7,6 @@ export const Customers: CollectionConfig = {
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeChange: [createTenantWriteGuard()],
-    // Hook afterChange para revalidar el caché del admin cuando se actualiza el CRM
-    afterChange: [
-      async ({ doc, req }) => {
-        // Solo revalidar si hay cambios significativos en el CRM
-        // para no invalidar el caché en cada actualización menor
-        if (req.context?.skipRevalidate) return doc;
-        
-        // El CRM se usa principalmente en el admin, así que no necesitamos
-        // revalidación agresiva del storefront
-        return doc;
-      },
-    ],
   },
   admin: {
     useAsTitle: 'name',

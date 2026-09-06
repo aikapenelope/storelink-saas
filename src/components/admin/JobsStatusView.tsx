@@ -35,19 +35,18 @@ export async function JobsStatusView() {
   }
 
   try {
-    // Acceder a la colección interna de Payload Jobs
-    const jobsRes = await (payload.db as unknown as { 
-      find: (args: { collection: string; where?: Record<string, unknown>; limit?: number; sort?: string }) => Promise<{ docs: JobStatus[] }>
-    }).find({
-      collection: 'payload-jobs',
+    // Acceder a la colección interna de Payload Jobs vía Local API oficial
+    const jobsRes = await payload.find({
+      collection: 'payload-jobs' as never,
       where: {
-        workflow: { equals: 'order-created' }
+        workflow: { equals: 'order-created' },
       },
       limit: 10,
-      sort: '-createdAt'
+      sort: '-createdAt',
+      overrideAccess: true,
     });
 
-    const jobs = jobsRes.docs || [];
+    const jobs = (jobsRes.docs || []) as unknown as JobStatus[];
     const failedJobs = jobs.filter((job) => job.hasError);
     const recentJobs = jobs.slice(0, 5);
 

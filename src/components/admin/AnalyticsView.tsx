@@ -97,7 +97,7 @@ export async function AnalyticsView() {
     // bajo demanda (paginación real). KPIs, serie y más vendidos vienen de
     // agregaciones SQL (src/lib/analytics.ts, zona America/Caracas) — ya no
     // se cargan 300 documentos para sumar en memoria.
-    const [ordersRes, customersRes, productsRes, lowStockRes, kpis, series14, bestSellers] =
+    const [ordersRes, customersRes, productsCountRes, lowStockRes, kpis, series14, bestSellers] =
       await Promise.all([
         payload.find({
           collection: 'orders',
@@ -111,11 +111,11 @@ export async function AnalyticsView() {
           ...(tenantFilter ? { where: tenantFilter } : {}),
           limit: 50,
           sort: '-totalSpent',
+          depth: 0,
         }),
-        payload.find({
+        payload.count({
           collection: 'products',
           ...(tenantFilter ? { where: tenantFilter } : {}),
-          limit: 100,
         }),
         payload.find({
           collection: 'products',
@@ -127,6 +127,7 @@ export async function AnalyticsView() {
             ],
           },
           limit: 6,
+          depth: 0,
         }),
         getOrderKpis(payload, tenantId),
         getSalesSeries(payload, tenantId, 14),
@@ -135,7 +136,7 @@ export async function AnalyticsView() {
 
     const orders = (ordersRes.docs || []) as Order[];
     const customers = (customersRes.docs || []) as Customer[];
-    const products = (productsRes.docs || []) as Product[];
+    const totalProducts = productsCountRes.totalDocs;
     const lowStockProducts = (lowStockRes.docs || []) as Product[];
 
     // 1. Financial Metrics (agregadas en SQL)
@@ -421,7 +422,7 @@ export async function AnalyticsView() {
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
-                <span className="font-mono text-xs text-zinc-400">{products.length} productos en BD</span>
+                <span className="font-mono text-xs text-zinc-400">{totalProducts} productos en BD</span>
                 <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none">
                   {pendingOrdersCount > 0 ? 'En curso' : 'Al día'}
                 </span>

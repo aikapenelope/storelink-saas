@@ -46,15 +46,21 @@ export const MAX_CSV_BYTES = 2 * 1024 * 1024;
 /** Máximo de filas de datos (sin contar el encabezado). */
 export const MAX_CSV_ROWS = 5000;
 
+/** Máximo de caracteres por celda individual (hardening contra DoS / memory bloat). */
+export const MAX_CELL_LENGTH = 10000;
+
 /** Solo prefijos que sobreviven al trim(): un tab/CR inicial desaparece con
  *  el propio recorte y por tanto no puede llegar a ser fórmula. */
 const FORMULA_PREFIXES = ['=', '+', '-', '@'];
 
-/** Neutraliza celdas que Excel/Sheets interpretarían como fórmula. */
-export function sanitizeCsvCell(value: string | undefined | null): string {
+/** Neutraliza celdas que Excel/Sheets interpretarían como fórmula y acota longitud. */
+export function sanitizeCsvCell(value: string | undefined | null, maxLen = MAX_CELL_LENGTH): string {
   if (typeof value !== 'string') return '';
-  const cell = value.trim();
+  let cell = value.trim();
   if (cell.length === 0) return '';
+  if (cell.length > maxLen) {
+    cell = cell.slice(0, maxLen);
+  }
   if (FORMULA_PREFIXES.some((prefix) => cell.startsWith(prefix))) {
     return `'${cell}`;
   }
