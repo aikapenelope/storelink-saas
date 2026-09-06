@@ -180,3 +180,47 @@ export async function checkAdminRouteRateLimit(
     return { allowed: true };
   }
 }
+
+/**
+ * Rate-limit por IP para los endpoints de AUTH (middleware.ts: login,
+ * forgot/reset-password, unlock). P2 hardening (auditoría 2026-09-05):
+ * antes el contador vivía en un Map EN MEMORIA del middleware — una cota
+ * APROXIMADA por instancia serverless que no frenaba credential stuffing
+ * distribuido (muchas IPs × muchas cuentas, y cada instancia con su propio
+ * contador). Ahora comparte el mismo contador global en Upstash que el
+ * resto de los limiters. Segunda capa: maxLoginAttempts/lockTime de
+ * Users.ts (control oficial de Payload, docs/production/preventing-abuse).
+ * FAIL-OPEN decidido con el dueño, igual que el resto de este módulo.
+ */
+function authIpRateMax(): number {
+  const configured = Number(process.env.RATE_LIMIT_AUTH_PER_MIN);
+  return Number.isFinite(configured) && configured > 0 ? configured : 10;
+}
+
+let authIpLimiter: Ratelimit | null | undefined;
+
+function getAuthIpLimiter(): Ratelimit | null {
+  if (authIpLimiter !== undefined) return authIpLimiter;
+  const redis = getSharedRedis();
+  authIpLimiter = redis
+    ? new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(authIpRateMax(), '60 s'),
+        prefix: 'storelink:auth-ip',
+      })
+    : null;
+  return authIpLimiter;
+}
+
+export async function checkAuthIpRateLimit(ip: string): Promise<RateLimitVerdict> {
+  const rl = getAuthIpLimiter();
+  if (!rl) return { allowed: true };
+
+  try {
+    const result = await rl.limit(`ip:${ip}`);
+    return { allowed: result.success, remaining: result.remaining };
+  } catch (err) {
+    console.warn('Rate-limit auth no disponible (fail-open):', err);
+    return { allowed: true };
+  }
+}
