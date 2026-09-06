@@ -15,8 +15,8 @@ import {
 import { notFound } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 import { getTenantBySlug } from '@/lib/tenants';
-import { DEFAULT_PRODUCT_IMAGE_URL, RESERVED_TENANT_SLUGS } from '@/lib/constants';
-import { normalizeProductImageUrl } from '@/lib/image-hosts';
+import { getCatalogLimit } from '@/lib/tenant-plans';
+import { RESERVED_TENANT_SLUGS } from '@/lib/constants';
 
 // ISR (patrón oficial Next.js 15): la tienda se revalida como máximo cada
 // 5 minutos, y al instante tras cada mutación (checkout, sync-sheets,
@@ -159,91 +159,19 @@ export default async function TenantStorefrontPage({
     // Fetch products for this tenant con caché distribuido Redis
     // Complementa el ISR de Next.js (300s) con caché adicional para reducir
     // carga BD en picos de tráfico. Fallback a memoria y BD si Redis no responde.
-    const { products: productsDocs } = await getCachedProducts(payload, doc.id);
+    // El límite de visualización viene del plan del tenant (auditoría P1-1).
+    const { products: productsDocs } = await getCachedProducts(
+      payload,
+      doc.id,
+      getCatalogLimit(doc.plan)
+    );
 
+    // La proyección liviana (ProductItem) viene YA resuelta desde el caché
+    // (storefront-cache.ts): imágenes resueltas con normalizeProductImageUrl,
+    // variantes/modificadores mapeados. El catálogo ya no viaja dos veces
+    // (BD → doc completo → HTML) ni se re-cachea en forma pesada.
     if (productsDocs.length > 0) {
-      products = productsDocs.map((prod) => {
-        return {
-          id: String(prod.id),
-          sku: prod.sku || `SKU-${prod.id}`,
-          title: prod.title,
-          price: Number(prod.price) || 0,
-          description: prod.description || '',
-          category: prod.category && typeof prod.category === 'object'
-            ? { id: String(prod.category.id), name: prod.category.name || 'General' }
-            : undefined,
-          stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
-          trackStock: Boolean(prod.trackStock),
-          // Auditoría 2026-09-04 (P2): `prod.stockQuantity ?` convertía el 0
-          // (falsy) en undefined y el catálogo mostraba "disponible" para
-          // productos exactamente agotados. Chequeo por tipo.
-          stockQuantity:
-            typeof prod.stockQuantity === 'number' ? Number(prod.stockQuantity) : undefined,
-          featured: Boolean(prod.featured),
-          variants: Array.isArray(prod.variants)
-            ? prod.variants.map((v) => ({
-                name: v.name,
-                sku: v.sku || undefined,
-                price: Number(v.price) || 0,
-                stockQuantity:
-                  typeof v.stockQuantity === 'number' ? Number(v.stockQuantity) : undefined,
-                stockStatus: (v.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
-              }))
-            : [],
-          modifiers: Array.isArray(prod.modifiers)
-            ? prod.modifiers.map((m) => ({
-                groupName: m.groupName,
-                options: Array.isArray(m.options)
-                  ? m.options.map((opt) => ({
-                      name: opt.name,
-                      priceDelta: Number(opt.priceDelta) || 0,
-                    }))
-                  : [],
-              }))
-            : [],
-          // Fase 1 (expand): imageUrls es el campo principal.
-          // Cadena de resolución resiliente:
-          // 1. prod.imageUrls (text hasMany, campo principal multi-foto)
-          // 2. prod.imageUrl (string histórico previo a la migración)
-          // 3. prod.images (relación upload legacy a Media)
-          // 4. DEFAULT_PRODUCT_IMAGE_URL (fallback de seguridad si no hay fotos)
-          images: (() => {
-            const urls: string[] = [];
-
-            if (Array.isArray(prod.imageUrls)) {
-              for (const u of prod.imageUrls) {
-                if (typeof u === 'string' && u.trim().length > 0) {
-                  urls.push(normalizeProductImageUrl(u.trim()));
-                }
-              }
-            }
-
-            const legacyImageUrl = (prod as { imageUrl?: unknown }).imageUrl;
-            if (urls.length === 0 && typeof legacyImageUrl === 'string' && legacyImageUrl.trim().length > 0) {
-              urls.push(normalizeProductImageUrl(legacyImageUrl.trim()));
-            }
-
-            if (urls.length === 0 && Array.isArray(prod.images)) {
-              for (const img of prod.images) {
-                if (
-                  typeof img.image === 'object' &&
-                  img.image &&
-                  'url' in img.image &&
-                  typeof img.image.url === 'string' &&
-                  img.image.url.trim().length > 0
-                ) {
-                  urls.push(normalizeProductImageUrl(img.image.url.trim()));
-                }
-              }
-            }
-
-            return urls.length > 0
-              ? urls.map((url) => ({ url }))
-              : [{ url: DEFAULT_PRODUCT_IMAGE_URL }];
-          })(),
-        };
-      });
-
+      products = productsDocs;
 
       // Dynamic categories from loaded products
       const catSet = new Set<string>(['Todos']);
@@ -252,6 +180,7 @@ export default async function TenantStorefrontPage({
       });
       categories = Array.from(catSet);
     }
+
   } catch (err: unknown) {
     const errorObject = err as { digest?: string; message?: string } | null;
     if (errorObject?.digest?.startsWith('NEXT_NOT_FOUND') || errorObject?.message === 'NEXT_NOT_FOUND') {

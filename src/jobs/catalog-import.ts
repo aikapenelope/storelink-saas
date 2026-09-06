@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { sanitizeCsvCell, parseCSVLine } from '@/lib/csv';
 import { isAllowedImageUrl, normalizeProductImageUrl } from '@/lib/image-hosts';
 import { invalidateProductsCache } from '@/lib/storefront-cache';
+import { getCatalogLimit } from '@/lib/tenant-plans';
 import type { Category, Product } from '@/payload-types';
 
 /**
@@ -36,6 +37,7 @@ const catalogImportRows: TaskConfig = {
     { name: 'created', type: 'number' },
     { name: 'updated', type: 'number' },
     { name: 'errorCount', type: 'number' },
+    { name: 'limitReached', type: 'checkbox' },
   ],
   handler: async ({ input, req }) => {
     const { payload } = req;
@@ -64,6 +66,30 @@ const catalogImportRows: TaskConfig = {
     let createdCount = 0;
     let updatedCount = 0;
     let errorCount = 0;
+    let limitReached = false;
+
+    // Puerta de cuota por plan (auditoría 2026-09-05, P1-1): el límite es
+    // sobre el TOTAL de productos del tenant. Los UPDATES de SKUs existentes
+    // nunca consumen cupo (un re-sync del catálogo completo sigue válido);
+    // solo las CREACIONES nuevas se detienen al agotarlo. El doc del tenant
+    // se lee aquí (no viaja en el input) para no cambiar inputSchema de jobs
+    // ya en cola.
+    let catalogLimit = getCatalogLimit(null);
+    try {
+      const tenantDoc = await payload.findByID({
+        collection: 'tenants',
+        id: tenantId,
+        depth: 0,
+        overrideAccess: true,
+      });
+      catalogLimit = getCatalogLimit(
+        (tenantDoc as { plan?: string | null }).plan
+      );
+    } catch {
+      console.warn(
+        `[storelink][catalog-import] tenant ${tenantId} no legible; usando límite estándar`
+      );
+    }
 
     const existingProductsRes = await payload.find({
       collection: 'products',
@@ -72,6 +98,11 @@ const catalogImportRows: TaskConfig = {
       depth: 0,
       overrideAccess: true,
     });
+    // totalDocs refleja el conteo REAL aunque los docs se trunquen en 5000.
+    const allowedNewCreations = Math.max(
+      0,
+      catalogLimit - existingProductsRes.totalDocs
+    );
     const productBySku = new Map<string, Product>();
     for (const prod of existingProductsRes.docs as Product[]) {
       if (prod.sku) productBySku.set(prod.sku, prod);
@@ -180,6 +211,18 @@ const catalogImportRows: TaskConfig = {
           productBySku.set(sku, updated as Product);
           updatedCount++;
         } else {
+          if (createdCount >= allowedNewCreations) {
+            // Cupo del plan agotado: la fila nueva NO se crea (se cuenta como
+            // error para que el admin la vea en el resultado del job).
+            if (!limitReached) {
+              console.warn(
+                `[storelink][catalog-import] tenant ${tenantId}: cupo del plan agotado (${catalogLimit}); filas nuevas restantes omitidas`
+              );
+            }
+            limitReached = true;
+            errorCount++;
+            continue;
+          }
           const created = await payload.create({
             collection: 'products',
             overrideAccess: true,
@@ -217,7 +260,7 @@ const catalogImportRows: TaskConfig = {
     // ISR, o los cambios no se ven hasta 3 min después.
     await invalidateProductsCache(tenantId);
 
-    return { output: { created: createdCount, updated: updatedCount, errorCount } };
+    return { output: { created: createdCount, updated: updatedCount, errorCount, limitReached } };
   },
 };
 

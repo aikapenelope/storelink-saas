@@ -7,6 +7,7 @@ import { after } from 'next/server';
 // Payload con user + overrideAccess: false (patrón oficial QUERIES.md §Local API)
 import { validateCsvLimits, parseCSVLine } from '@/lib/csv';
 import { checkAdminRouteRateLimit, checkTenantRateLimit } from '@/lib/rate-limit';
+import { describeCatalogLimit } from '@/lib/tenant-plans';
 
 export const dynamic = 'force-dynamic';
 
@@ -157,7 +158,7 @@ export async function POST(
         success: true,
         queued: true,
         jobId: job.id,
-        message: `Importación en cola para ${tenantResult.docs[0].name}. Se reflejará en el catálogo en unos segundos.`,
+        message: `Importación en cola para ${tenantResult.docs[0].name} (${describeCatalogLimit(tenantResult.docs[0].plan)}; los re-sync de SKUs existentes no consumen cupo). Se reflejará en el catálogo en unos segundos.`,
       },
       { status: 202 }
     );
