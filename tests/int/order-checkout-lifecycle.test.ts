@@ -7,7 +7,7 @@ import config from '../payload.config';
  * Regresión de dos brechas señaladas en las auditorías previas y nunca
  * cerradas con un test de integración real (contra Postgres, no mocks):
  *
- * 1. V-H1 (AUDITORIA_REVALIDADA_2026-08-25 §V-H1): "Test faltante: integración
+ * 1. V-H1 (auditoría revalidada de 2026-08-25, §V-H1): "Test faltante: integración
  *    que compre por SKU de variante y afirme qué campo decreció." Este test
  *    compra por SKU de variante y verifica que SOLO la fila de la variante
  *    en products_variants decrece — el stock base del producto no se toca.
