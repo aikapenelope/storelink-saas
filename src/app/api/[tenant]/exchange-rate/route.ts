@@ -26,7 +26,17 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
+    // P2 (auditoría 2026-09-05): body JSON malformado → 400 explícito. Ojo
+    // con la semántica: un body VÁLIDO con exchangeRateVES null/undefined
+    // significa "restablecer a modo automático" (comportamiento intencional
+    // de la ruta); eso NO debe confundirse con un body que ni siquiera es
+    // JSON válido.
+    let body: { exchangeRateVES?: unknown };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Cuerpo JSON inválido' }, { status: 400 });
+    }
     const { exchangeRateVES } = body;
 
     // Find tenant — Sprint 2: user + overrideAccess: false para el lookup

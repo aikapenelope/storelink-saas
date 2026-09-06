@@ -373,7 +373,7 @@ export function DashboardOrdersManager({
                       <p className="font-semibold text-white truncate max-w-[140px]">{customerName}</p>
                       {cleanPhone ? (
                         <a
-                          href={`https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${prefilledMsg}`}
+                          href={`https://wa.me/${encodeURIComponent(cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`)}?text=${prefilledMsg}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[11px] text-zinc-400 hover:text-white inline-flex items-center gap-1 font-mono"

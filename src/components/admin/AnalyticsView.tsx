@@ -625,7 +625,7 @@ export async function AnalyticsView() {
                       </div>
                       {cleanPhone ? (
                         <a
-                          href={`https://wa.me/${cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`}?text=${prefilledMsg}`}
+                          href={`https://wa.me/${encodeURIComponent(cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`)}?text=${prefilledMsg}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 shrink-0 rounded-none"
