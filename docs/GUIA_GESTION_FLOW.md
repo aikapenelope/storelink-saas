@@ -79,6 +79,27 @@ El sistema usa **una sola credencial maestra de Trello** (ya configurada en las 
 
 ## 3. 📦 Paso a Paso: Cargar el Catálogo de Productos
 
+### 📊 Planes de Capacidad y Límites del Catálogo
+
+Cada tienda tiene un **límite de productos en catálogo** según su plan, asignado por el super-admin
+desde el panel (`Tenants → campo "Plan de Capacidad"`):
+
+| Plan | Límite de productos | Sin plan asignado |
+| :--- | :---: | :---: |
+| Básico | **500** | — |
+| Pro | **2000** | — |
+| *(estándar)* | — | **1000** |
+
+Reglas del límite:
+
+- El límite aplica a los **productos visibles en la tienda** y a las **creaciones nuevas** por importación.
+- **Re-sincronizar (Google Sheets/CSV) productos que ya existen (mismo SKU) NUNCA consume cupo**: puedes
+  re-importar tu catálogo completo tantas veces como quieras para actualizar precios, stock o fotos.
+- Si una importación supera el cupo disponible, las filas nuevas que no quepan se omiten y quedan
+  contadas como errores en el resultado del job (`limitReached`), con aviso en la respuesta de la sincronización.
+- Otras cotas de la plataforma: máximo 5.000 filas / 2 MB por archivo de importación; 6 fotos por
+  producto; 30 ítems por pedido; tasa de 5 pedidos/min por cliente y tienda.
+
 ### Sincronización en 1 Clic con Google Sheets (Recomendado)
 
 1. **Estructura de la Hoja de Google Sheets:**
