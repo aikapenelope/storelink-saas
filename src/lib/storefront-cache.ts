@@ -35,6 +35,21 @@ function getRedis(): Redis | null {
 const inMemoryCache = new Map<string, { data: ProductItem[]; timestamp: number }>();
 const MEMORY_TTL_MS = 2 * 60 * 1000; // 2 minutos en memoria
 
+/**
+ * Versión del esquema serializado del caché (review Devin #84): el formato
+ * pasó de Product[] (docs completos) a ProductItem[] (proyección liviana) y
+ * el límite dejó de estar cocido en el valor. Sin versionar la clave, un
+ * deploy serviría entradas del formato viejo hasta 180s (imágenes con shape
+ * incompatible + tope 500 viejo). Versionar la clave deja las entradas
+ * anteriores huérfanas: las borra el TTL y nunca se leen.
+ */
+const CACHE_SCHEMA_VERSION = 'v2';
+const LEGACY_CACHE_PREFIX = 'storefront:products:';
+
+function cacheKeyFor(tenantId: number): string {
+  return `${LEGACY_CACHE_PREFIX}${CACHE_SCHEMA_VERSION}:${tenantId}`;
+}
+
 export interface ProductCacheResult {
   products: ProductItem[];
   source: 'redis' | 'memory' | 'database';
@@ -141,7 +156,7 @@ export async function getCachedProducts(
    */
   catalogLimit: number = DEFAULT_CATALOG_LIMIT
 ): Promise<ProductCacheResult> {
-  const cacheKey = `storefront:products:${tenantId}`;
+  const cacheKey = cacheKeyFor(tenantId);
   const now = Date.now();
 
   // 1. Intentar caché Redis
@@ -191,18 +206,20 @@ export async function getCachedProducts(
 }
 
 export async function invalidateProductsCache(tenantId: number): Promise<void> {
-  const cacheKey = `storefront:products:${tenantId}`;
-  inMemoryCache.delete(cacheKey);
+  // Borra la clave versionada actual Y la legacy pre-deploy (review Devin
+  // #84): la legacy muere por TTL, pero eliminarla aquí garantiza que una
+  // invalidación no deje jamás un valor viejo alcanzable bajo ninguna clave.
+  inMemoryCache.delete(cacheKeyFor(tenantId));
 
   const redis = getRedis();
   if (redis) {
-    // Fix review Devin/Graphify (#64): AWAIT del borr distribuido. Antes era
+    // Fix review Devin/Graphify #64: AWAIT del borrado distribuido. Antes era
     // fire-and-forget: un revalidatePath inmediato podía regenerar el HTML
     // leyendo el valor VIEJO de Redis antes de que el DEL aterrizara. El fallo
     // de Redis se tolera (el TTL de 180s es el límite de consistencia), pero la
     // invalidación exitosa debe completarse antes de devolver el control.
     try {
-      await redis.del(cacheKey);
+      await redis.del(cacheKeyFor(tenantId), `${LEGACY_CACHE_PREFIX}${tenantId}`);
     } catch {
       // Non-blocking: si Redis no responde, el TTL acota la obsolescencia.
     }
