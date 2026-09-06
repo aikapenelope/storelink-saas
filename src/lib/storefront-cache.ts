@@ -3,7 +3,10 @@ import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import type { Payload } from 'payload';
 import type { Product } from '@/payload-types';
+import type { ProductItem } from '@/components/storefront-client';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '@/lib/constants';
 import { normalizeProductImageUrl } from '@/lib/image-hosts';
+import { DEFAULT_CATALOG_LIMIT } from '@/lib/tenant-plans';
 
 /**
  * Caché distribuido Redis para productos del storefront.
@@ -29,26 +32,138 @@ function getRedis(): Redis | null {
   return redisClient;
 }
 
-const inMemoryCache = new Map<string, { data: Product[]; timestamp: number }>();
+const inMemoryCache = new Map<string, { data: ProductItem[]; timestamp: number }>();
 const MEMORY_TTL_MS = 2 * 60 * 1000; // 2 minutos en memoria
 
+/**
+ * Versión del esquema serializado del caché (review Devin #84): el formato
+ * pasó de Product[] (docs completos) a ProductItem[] (proyección liviana) y
+ * el límite dejó de estar cocido en el valor. Sin versionar la clave, un
+ * deploy serviría entradas del formato viejo hasta 180s (imágenes con shape
+ * incompatible + tope 500 viejo). Versionar la clave deja las entradas
+ * anteriores huérfanas: las borra el TTL y nunca se leen.
+ */
+const CACHE_SCHEMA_VERSION = 'v2';
+const LEGACY_CACHE_PREFIX = 'storefront:products:';
+
+function cacheKeyFor(tenantId: number): string {
+  return `${LEGACY_CACHE_PREFIX}${CACHE_SCHEMA_VERSION}:${tenantId}`;
+}
+
 export interface ProductCacheResult {
-  products: Product[];
+  products: ProductItem[];
   source: 'redis' | 'memory' | 'database';
+}
+
+/**
+ * Proyección LIVIANA del producto para storefront y caché (auditoría
+ * 2026-09-05): se cachea exactamente lo que el catálogo renderiza (la forma
+ * ProductItem con las URLs de imagen YA resueltas), no el doc completo de
+ * Payload. Reduce el valor Redis 3-5× (upstash tiene tope por valor: un
+ * catálogo de 1000+ productos como doc completo lo reventaba y el set
+ * fallaba en silencio, dejando al tenant grande sin caché distribuido) y
+ * de paso evita serializar dos veces el catálogo hacia el HTML del cliente.
+ *
+ * Cadena de resolución de imágenes (antes en [tenant]/page.tsx, misma
+ * semántica): imageUrls → imageUrl (legacy) → images (relación Media con
+ * depth 1) → DEFAULT_PRODUCT_IMAGE_URL.
+ */
+function toStorefrontProduct(prod: Product): ProductItem {
+  const images = (() => {
+    const urls: string[] = [];
+
+    if (Array.isArray(prod.imageUrls)) {
+      for (const u of prod.imageUrls) {
+        if (typeof u === 'string' && u.trim().length > 0) {
+          urls.push(normalizeProductImageUrl(u.trim()));
+        }
+      }
+    }
+
+    const legacyImageUrl = (prod as { imageUrl?: unknown }).imageUrl;
+    if (urls.length === 0 && typeof legacyImageUrl === 'string' && legacyImageUrl.trim().length > 0) {
+      urls.push(normalizeProductImageUrl(legacyImageUrl.trim()));
+    }
+
+    if (urls.length === 0 && Array.isArray(prod.images)) {
+      for (const img of prod.images) {
+        if (
+          typeof img.image === 'object' &&
+          img.image &&
+          'url' in img.image &&
+          typeof img.image.url === 'string' &&
+          img.image.url.trim().length > 0
+        ) {
+          urls.push(normalizeProductImageUrl(img.image.url.trim()));
+        }
+      }
+    }
+
+    return urls.length > 0
+      ? urls.map((url) => ({ url }))
+      : [{ url: DEFAULT_PRODUCT_IMAGE_URL }];
+  })();
+
+  return {
+    id: String(prod.id),
+    sku: prod.sku || `SKU-${prod.id}`,
+    title: prod.title,
+    price: Number(prod.price) || 0,
+    description: prod.description || '',
+    category:
+      prod.category && typeof prod.category === 'object'
+        ? { id: String(prod.category.id), name: prod.category.name || 'General' }
+        : undefined,
+    stockStatus: (prod.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
+    trackStock: Boolean(prod.trackStock),
+    // Chequeo por tipo: `prod.stockQuantity ?` convertía el 0 (falsy) en
+    // undefined y el catálogo mostraba "disponible" para agotados exactos.
+    stockQuantity: typeof prod.stockQuantity === 'number' ? Number(prod.stockQuantity) : undefined,
+    featured: Boolean(prod.featured),
+    variants: Array.isArray(prod.variants)
+      ? prod.variants.map((v) => ({
+          name: v.name,
+          sku: v.sku || undefined,
+          price: Number(v.price) || 0,
+          stockQuantity: typeof v.stockQuantity === 'number' ? Number(v.stockQuantity) : undefined,
+          stockStatus: (v.stockStatus as 'in_stock' | 'out_of_stock') || 'in_stock',
+        }))
+      : [],
+    modifiers: Array.isArray(prod.modifiers)
+      ? prod.modifiers.map((m) => ({
+          groupName: m.groupName,
+          options: Array.isArray(m.options)
+            ? m.options.map((opt) => ({
+                name: opt.name,
+                priceDelta: Number(opt.priceDelta) || 0,
+              }))
+            : [],
+        }))
+      : [],
+    images,
+  };
 }
 
 export async function getCachedProducts(
   payload: Payload,
-  tenantId: number
+  tenantId: number,
+  /**
+   * Límite de catálogo del plan del tenant (auditoría 2026-09-05, P1-1):
+   * antes 500 hardcodeado — productos 501+ quedaban invisibles en silencio.
+   * Default 1000 (estándar sin plan); el caller pasa el límite del plan.
+   * sort determinista: el recorte (si lo hay) siempre corta los mismos
+   * productos, no un subconjunto arbitrario por página.
+   */
+  catalogLimit: number = DEFAULT_CATALOG_LIMIT
 ): Promise<ProductCacheResult> {
-  const cacheKey = `storefront:products:${tenantId}`;
+  const cacheKey = cacheKeyFor(tenantId);
   const now = Date.now();
 
   // 1. Intentar caché Redis
   const redis = getRedis();
   if (redis) {
     try {
-      const cached = await redis.get<Product[]>(cacheKey);
+      const cached = await redis.get<ProductItem[]>(cacheKey);
       if (cached) {
         return { products: cached, source: 'redis' };
       }
@@ -67,21 +182,15 @@ export async function getCachedProducts(
   const productsResult = await payload.find({
     collection: 'products',
     where: { tenant: { equals: tenantId } },
-    limit: 500,
+    limit: catalogLimit,
+    sort: '-createdAt',
     depth: 1,
   });
 
   const rawProducts = productsResult.docs as Product[];
-  const products: Product[] = rawProducts.map((p) => {
-    const legacyUrl = (p as { imageUrl?: unknown }).imageUrl;
-    return {
-      ...p,
-      imageUrls: Array.isArray(p.imageUrls)
-        ? p.imageUrls.map((u) => (typeof u === 'string' ? normalizeProductImageUrl(u) : u))
-        : p.imageUrls,
-      ...(typeof legacyUrl === 'string' ? { imageUrl: normalizeProductImageUrl(legacyUrl) } : {}),
-    };
-  });
+  // Proyección liviana YA resuelta: es lo que se cachea en memoria y Redis
+  // (ver toStorefrontProduct — misma semántica que mapeaba [tenant]/page.tsx).
+  const products: ProductItem[] = rawProducts.map(toStorefrontProduct);
 
   // 4. Guardar en caché memoria
   inMemoryCache.set(cacheKey, { data: products, timestamp: now });
@@ -97,18 +206,20 @@ export async function getCachedProducts(
 }
 
 export async function invalidateProductsCache(tenantId: number): Promise<void> {
-  const cacheKey = `storefront:products:${tenantId}`;
-  inMemoryCache.delete(cacheKey);
+  // Borra la clave versionada actual Y la legacy pre-deploy (review Devin
+  // #84): la legacy muere por TTL, pero eliminarla aquí garantiza que una
+  // invalidación no deje jamás un valor viejo alcanzable bajo ninguna clave.
+  inMemoryCache.delete(cacheKeyFor(tenantId));
 
   const redis = getRedis();
   if (redis) {
-    // Fix review Devin/Graphify (#64): AWAIT del borr distribuido. Antes era
+    // Fix review Devin/Graphify #64: AWAIT del borrado distribuido. Antes era
     // fire-and-forget: un revalidatePath inmediato podía regenerar el HTML
     // leyendo el valor VIEJO de Redis antes de que el DEL aterrizara. El fallo
     // de Redis se tolera (el TTL de 180s es el límite de consistencia), pero la
     // invalidación exitosa debe completarse antes de devolver el control.
     try {
-      await redis.del(cacheKey);
+      await redis.del(cacheKeyFor(tenantId), `${LEGACY_CACHE_PREFIX}${tenantId}`);
     } catch {
       // Non-blocking: si Redis no responde, el TTL acota la obsolescencia.
     }

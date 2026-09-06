@@ -1,6 +1,8 @@
-import type { CollectionConfig, TextFieldSingleValidation } from 'payload';
+import type { CollectionAfterChangeHook, CollectionConfig, TextFieldSingleValidation } from 'payload';
+import type { Tenant } from '@/payload-types';
 import { getUserRole, getUserTenantIds, hasTenantAccess } from '@/lib/utils';
 import { RESERVED_TENANT_SLUGS } from '@/lib/constants';
+import { schedulePostCommitInvalidation } from '@/lib/storefront-cache';
 
 /**
  * F1 (auditoría BYOK 2026-08-29): resend-tenant-adapter.ts resuelve la clave
@@ -54,12 +56,40 @@ const validateSlugNotReserved: TextFieldSingleValidation = (value) => {
   return true;
 };
 
+/**
+ * Review Devin #84: un cambio de `plan` cambia el tope de catálogo que el
+ * storefront aplica al leer el caché — un upgrade dejaba el catálogo truncado
+ * y un downgrade lo dejaba sobreexpuesto hasta expirar el TTL (180s Redis /
+ * 2 min memoria / 300s ISR). Se invalida el caché de productos y se revalida
+ * el ISR de la tienda SOLO cuando el plan cambia de verdad (no en updates
+ * ajenos: tasa, branding, configs de Trello/email...).
+ *
+ * Los hooks de Payload corren DENTRO de la transacción (docs oficiales,
+ * ADAPTERS.md): schedulePostCommitInvalidation espera el commit real y
+ * re-invalida entonces — el mismo patrón transaccional de los hooks de
+ * Products (hallazgo Devin/Graphify #64).
+ */
+const planChangeInvalidation: CollectionAfterChangeHook<Tenant> = async ({
+  doc,
+  previousDoc,
+  req,
+  operation,
+}) => {
+  if (operation !== 'update') return doc;
+  if ((previousDoc?.plan ?? null) === (doc.plan ?? null)) return doc;
+  schedulePostCommitInvalidation(req, doc.id, doc.slug ?? undefined);
+  return doc;
+};
+
 export const Tenants: CollectionConfig = {
   slug: 'tenants',
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'slug', 'theme', 'whatsappPhone', 'createdAt'],
     hidden: ({ user }) => getUserRole(user) !== 'super-admin',
+  },
+  hooks: {
+    afterChange: [planChangeInvalidation],
   },
   access: {
     // Audit fix C2: los datos de tenants ya no son públicos vía REST API.
@@ -122,6 +152,26 @@ export const Tenants: CollectionConfig = {
       ],
       admin: {
         description: 'Elige si la tienda usa la plantilla del Plan Básico o una de las plantillas Premium especializadas.',
+      },
+    },
+    {
+      // Planes de capacidad (auditoría 2026-09-05, P1-1): el límite de catálogo
+      // por tienda es configurable por super-admin. Sin plan asignado (null) la
+      // tienda usa el límite estándar de 1000 productos. La fuente de verdad de
+      // los números es src/lib/tenant-plans.ts; aquí solo se elige el plan.
+      // NOTA: no confundir con `theme` (diseño de la tienda) — este campo es
+      // capacidad de catálogo. Tenants.update ya es super-admin only, así que
+      // el campo hereda esa protección sin access adicional.
+      name: 'plan',
+      type: 'select',
+      label: 'Plan de Capacidad (Límite de Catálogo)',
+      options: [
+        { label: 'Básico — hasta 500 productos', value: 'basico' },
+        { label: 'Pro — hasta 2000 productos', value: 'pro' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Sin plan asignado la tienda tiene un límite estándar de 1000 productos. Solo super-admin.',
       },
     },
     {
