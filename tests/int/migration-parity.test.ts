@@ -102,7 +102,7 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
       console.warn(
         '[migration-parity] SIN BASELINE: la cadena de migraciones NO reconstruye el schema desde una BD vacía ' +
           '(primera migración = ALTER sobre tablas preexistentes; backfill CRM usa columnas JSONB legacy). ' +
-          'Gap DR documentado en docs/AUDITORIA_INTEGRAL_2026-09-04.md (§4, hallazgo 24). Acción del owner: ' +
+          'Gap DR conocido desde la auditoría de 2026-09-04 (hallazgo 24). Acción del owner: ' +
           'generar el baseline con `pnpm migrate:create` en un entorno local con BD y registrarlo PRIMERO en ' +
           'src/migrations/index.ts — este suite se activará solo en modo completo. Suite saltado.'
       );

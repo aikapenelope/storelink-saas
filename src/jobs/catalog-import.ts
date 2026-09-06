@@ -11,8 +11,8 @@ import type { Category, Product } from '@/payload-types';
  * plano) movido FUERA del request síncrono de Vercel. Antes,
  * import-csv/route.ts y sync-sheets/route.ts procesaban hasta 5.000 filas
  * dentro del propio request — riesgo real de timeout de función serverless
- * en catálogos grandes (ver docs/HALLAZGOS_AUDITORIA_PROFUNDA_2026-08-29.md
- * §1). No se suma infraestructura nueva (Inngest/QStash/Vercel Queues): se
+ * en catálogos grandes (hallazgo de la auditoría profunda de 2026-08-29, §1).
+ * No se suma infraestructura nueva (Inngest/QStash/Vercel Queues): se
  * reutiliza la Jobs Queue y el runner externo (.github/workflows/jobs-
  * runner.yml, cada 5 min) que YA existen para order-created.
  *

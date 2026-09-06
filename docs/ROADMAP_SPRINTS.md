@@ -1,6 +1,6 @@
 # Roadmap de Sprints — Remediación post-auditoría 2026-09-04
 
-Derivado de `docs/AUDITORIA_INTEGRAL_2026-09-04.md` (5.8/10 NO-GO remediable → objetivo ≥8.0 GO).
+Derivado de la auditoría integral de 2026-09-04 (5.8/10 NO-GO remediable → objetivo ≥8.0 GO).
 Cada sprint = 2 semanas, 1–3 PRs, con criterios de aceptación verificables. El PR #73 (remediación
 de la auditoría) cierra los fixes transversales; este roadmap organiza lo restante.
 
