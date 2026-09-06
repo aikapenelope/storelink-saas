@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_CELL_LENGTH,
   MAX_CSV_BYTES,
   MAX_CSV_ROWS,
   sanitizeCsvCell,
@@ -36,12 +37,19 @@ describe('sanitizeCsvCell — inyección de fórmulas (OWASP)', () => {
     expect(sanitizeCsvCell('')).toBe('');
   });
 
-  it('-50% como precio numérico no pasa por aquí (parseo aparte): la celda guardada sí queda neutralizada', () => {
-    // Documenta el contrato: los números se parsean con parseFloat ANTES de
-    // almacenar; sanitizeCsvCell aplica solo a campos de texto persistidos.
-    const stored = sanitizeCsvCell('-50');
-    expect(stored.startsWith("'")).toBe(true);
-    expect(parseFloat(stored)).toBeNaN();
+  it('trunca celdas que exceden MAX_CELL_LENGTH para evitar memory bloat', () => {
+    const longText = 'A'.repeat(MAX_CELL_LENGTH + 500);
+    const sanitized = sanitizeCsvCell(longText);
+    expect(sanitized.length).toBe(MAX_CELL_LENGTH);
+    expect(sanitized).toBe('A'.repeat(MAX_CELL_LENGTH));
+  });
+
+  it('trunca celdas con fórmulas y mantiene prefijo apóstrofe', () => {
+    const longFormula = '=' + 'B'.repeat(MAX_CELL_LENGTH + 100);
+    const sanitized = sanitizeCsvCell(longFormula);
+    expect(sanitized.startsWith("'=")).toBe(true);
+    // '=' + 'B' * (MAX_CELL_LENGTH - 1) prefixado por "'" = MAX_CELL_LENGTH + 1
+    expect(sanitized.length).toBe(MAX_CELL_LENGTH + 1);
   });
 });
 

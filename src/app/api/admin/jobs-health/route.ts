@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPayload, type Where } from 'payload';
+import { getPayload } from 'payload';
 import config from '@payload-config';
 import { verifyCronSecret } from '@/lib/cron-secret';
 
@@ -18,13 +18,6 @@ import { verifyCronSecret } from '@/lib/cron-secret';
  *    muerto, endpoint caído o cola atascada).
  */
 
-type InternalJobsFind = (args: {
-  collection: string;
-  where?: Where;
-  limit?: number;
-  sort?: string;
-}) => Promise<{ docs: Array<{ id: number | string; createdAt?: string }> }>;
-
 const OLDEST_PENDING_ALARM_MINUTES = 30;
 
 export async function GET(request: Request) {
@@ -35,26 +28,24 @@ export async function GET(request: Request) {
   try {
     const payload = await getPayload({ config });
 
-    // 'payload-jobs' es colección interna (ver cleanup-jobs/route.ts para el
-    // detalle del hueco de generación de tipos).
-    const db = payload.db as unknown as { find: InternalJobsFind };
-
-    const failedRes = await db.find({
-      collection: 'payload-jobs',
+    const failedRes = await payload.find({
+      collection: 'payload-jobs' as never,
       where: { hasError: { equals: true } },
       limit: 100,
       sort: '-updatedAt',
+      overrideAccess: true,
     });
 
-    const oldestPendingRes = await db.find({
-      collection: 'payload-jobs',
+    const oldestPendingRes = await payload.find({
+      collection: 'payload-jobs' as never,
       where: { hasError: { not_equals: true } },
       limit: 1,
       sort: 'createdAt',
+      overrideAccess: true,
     });
 
     const failedJobs = failedRes.docs.length;
-    const oldestPending = oldestPendingRes.docs[0];
+    const oldestPending = (oldestPendingRes.docs as unknown as Array<{ id: string | number; createdAt?: string }>)[0];
     const oldestPendingMinutes = oldestPending?.createdAt
       ? Math.round((Date.now() - new Date(oldestPending.createdAt).getTime()) / 60000)
       : 0;
