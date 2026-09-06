@@ -167,6 +167,10 @@ export interface Tenant {
       )
     | null;
   /**
+   * Sin plan asignado la tienda tiene un límite estándar de 1000 productos. Solo super-admin.
+   */
+  plan?: ('basico' | 'pro') | null;
+  /**
    * Incluir código de país sin el signo + (ej: 34600111222 o 584121234567)
    */
   whatsappPhone: string;
@@ -762,6 +766,7 @@ export interface TenantsSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
   theme?: T;
+  plan?: T;
   whatsappPhone?: T;
   emailConfig?:
     | T

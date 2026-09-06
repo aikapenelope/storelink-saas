@@ -125,6 +125,26 @@ export const Tenants: CollectionConfig = {
       },
     },
     {
+      // Planes de capacidad (auditoría 2026-09-05, P1-1): el límite de catálogo
+      // por tienda es configurable por super-admin. Sin plan asignado (null) la
+      // tienda usa el límite estándar de 1000 productos. La fuente de verdad de
+      // los números es src/lib/tenant-plans.ts; aquí solo se elige el plan.
+      // NOTA: no confundir con `theme` (diseño de la tienda) — este campo es
+      // capacidad de catálogo. Tenants.update ya es super-admin only, así que
+      // el campo hereda esa protección sin access adicional.
+      name: 'plan',
+      type: 'select',
+      label: 'Plan de Capacidad (Límite de Catálogo)',
+      options: [
+        { label: 'Básico — hasta 500 productos', value: 'basico' },
+        { label: 'Pro — hasta 2000 productos', value: 'pro' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Sin plan asignado la tienda tiene un límite estándar de 1000 productos. Solo super-admin.',
+      },
+    },
+    {
       name: 'whatsappPhone',
       type: 'text',
       required: true,
