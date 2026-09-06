@@ -25,7 +25,7 @@ test.describe('Panel admin — login y dashboard', () => {
     await cleanupE2EFixtures(tenantSlug);
   });
 
-  test('un super-admin puede iniciar sesión y ver el banner de tienda activa', async ({ page }) => {
+  test('un admin E2E puede iniciar sesión y ver el banner de tienda activa', async ({ page }) => {
     await page.goto('/admin/login');
 
     await page.locator('input[name="email"]').fill(E2E_ADMIN.email);
@@ -37,7 +37,9 @@ test.describe('Panel admin — login y dashboard', () => {
     await expect(page).toHaveURL(/\/admin(\/collections\/tenants)?\/?$/, { timeout: 15000 });
 
     // StoreUrlBanner (src/components/admin/StoreUrlBanner.tsx): confirma que
-    // el dashboard resolvió el tenant del super-admin sin error de columna.
+    // el dashboard resolvió el tenant del admin E2E sin error de columna.
+    // El usuario sembrado es tenant-admin de SU fixture (review Devin #85:
+    // el seed nunca fabrica super-admins logueables contra la BD compartida).
     await expect(page.getByText('Tienda Activa:').first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('link', { name: /Abrir Tienda/i })).toBeVisible();
   });
