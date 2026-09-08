@@ -159,6 +159,92 @@ const applyBaseProductStockDelta = async ({
 };
 
 /**
+ * PR 11 (SPEC-20260907-11, thermo D2): dispatch UNIFICADO variante-vs-base
+ * del ajuste de stock de un ítem. Antes este bloque vivía TRIPLICADO en los
+ * tres caminos del hook (deducción del alta, restoreStockForItems de
+ * cancelación/borrado, applyStockDeltasForEdit de edición) — cada fix de
+ * dispatch (ej. mensajes de APIError de stock) exigía 3 ediciones síncronas.
+ *
+ * Semántica de cada calle PRESERVADA al 100%:
+ *  - Ítem con SKU de variante cuya fila tiene stockQuantity → delta sobre la
+ *    FILA de la variante (venta por variante descuenta la variante).
+ *  - Si no, producto base con trackStock y stockQuantity → delta del base.
+ *  - Si no, no-op (productos sin tracking / sin dato legacy).
+ *
+ * Parámetros:
+ *  - `checkStock` (default false): true hace que una deducción sin stock
+ *    lance APIError 400 "Stock insuficiente para ..." (mensajes IDÉNTICOS a
+ *    los originales de cada camino) dentro de la misma tx — usado por
+ *    deducción del alta y por deltas negativos de edición. La reposición
+ *    (cancelación/borrado/disminución en edición) corre sin check como
+ *    siempre: reponer no puede fallar por stock.
+ *  - `req` threaded: el delta SQL corre en la transacción del request
+ *    (patrón oficial ADAPTERS.md), igual que los originales.
+ */
+const applyItemStockDelta = async ({
+  payload,
+  req,
+  prod,
+  sku,
+  delta,
+  checkStock,
+}: {
+  payload: Payload;
+  req: PayloadRequest;
+  prod: Product;
+  sku?: string | null;
+  delta: number;
+  /** Exigir stock en deducciones y lanzar APIError si no alcanza. */
+  checkStock?: boolean;
+}): Promise<void> => {
+  // La venta por SKU de variante descuenta la FILA de la variante
+  const variantIndex = findVariantIndexBySku(prod.variants, sku);
+  const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
+
+  if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
+    if (checkStock && delta < 0) {
+      const success = await applyVariantStockDelta({
+        payload,
+        req,
+        productId: prod.id,
+        variantIndex,
+        delta,
+        checkStock: true,
+      });
+      if (!success) {
+        throw new APIError(
+          `Stock insuficiente para "${matchedVariant.name || prod.title}". No quedan unidades disponibles.`,
+          400,
+        );
+      }
+    } else {
+      await applyVariantStockDelta({ payload, req, productId: prod.id, variantIndex, delta });
+    }
+    return;
+  }
+
+  if (!prod.trackStock || typeof prod.stockQuantity !== 'number') return;
+
+  if (checkStock && delta < 0) {
+    const success = await applyBaseProductStockDelta({
+      payload,
+      req,
+      productId: prod.id,
+      delta,
+      checkStock: true,
+    });
+    if (!success) {
+      throw new APIError(
+        `Stock insuficiente para "${prod.title}". No quedan unidades disponibles.`,
+        400,
+      );
+    }
+  } else {
+    await applyBaseProductStockDelta({ payload, req, productId: prod.id, delta });
+  }
+};
+
+/**
  * Reconciliación CRM cancel↔activo (auditoría 2026-09-01 + review Devin #65).
  *
  * GATEADA por CRM_RECONCILIATION_ENABLED. Hoy = true (activada en PR #67
@@ -180,6 +266,43 @@ const applyBaseProductStockDelta = async ({
  * (orders >= 3 || spent >= 50 → vip; si no frecuente; 0 → inactivo).
  */
 const CRM_RECONCILIATION_ENABLED = true;
+
+/**
+ * PR 11 (SPEC-20260907-11, thermo D2): guard CRM best-effort UNIFICADO.
+ * Antes el patrón try → applyCustomerCrmDelta → catch-log-non-blocking vivía
+ * TRIPLICADO (edición, transición cancel↔activo, borrado) con solo el
+ * contexto del log distinto.
+ *
+ * INVARIANTE NO NEGOCIABLE (documentado en cada caller): la reconciliación
+ * CRM corre DESPUÉS del ajuste de stock con ejecutor AISLADO de la tx
+ * (adapter.drizzle dentro de applyCustomerCrmDelta) — si el stock lanza, la
+ * tx se revierte y el CRM nunca se toca; y un fallo del CRM jamás aborta el
+ * pedido/borrado/reposición (solo se loguea para reconciliación manual).
+ *
+ * El gate (CRM_RECONCILIATION_ENABLED + condiciones del camino) queda en el
+ * caller: cada camino decide CUÁNDO reconciliar; este helper solo garantiza
+ * el CÓMO (best-effort uniforme con log con contexto del camino).
+ */
+const reconcileCrmBestEffort = async ({
+  docId,
+  context,
+  delta,
+}: {
+  docId: number | string;
+  /** Contexto del camino para el log: 'edición' | 'borrado' | estado de transición. */
+  context: string;
+  /** Delta(s) CRM a aplicar — ya resueltos por el caller (teléfono/total/sign). */
+  delta: () => Promise<void>;
+}): Promise<void> => {
+  try {
+    await delta();
+  } catch (crmErr) {
+    console.error(
+      `[storelink][orders][${docId}] reconciliación CRM ${context} falló (non-blocking):`,
+      crmErr
+    );
+  }
+};
 
 export const applyCustomerCrmDelta = async ({
   payload,
@@ -409,28 +532,13 @@ const restoreStockForItems = async ({
     const prod = await getProduct(item);
     if (!prod) continue;
 
-    const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
-    const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
-
-    if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
-      const qtyToRestore = Number(item.quantity) || 1;
-      await applyVariantStockDelta({
-        payload,
-        req,
-        productId: prod.id,
-        variantIndex,
-        delta: qtyToRestore,
-      });
-      continue;
-    }
-
-    if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
-
+    // PR 11: dispatch unificado (reposición — sin checkStock, delta positivo)
     const qtyToRestore = Number(item.quantity) || 1;
-    await applyBaseProductStockDelta({
+    await applyItemStockDelta({
       payload,
       req,
-      productId: prod.id,
+      prod,
+      sku: item.sku,
       delta: qtyToRestore,
     });
   }
@@ -488,50 +596,17 @@ const applyStockDeltasForEdit = async ({
     const prod = await getProduct({ sku });
     if (!prod) continue;
 
-    const variantIndex = findVariantIndexBySku(prod.variants, sku);
-    const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
-
-    if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
-      if (delta < 0) {
-        const success = await applyVariantStockDelta({
-          payload,
-          req,
-          productId: prod.id,
-          variantIndex,
-          delta,
-          checkStock: true,
-        });
-        if (!success) {
-          throw new APIError(
-            `Stock insuficiente para "${matchedVariant.name || prod.title}". No quedan unidades disponibles.`,
-            400,
-          );
-        }
-      } else {
-        await applyVariantStockDelta({ payload, req, productId: prod.id, variantIndex, delta });
-      }
-      continue;
-    }
-
-    if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
-
-    if (delta < 0) {
-      const success = await applyBaseProductStockDelta({
-        payload,
-        req,
-        productId: prod.id,
-        delta,
-        checkStock: true,
-      });
-      if (!success) {
-        throw new APIError(
-          `Stock insuficiente para "${prod.title}". No quedan unidades disponibles.`,
-          400,
-        );
-      }
-    } else {
-      await applyBaseProductStockDelta({ payload, req, productId: prod.id, delta });
-    }
+    // PR 11: dispatch unificado. checkStock solo para deducciones (delta<0):
+    // la edición se rechaza si no hay inventario (APIError dentro de la tx);
+    // las reposiciones corren sin check como siempre.
+    await applyItemStockDelta({
+      payload,
+      req,
+      prod,
+      sku,
+      delta,
+      checkStock: delta < 0,
+    });
   }
 
   return true;
@@ -632,47 +707,49 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
             : undefined;
         const newPhone =
           doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
-        try {
-          if (prevPhone && newPhone && prevPhone !== newPhone) {
-            // Cambió el teléfono en la edición: revertir el incremento
-            // original en el teléfono anterior y aplicar el total nuevo en
-            // el actual (si no, el delta tocaría la fila equivocada).
-            if (prevTotal > 0) {
+        // PR 11: guard CRM best-effort unificado — el orden de deltas
+        // (revertir teléfono anterior, aplicar nuevo / ajustar diferencia)
+        // es propio de este camino; el patrón try/catch vive en el helper.
+        await reconcileCrmBestEffort({
+          docId: doc.id,
+          context: 'en edición',
+          delta: async () => {
+            if (prevPhone && newPhone && prevPhone !== newPhone) {
+              // Cambió el teléfono en la edición: revertir el incremento
+              // original en el teléfono anterior y aplicar el total nuevo en
+              // el actual (si no, el delta tocaría la fila equivocada).
+              if (prevTotal > 0) {
+                await applyCustomerCrmDelta({
+                  payload,
+                  tenantId,
+                  phone: prevPhone,
+                  totalAmount: prevTotal,
+                  sign: -1,
+                });
+              }
               await applyCustomerCrmDelta({
                 payload,
                 tenantId,
-                phone: prevPhone,
-                totalAmount: prevTotal,
-                sign: -1,
+                phone: newPhone,
+                totalAmount: newTotal,
+                sign: 1,
+              });
+            } else if (newPhone) {
+              // Review Devin PR #91: una EDICIÓN de monto no puede alterar
+              // total_orders — antes sumaba/restaba una orden fantasma por cada
+              // cambio de totalAmount de una orden ya contada. Solo ajusta
+              // total_spent por la diferencia.
+              await applyCustomerCrmDelta({
+                payload,
+                tenantId,
+                phone: newPhone,
+                totalAmount: Math.abs(editDelta),
+                sign: editDelta > 0 ? 1 : -1,
+                orderCountDelta: 0,
               });
             }
-            await applyCustomerCrmDelta({
-              payload,
-              tenantId,
-              phone: newPhone,
-              totalAmount: newTotal,
-              sign: 1,
-            });
-          } else if (newPhone) {
-            // Review Devin PR #91: una EDICIÓN de monto no puede alterar
-            // total_orders — antes sumaba/restaba una orden fantasma por cada
-            // cambio de totalAmount de una orden ya contada. Solo ajusta
-            // total_spent por la diferencia.
-            await applyCustomerCrmDelta({
-              payload,
-              tenantId,
-              phone: newPhone,
-              totalAmount: Math.abs(editDelta),
-              sign: editDelta > 0 ? 1 : -1,
-              orderCountDelta: 0,
-            });
-          }
-        } catch (crmErr) {
-          console.error(
-            `[storelink][orders][${doc.id}] reconciliación CRM en edición falló (non-blocking):`,
-            crmErr
-          );
-        }
+          },
+        });
       }
       if (!adjusted) return doc;
       // Stock ajustado: continuar hasta la invalidación de caché del final
@@ -696,45 +773,17 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       const prod = await getProduct(item);
       if (!prod) continue;
 
-      // La venta por SKU de variante descuenta la FILA de la variante
-      const variantIndex = findVariantIndexBySku(prod.variants, item.sku);
-      const matchedVariant = variantIndex >= 0 ? prod.variants?.[variantIndex] : undefined;
-
-      if (matchedVariant && typeof matchedVariant.stockQuantity === 'number') {
-        const qtyToDeduct = Number(item.quantity) || 1;
-        const success = await applyVariantStockDelta({
-          payload,
-          req,
-          productId: prod.id,
-          variantIndex,
-          delta: -qtyToDeduct,
-          checkStock: true,
-        });
-        if (!success) {
-          throw new APIError(
-            `Stock insuficiente para "${matchedVariant.name || prod.title}". No quedan unidades disponibles.`,
-            400,
-          );
-        }
-        continue;
-      }
-
-      if (!prod.trackStock || typeof prod.stockQuantity !== 'number') continue;
-
+      // PR 11: dispatch unificado (deducción — checkStock true: sin stock la
+      // orden NO se crea; APIError dentro de la misma tx del request).
       const qtyToDeduct = Number(item.quantity) || 1;
-      const success = await applyBaseProductStockDelta({
+      await applyItemStockDelta({
         payload,
         req,
-        productId: prod.id,
+        prod,
+        sku: item.sku,
         delta: -qtyToDeduct,
         checkStock: true,
       });
-      if (!success) {
-        throw new APIError(
-          `Stock insuficiente para "${prod.title}". No quedan unidades disponibles.`,
-          400,
-        );
-      }
     }
   } else if (isCancelled) {
     // PR 2 (auditoría 2026-09-07, A4): restaurar lo que FUE DEDUCIDO, no las
@@ -791,20 +840,19 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
     totalAmount > 0 &&
     (doc as unknown as { crmCounted?: boolean }).crmCounted === true
   ) {
-    try {
-      await applyCustomerCrmDelta({
-        payload,
-        tenantId,
-        phone: customerPhone,
-        totalAmount,
-        sign: isCancelled ? -1 : 1,
-      });
-    } catch (crmErr) {
-      console.error(
-        `[storelink][orders][${doc.id}] reconciliación CRM falló (non-blocking) para estado ${currentStatus}:`,
-        crmErr
-      );
-    }
+    // PR 11: guard CRM best-effort unificado (transición cancel↔activo).
+    await reconcileCrmBestEffort({
+      docId: doc.id,
+      context: `para estado ${currentStatus}`,
+      delta: () =>
+        applyCustomerCrmDelta({
+          payload,
+          tenantId,
+          phone: customerPhone,
+          totalAmount,
+          sign: isCancelled ? -1 : 1,
+        }),
+    });
   }
 
   // Auditoría final 2026-09-01 (P1) + review Graphify #64: refrescar TODAS las
@@ -933,20 +981,19 @@ const restoreInventoryOnDeleteHook: CollectionAfterDeleteHook = async ({ doc, re
     totalAmount > 0 &&
     (doc as unknown as { crmCounted?: boolean }).crmCounted === true
   ) {
-    try {
-      await applyCustomerCrmDelta({
-        payload,
-        tenantId,
-        phone: customerPhone,
-        totalAmount,
-        sign: -1,
-      });
-    } catch (crmErr) {
-      console.error(
-        `[storelink][orders][${doc.id}] reconciliación CRM en borrado falló (non-blocking):`,
-        crmErr
-      );
-    }
+    // PR 11: guard CRM best-effort unificado (borrado).
+    await reconcileCrmBestEffort({
+      docId: doc.id,
+      context: 'en borrado',
+      delta: () =>
+        applyCustomerCrmDelta({
+          payload,
+          tenantId,
+          phone: customerPhone,
+          totalAmount,
+          sign: -1,
+        }),
+    });
   }
 
   return doc;
