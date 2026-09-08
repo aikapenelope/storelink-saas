@@ -888,13 +888,69 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       orderCreated = true;
 
       // ------------------------------------------------------------------
-      // 7bis. Generate Official Delivery Note PDF & Upload to R2 (A6)
+      // 7bis. Build Structured WhatsApp Message & Sanitize Customer Data
+      // ------------------------------------------------------------------
+      // PURA (operaciones de string): microsegundos — puede vivir antes de la
+      // frontera del replay (8) sin ensanchar la ventana de crash.
+      const { whatsappUrl } = buildWhatsappMessagePayload({
+        tenantDoc,
+        storeName,
+        orderNumber,
+        customer,
+        verifiedItems,
+        deliveryFee,
+        total,
+        totalVES,
+        vesRate,
+        showVESEffective,
+        safePhone,
+        safeEmail,
+      });
+
+      // ------------------------------------------------------------------
+      // 8. Replay DURADERO de idempotencia en la frontera de creación
+      // ------------------------------------------------------------------
+      // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable") +
+      // review Devin PR #94 ("Post-create work reopens duplicate orders"):
+      // reemplazar ATÓMICAMENTE la reserva ('reserved') por la respuesta de
+      // replay INMEDIATAMENTE después de payload.create. Entre el create y
+      // esta frontera SOLO corre el armado de WhatsApp (puro) — el PDF, que
+      // implica red (R2 PUT), va DESPUÉS (8bis): un crash/timeout entre create
+      // y respuesta no puede dejar la reserva sin replay (si el proceso muere
+      // aquí, el reintento recupera ESTA respuesta y ve su pantalla de éxito
+      // en vez de crear una segunda orden tras expirar el TTL — deducción de
+      // inventario doble). SET con EX es un reemplazo atómico (nunca convive
+      // con el sentinel 'reserved'); releaseCheckoutReservation solo borra
+      // valores 'reserved', así que jamás borra este replay. Endurecimiento
+      // futuro (opción A de Devin): clave idempotente en la orden con
+      // constraint UNIQUE en BD — requiere migración del owner.
+      const builtResponse: CheckoutResponse = {
+        success: true,
+        orderNumber,
+        whatsappUrl,
+        pdfBase64: undefined,
+        pdfUrl: undefined,
+        emailSent: false,
+        // Totales confirmados por el servidor (fuente oficial del pedido).
+        totalUSD: total,
+        totalVES: showVESEffective ? totalVES : undefined,
+        exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
+      };
+      successResponse = builtResponse;
+      await storeCheckoutResponse(idempotencyKey, builtResponse);
+
+      // ------------------------------------------------------------------
+      // 8bis. Generate Official Delivery Note PDF & Upload to R2 (A6)
       // ------------------------------------------------------------------
       // MOVIDO: antes corría ANTES del create — cualquier fallo provocable del
       // create (validación de select, carrera de stock del hook de inventario)
-      // dejaba un PDF huérfano en R2. Ahora la orden ya existe cuando el PDF
-      // nace: R2 solo recibe notas de pedidos reales. El fallo de PDF/R2 sigue
-      // siendo no-bloqueante (el pedido sobrevive sin PDF, igual que hoy).
+      // dejaba un PDF huérfano en R2. Ahora la orden ya existe Y la respuesta
+      // de replay ya está almacenada cuando el PDF nace: R2 solo recibe notas
+      // de pedidos reales y la ventana de crash sin replay no se ensancha.
+      // Si el PDF/PUT tiene éxito se ACTUALIZA la respuesta almacenada (mismo
+      // SET atómico): los reintentos obtienen la versión con PDF; si el update
+      // falla, los reintentos conservan la v1 sin PDF (degradación aceptable —
+      // el comprador actual SÍ recibe su PDF) y el fallo es no-bloqueante.
       let pdfBase64: string | undefined = undefined;
       let pdfUrl: string | undefined = undefined;
       try {
@@ -923,61 +979,21 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         if (uploaded) {
           pdfUrl = (await getDeliveryNoteUrl(orderNumber)) ?? undefined;
         }
+
+        if (pdfBase64 !== undefined || pdfUrl !== undefined) {
+          const withPdf: CheckoutResponse = { ...builtResponse, pdfBase64, pdfUrl };
+          successResponse = withPdf;
+          try {
+            await storeCheckoutResponse(idempotencyKey, withPdf);
+          } catch (storePdfErr) {
+            // El comprador actual ya recibe el PDF (successResponse); el
+            // replay de reintentos conservará la v1 sin PDF. No bloquea.
+            console.warn('PDF replay update warning:', storePdfErr);
+          }
+        }
       } catch (pdfErr) {
         console.warn('PDF generation warning:', pdfErr);
       }
-
-      // ------------------------------------------------------------------
-      // 7ter. Build Structured WhatsApp Message & Sanitize Customer Data
-      // ------------------------------------------------------------------
-      const { whatsappUrl } = buildWhatsappMessagePayload({
-        tenantDoc,
-        storeName,
-        orderNumber,
-        customer,
-        verifiedItems,
-        deliveryFee,
-        total,
-        totalVES,
-        vesRate,
-        showVESEffective,
-        pdfUrl,
-        safePhone,
-        safeEmail,
-      });
-
-      // ------------------------------------------------------------------
-      // 8. Replay DURADERO de idempotencia en la frontera de creación
-      // ------------------------------------------------------------------
-      // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable"):
-      // reemplazar ATÓMICAMENTE la reserva ('reserved') por la respuesta de
-      // replay INMEDIATAMENTE después de payload.create. Todo lo que compone
-      // la respuesta (orderNumber, WhatsApp, PDF/R2, totales) ya está
-      // calculado AQUÍ — entre el create (7) y esta frontera corren SOLO los
-      // pasos que alimentan la respuesta; el CRM, la cola y la revalidación
-      // son pasos posteriores no bloqueantes. Si el proceso serverless muere
-      // tras crear la orden pero antes de escribir la respuesta final, el
-      // reintento con el mismo token recupera ESTA respuesta y ve su pantalla
-      // de éxito en vez de crear una segunda orden. SET con EX es un
-      // reemplazo atómico (nunca convive con el sentinel 'reserved');
-      // releaseCheckoutReservation solo borra valores 'reserved', así que
-      // jamás borra este replay. Endurecimiento futuro (opción A de Devin):
-      // clave idempotente en la orden con constraint UNIQUE en BD — requiere
-      // migración del owner (anotado en el roadmap, Sprint 1 PR 2).
-      const builtResponse: CheckoutResponse = {
-        success: true,
-        orderNumber,
-        whatsappUrl,
-        pdfBase64,
-        pdfUrl,
-        emailSent: false,
-        // Totales confirmados por el servidor (fuente oficial del pedido).
-        totalUSD: total,
-        totalVES: showVESEffective ? totalVES : undefined,
-        exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
-      };
-      successResponse = builtResponse;
-      await storeCheckoutResponse(idempotencyKey, builtResponse);
 
       // ------------------------------------------------------------------
       // 9. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
