@@ -12,6 +12,7 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
+import { normalizePaymentDetails } from '@/lib/checkout-sanitize';
 import {
   buildIdempotencyKey,
   releaseCheckoutReservation,
@@ -271,9 +272,22 @@ async function verifyAndPriceItems({
       }
     }
 
+    // Auditoría 2026-09-07 (A2): título server-authoritative. El título que
+    // envía el cliente se descarta — el nombre sale de la BD (producto base o
+    // variante) y los modificadores (ya validados contra el catálogo) se
+    // anexan al final, porque `modifiers` NO se persiste en la orden
+    // (solo sku/title/price/quantity/subtotal): sin anexarlos se perdería la
+    // personalización del pedido para el comercio (PDF/WhatsApp/CRM).
+    const serverTitle = matchedVariant?.name
+      ? `${dbProd.title} - ${matchedVariant.name}`
+      : dbProd.title;
+    const itemTitle = item.modifiers?.length
+      ? `${serverTitle} (${item.modifiers.join(', ')})`
+      : serverTitle;
+
     verifiedItems.push({
       sku: item.sku,
-      title: item.title || dbProd.title,
+      title: itemTitle,
       quantity: qty,
       price: finalPrice,
     });
@@ -471,8 +485,12 @@ async function upsertCustomerCrm({
     const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
 
     // Preparar datos del historial y preferencias
+    // Auditoría 2026-09-07 (A2): el resumen hacia el CRM se sanitiza (sin
+    // saltos de línea ni caracteres de control) aunque los títulos ya sean
+    // server-authoritative.
     const itemsSummary = verifiedItems
-      .map((item) => `${item.quantity}x ${item.title}`)
+      .map((item) => sanitizePlainText(`${item.quantity}x ${item.title}`))
+      .filter(Boolean)
       .join(', ');
     
     const purchaseHistoryEntry = {
@@ -565,7 +583,20 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
   // creación de la orden (7bis); el final de processOrder solo la retorna.
   let successResponse: CheckoutResponse | null = null;
   try {
-    const { tenantSlug, storeName, currency, showVES, customer, items } = request;
+    const { tenantSlug, storeName, currency, showVES, items } = request;
+
+    // ------------------------------------------------------------------
+    // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1)
+    // ------------------------------------------------------------------
+    // El comprador anónimo es un writer NO confiable: `paymentStatus` se
+    // fuerza a 'pending_verification' y el resto de paymentDetails pasa por
+    // whitelist de claves. La fuerza vive aquí y NO en hooks de colección
+    // porque el admin panel comparte la colección y ahí el comercio SÍ puede
+    // marcar 'verified' legítimamente al conciliar el pago.
+    const customer: CheckoutCustomerData = {
+      ...request.customer,
+      paymentDetails: normalizePaymentDetails(request.customer?.paymentDetails),
+    };
 
     // ------------------------------------------------------------------
     // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP
