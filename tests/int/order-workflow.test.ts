@@ -28,6 +28,16 @@ let tenantId: number;
 let productId: number;
 const createdOrderIds: number[] = [];
 
+/**
+ * PR 8 (auditoría 2026-09-07, hallazgo C5): el producto se sembraba con
+ * `TEST-SKU-${Date.now()}` pero la orden vendía `'TEST-SKU'` → el resolver no
+ * encontraba el producto, el hook hacía `continue` sin deducir NADA y el test
+ * pasaba en verde sin probar inventario (no-op silencioso). Ahora la orden
+ * compra EXACTAMENTE el SKU sembrado y el test aserta la deducción.
+ */
+const PRODUCT_SKU = 'TEST-SKU';
+const INITIAL_STOCK = 5;
+
 beforeAll(async () => {
   payload = await getPayload({ config: config as never });
 
@@ -52,9 +62,9 @@ beforeAll(async () => {
       tenant: tenantId,
       title: 'Producto Test',
       price: 10,
-      sku: `TEST-SKU-${Date.now()}`,
+      sku: PRODUCT_SKU,
       trackStock: true,
-      stockQuantity: 5,
+      stockQuantity: INITIAL_STOCK,
       stockStatus: 'in_stock',
     } as never,
   });
@@ -71,6 +81,8 @@ afterAll(async () => {
 d('workflow order-created (Jobs Queue oficial)', () => {
   it('procesa el pedido: registra log con id varchar, setea trelloCardUrl y completa el job', async () => {
     // Pedido directo vía Local API (el checkout ya valida precios server-side)
+    // PR 8: compra el SKU real del seed — antes vendía 'TEST-SKU' contra un
+    // producto `TEST-SKU-<ts>` y el hook no deducía nada (no-op).
     const order = await payload.create({
       collection: 'orders',
       overrideAccess: true,
@@ -79,12 +91,21 @@ d('workflow order-created (Jobs Queue oficial)', () => {
         status: 'pending',
         orderNumber: `TEST-${Date.now()}`,
         customer: { name: 'Cliente Test', phone: '+584121234567', email: 'cliente@test.local' },
-        items: [{ sku: 'TEST-SKU', title: 'Producto Test', price: 10, quantity: 2 }],
+        items: [{ sku: PRODUCT_SKU, title: 'Producto Test', price: 10, quantity: 2 }],
         totalAmount: 20,
         currency: 'USD',
       } as never,
     });
     createdOrderIds.push(order.id as number);
+
+    // PR 8: la deducción de inventario AHORA se aserta (el no-op la ocultaba)
+    const afterOrder = (await payload.findByID({
+      collection: 'products',
+      id: productId,
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { stockQuantity?: number };
+    expect(afterOrder.stockQuantity).toBe(INITIAL_STOCK - 2);
 
     // Encola + ejecuta DIRECTO (mismo patrón que el checkout con after())
     const job = await payload.jobs.queue({
