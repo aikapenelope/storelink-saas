@@ -186,6 +186,7 @@ export const applyCustomerCrmDelta = async ({
   phone,
   totalAmount,
   sign,
+  orderCountDelta,
 }: {
   payload: Payload;
   tenantId: number | string;
@@ -193,10 +194,19 @@ export const applyCustomerCrmDelta = async ({
   totalAmount: number;
   /** +1 = pedido (re)activo; -1 = cancelación */
   sign: 1 | -1;
+  /**
+   * Review Devin PR #91 ("Price edits corrupt order counts"): delta INDEPENDIENTE
+   * de total_orders. Default = sign (comportamiento del ciclo de vida:
+   * cancelación/reactivación/borrado/transfer ±1 orden). La EDICIÓN de una orden
+   * activa pasa 0: ajusta SOLO total_spent — editar el total de una orden ya
+   * contada no puede crear/quitar órdenes fantasma en el CRM.
+   */
+  orderCountDelta?: number;
 }): Promise<void> => {
   const adapter = payload.db as unknown as PostgresAdapterLike;
   const tableName = adapter.tableNameMap.get('customers') || 'customers';
   const signedTotal = sign * totalAmount;
+  const ordersDelta = orderCountDelta ?? sign;
 
   // Ejecutor AISLADO (adapter.drizzle = conexión del pool, NO la sesión de la
   // tx del request): si este UPDATE falla, no aborta la transacción del
@@ -212,11 +222,11 @@ export const applyCustomerCrmDelta = async ({
   // de Payload; convención enum_<tabla>_<campo>).
   await adapter.drizzle.execute(sql`
     update ${sql.identifier(tableName)}
-    set total_orders = greatest(coalesce(total_orders, 0) + ${sign}, 0),
+    set total_orders = greatest(coalesce(total_orders, 0) + ${ordersDelta}, 0),
         total_spent = greatest(coalesce(total_spent, 0) + ${signedTotal}, 0),
         tag = (case
-          when coalesce(total_orders, 0) + ${sign} <= 0 then 'inactivo'
-          when coalesce(total_orders, 0) + ${sign} >= 3
+          when coalesce(total_orders, 0) + ${ordersDelta} <= 0 then 'inactivo'
+          when coalesce(total_orders, 0) + ${ordersDelta} >= 3
             or coalesce(total_spent, 0) + ${signedTotal} >= 50 then 'vip'
           else 'frecuente'
         end)::enum_customers_tag
@@ -582,12 +592,17 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
               sign: 1,
             });
           } else if (newPhone) {
+            // Review Devin PR #91: una EDICIÓN de monto no puede alterar
+            // total_orders — antes sumaba/restaba una orden fantasma por cada
+            // cambio de totalAmount de una orden ya contada. Solo ajusta
+            // total_spent por la diferencia.
             await applyCustomerCrmDelta({
               payload,
               tenantId,
               phone: newPhone,
               totalAmount: Math.abs(editDelta),
               sign: editDelta > 0 ? 1 : -1,
+              orderCountDelta: 0,
             });
           }
         } catch (crmErr) {
