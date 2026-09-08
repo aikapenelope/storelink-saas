@@ -14,8 +14,6 @@ import {
   MapPin,
   Clock,
   Info,
-  Copy,
-  Check,
   CreditCard,
   Smartphone,
   DollarSign,
@@ -29,6 +27,18 @@ import {
   clearCheckoutIntentToken,
   getOrCreateCheckoutIntentToken,
 } from '@/lib/checkout-intent-token';
+// PR 12 (thermo D3): sección de métodos de pago data-driven.
+import {
+  AccountCard,
+  PaymentMethodGrid,
+  VerificationForm,
+  WhatsAppProofCallout,
+  type AccountCardConfig,
+  type MethodButtonConfig,
+  type PaymentMethodKey,
+  type PaymentVerificationState,
+  type VerificationFormConfig,
+} from './cart-drawer/payment-methods';
 
 export interface CartItem extends ProductItem {
   quantity: number;
@@ -184,9 +194,433 @@ export function CartDrawer({
     : 'cash';
 
   // Payment Method Selection
-  const [paymentMethodKey, setPaymentMethodKey] = useState<
-    'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos'
-  >(defaultMethod);
+  const [paymentMethodKey, setPaymentMethodKey] = useState<PaymentMethodKey>(defaultMethod);
+
+  const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+  const selectedZone = deliveryConfig?.zones?.find((z) => z.name === customer.municipality);
+  const zoneDeliveryPrice =
+    selectedZone && typeof selectedZone.priceDelivery === 'number' ? selectedZone.priceDelivery : null;
+  const deliveryFee =
+    deliveryType === 'delivery' ? (zoneDeliveryPrice ?? Number(deliveryConfig?.fixedPrice || 0)) : 0;
+  const total = itemsSubtotal + deliveryFee;
+  const totalVES = total * exchangeRateVES;
+
+  const handleCopyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  // PR 12 (thermo D3): configs data-driven de la sección de pago — classNames
+  // LITERALES EXACTOS del original (HTML byte-idéntico). Los condicionales
+  // de disponibilidad (`? : null` del grid original) se preservan filtrando
+  // el array por configuración del comercio.
+  const methodButtons: MethodButtonConfig[] = [
+    ...(pagoMovilConfigurado
+      ? [{
+          method: 'pago_movil' as const,
+          label: 'Pago Móvil VES',
+          icon: <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />,
+          iconClass: 'text-emerald-600',
+          selectedClass: 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs',
+        }]
+      : []),
+    ...(zelleConfigurado
+      ? [{
+          method: 'zelle' as const,
+          label: 'Zelle USD',
+          icon: <CreditCard className="w-4 h-4 text-purple-600 flex-shrink-0" />,
+          iconClass: 'text-purple-600',
+          selectedClass: 'border-purple-600 bg-purple-50 text-purple-950 font-bold ring-1 ring-purple-600 shadow-xs',
+        }]
+      : []),
+    ...(binanceConfigurado
+      ? [{
+          method: 'binance' as const,
+          label: 'Binance Pay USDT',
+          icon: <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />,
+          iconClass: 'text-amber-600',
+          selectedClass: 'border-amber-600 bg-amber-50 text-amber-950 font-bold ring-1 ring-amber-600 shadow-xs',
+        }]
+      : []),
+    ...(zinliConfigurado
+      ? [{
+          method: 'zinli' as const,
+          label: 'Zinli USD',
+          icon: <CreditCard className="w-4 h-4 text-indigo-600 flex-shrink-0" />,
+          iconClass: 'text-indigo-600',
+          selectedClass: 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-600 shadow-xs',
+        }]
+      : []),
+    ...(banescoConfigurado
+      ? [{
+          method: 'banesco_panama' as const,
+          label: 'Banesco Panamá',
+          icon: <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />,
+          iconClass: 'text-blue-600',
+          selectedClass: 'border-blue-600 bg-blue-50 text-blue-950 font-bold ring-1 ring-blue-600 shadow-xs',
+        }]
+      : []),
+    {
+      method: 'cash' as const,
+      label: 'Efectivo ($ / Bs)',
+      icon: <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />,
+      iconClass: 'text-emerald-600',
+      selectedClass: 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs',
+    },
+    {
+      method: 'pos' as const,
+      label: 'Punto en Tienda',
+      icon: <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />,
+      iconClass: 'text-slate-600',
+      selectedClass: 'border-slate-800 bg-slate-100 text-slate-950 font-bold ring-1 ring-slate-800 shadow-xs',
+      // El POS ocupa el ancho completo en móvil (original col-span-2).
+      extraClass: 'col-span-2 sm:col-span-1',
+    },
+  ];
+
+  // Cards de cuenta del método seleccionado (una por método con datos).
+  const accountCards: AccountCardConfig[] = [
+    {
+      method: 'pago_movil',
+      cardClass: 'bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md',
+      headerBorderClass: 'border-b border-slate-800',
+      headerLabelClass: 'text-emerald-400',
+      headerLabel: 'Datos para Pago Móvil',
+      rows: [
+        {
+          label: 'Banco Receptores',
+          value: pmBank,
+          copyKey: 'pm_banco',
+        },
+        {
+          label: 'Teléfono',
+          value: pmPhone,
+          copyKey: 'pm_phone',
+          copyTransform: (v) => v.replace(/\D/g, ''),
+        },
+        {
+          label: 'C.I. / RIF',
+          value: pmIdDoc,
+          copyKey: 'pm_rif',
+          copyTransform: (v) => v.replace(/[-.\s]/g, ''),
+        },
+        {
+          label: 'Titular',
+          value: pmHolder,
+          copyKey: 'pm_titular',
+        },
+        ...(showVES
+          ? [{
+              label: 'Monto Exacto a Transferir',
+              value: totalVES.toFixed(2),
+              amountValue: `Bs. ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              copyKey: 'pm_monto',
+              copyLabel: 'Copiar Monto',
+              buttonClass: 'px-2.5 py-1 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 border border-emerald-700/50',
+              checkClass: 'text-emerald-300',
+              labelClass: 'text-slate-400',
+              amountLabelClass: 'text-emerald-400',
+              amountValueClass: 'text-emerald-400',
+              amountRow: true,
+            }]
+          : []),
+      ],
+    },
+    {
+      method: 'zelle',
+      cardClass: 'bg-purple-950 text-white rounded-2xl p-3.5 space-y-2 shadow-md',
+      headerBorderClass: 'border-b border-purple-900',
+      headerLabelClass: 'text-purple-300',
+      headerLabel: 'Datos para Pago Zelle',
+      rows: [
+        {
+          label: 'Correo Zelle',
+          value: zelleEmail,
+          copyKey: 'zelle_email',
+          buttonClass: 'px-2.5 py-1 bg-purple-900 hover:bg-purple-800 text-purple-200',
+          checkClass: 'text-purple-300',
+          labelClass: 'text-purple-300',
+        },
+        {
+          label: 'Titular',
+          value: zelleHolder,
+          copyKey: 'zelle_titular',
+          buttonClass: 'px-2.5 py-1 bg-purple-900 hover:bg-purple-800 text-purple-200',
+          checkClass: 'text-purple-300',
+          labelClass: 'text-purple-300',
+        },
+        {
+          label: 'Monto Exacto USD',
+          value: total.toFixed(2),
+          amountValue: `$${total.toFixed(2)} USD`,
+          copyKey: 'zelle_monto',
+          copyLabel: 'Copiar Monto',
+          buttonClass: 'px-2.5 py-1 bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-700/50',
+          checkClass: 'text-purple-300',
+          amountLabelClass: 'text-purple-300',
+          amountValueClass: 'text-purple-200',
+          amountRow: true,
+        },
+      ],
+    },
+    {
+      method: 'binance',
+      cardClass: 'bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md',
+      headerBorderClass: 'border-b border-slate-800',
+      headerLabelClass: 'text-amber-400',
+      headerLabel: 'Datos Binance Pay (USDT)',
+      rows: [
+        {
+          label: 'Binance Pay ID',
+          value: binancePayId,
+          copyKey: 'binance_payid',
+          copyLabel: 'Copiar ID',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400',
+          checkClass: 'text-amber-400',
+        },
+        {
+          label: 'Nickname',
+          value: binanceNick,
+          copyKey: 'binance_nick',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200',
+          checkClass: 'text-amber-400',
+        },
+        {
+          label: 'Monto Total USDT',
+          value: total.toFixed(2),
+          amountValue: `${total.toFixed(2)} USDT`,
+          copyKey: 'binance_monto',
+          copyLabel: 'Copiar Monto',
+          buttonClass: 'px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/50',
+          checkClass: 'text-amber-400',
+          amountLabelClass: 'text-amber-400',
+          amountValueClass: 'text-amber-400',
+          amountRow: true,
+        },
+      ],
+    },
+    {
+      method: 'zinli',
+      cardClass: 'bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md',
+      headerBorderClass: 'border-b border-slate-800',
+      headerLabelClass: 'text-indigo-400',
+      headerLabel: 'Datos para Pago Zinli',
+      rows: [
+        {
+          label: 'Correo Zinli',
+          value: zinliEmail,
+          copyKey: 'zinli_email',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-300',
+          checkClass: 'text-indigo-400',
+        },
+        {
+          label: 'Titular',
+          value: zinliHolder,
+          copyKey: 'zinli_titular',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200',
+          checkClass: 'text-indigo-400',
+        },
+        {
+          label: 'Monto Total USD',
+          value: total.toFixed(2),
+          amountValue: `$${total.toFixed(2)} USD`,
+          copyKey: 'zinli_monto',
+          copyLabel: 'Copiar Monto',
+          buttonClass: 'px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50',
+          checkClass: 'text-indigo-400',
+          amountLabelClass: 'text-indigo-400',
+          amountValueClass: 'text-indigo-400',
+          amountRow: true,
+        },
+      ],
+    },
+    {
+      method: 'banesco_panama',
+      cardClass: 'bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md',
+      headerBorderClass: 'border-b border-slate-800',
+      headerLabelClass: 'text-blue-400',
+      headerLabel: 'Banesco Panamá (Transferencia USD)',
+      rows: [
+        {
+          label: 'Banco',
+          value: 'Banesco Panamá',
+          copyKey: 'bp_banco',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200',
+          checkClass: 'text-blue-400',
+        },
+        {
+          label: 'N° Cuenta Corriente',
+          value: banescoAcc,
+          copyKey: 'bp_cuenta',
+          copyLabel: 'Copiar N°',
+          copyTransform: (v) => v.replace(/[-.\s]/g, ''),
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-400',
+          checkClass: 'text-blue-400',
+        },
+        {
+          label: 'Titular',
+          value: banescoHolder,
+          copyKey: 'bp_titular',
+          buttonClass: 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200',
+          checkClass: 'text-blue-400',
+        },
+        {
+          label: 'Monto Total USD',
+          value: total.toFixed(2),
+          amountValue: `$${total.toFixed(2)} USD`,
+          copyKey: 'bp_monto',
+          copyLabel: 'Copiar Monto',
+          buttonClass: 'px-2.5 py-1 bg-blue-950 hover:bg-blue-900 text-blue-300 border border-blue-700/50',
+          checkClass: 'text-blue-400',
+          amountLabelClass: 'text-blue-400',
+          amountValueClass: 'text-blue-400',
+          amountRow: true,
+        },
+      ],
+    },
+  ];
+
+  const selectedAccountCard =
+    paymentMethodKey === 'cash' || paymentMethodKey === 'pos'
+      ? undefined
+      : accountCards.find((c) => c.method === paymentMethodKey);
+
+  // Formularios de verificación (por método digital; cash/pos no verifican).
+  const verificationForms: VerificationFormConfig[] = [
+    {
+      method: 'pago_movil',
+      title: 'Datos de tu Pago Móvil para Verificación:',
+      fields: [
+        {
+          label: 'Banco Emisor (desde donde pagaste) *',
+          type: 'text',
+          placeholder: '',
+          stateKey: 'issuingBank',
+          selectOptions: [
+            'Banesco',
+            'Banco de Venezuela (BDV)',
+            'Banco Mercantil',
+            'BBVA Provincial',
+            'Bancaribe',
+            'BNC (Banco Nacional de Crédito)',
+            'Bancamiga',
+            'Banplus',
+            'Banco Plaza',
+            '100% Banco',
+            'Otro Banco',
+          ],
+        },
+      ],
+      // El original renderiza teléfono + referencia en grid grid-cols-2.
+      gridFields: [
+        {
+          label: 'Teléfono Emisor',
+          type: 'tel',
+          placeholder: '0414 1234567',
+          stateKey: 'issuingPhone',
+        },
+        {
+          label: 'N° Referencia (4 a 6 dígitos) *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: 489201',
+          stateKey: 'referenceNumber',
+          inputClass: 'font-mono font-bold',
+        },
+      ],
+    },
+    {
+      method: 'zelle',
+      title: 'Datos de tu Transferencia Zelle:',
+      fields: [
+        {
+          label: 'Nombre del Titular de la Cuenta Zelle Emisora *',
+          type: 'text',
+          required: true,
+          placeholder: 'Nombre que figura en tu Zelle',
+          stateKey: 'senderName',
+        },
+        {
+          label: 'Número de Confirmación / Referencia Zelle *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: ZEL-948102',
+          stateKey: 'referenceNumber',
+          inputClass: 'font-mono font-bold',
+        },
+      ],
+    },
+    {
+      method: 'binance',
+      title: 'Datos de tu Pago Binance:',
+      fields: [
+        {
+          label: 'Tu Pay ID o Nickname de Binance *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: TuNickname / 19283746',
+          stateKey: 'binancePayId',
+        },
+        {
+          label: 'Order ID / TXID de Transacción *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: 204918273619',
+          stateKey: 'referenceNumber',
+          inputClass: 'font-mono font-bold',
+        },
+      ],
+    },
+    {
+      method: 'zinli',
+      title: 'Datos de tu Pago Zinli:',
+      fields: [
+        {
+          label: 'Correo o Teléfono de tu Cuenta Zinli *',
+          type: 'text',
+          required: true,
+          placeholder: 'tucuenta@email.com o +58...',
+          stateKey: 'senderEmail',
+        },
+        {
+          label: 'Número de Referencia Zinli *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: 198274',
+          stateKey: 'referenceNumber',
+          inputClass: 'font-mono font-bold',
+        },
+      ],
+    },
+    {
+      method: 'banesco_panama',
+      title: 'Datos de Transferencia Banesco Panamá:',
+      fields: [
+        {
+          label: 'Nombre del Titular de la Cuenta Emisora *',
+          type: 'text',
+          required: true,
+          placeholder: 'Nombre del emisor',
+          stateKey: 'senderName',
+        },
+        {
+          label: 'Número de Referencia de la Transferencia *',
+          type: 'text',
+          required: true,
+          placeholder: 'Ej: BP-291840',
+          stateKey: 'referenceNumber',
+          inputClass: 'font-mono font-bold',
+        },
+      ],
+    },
+  ];
+
+  const selectedVerificationForm = verificationForms.find((f) => f.method === paymentMethodKey);
+
+  const handleVerificationChange = (key: keyof PaymentVerificationState, value: string) => {
+    setPaymentVerification((prev) => ({ ...prev, [key]: value }));
+  };
 
   // Customer Verification Fields
   const [paymentVerification, setPaymentVerification] = useState({
@@ -245,7 +679,6 @@ export function CartDrawer({
   const checkoutIntentStorage = (): Storage | null =>
     typeof window === 'undefined' ? null : window.localStorage;
 
-  const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
 
   // Review Devin #74 (2ª ronda): el carrito vaciado (éxito con onClearCart o
   // el usuario eliminando todo) es una COMPRA NUEVA INTENCIONAL → rota el
@@ -260,20 +693,6 @@ export function CartDrawer({
   // Espejo exacto de la resolución server-side en checkout.ts (la fuente de
   // verdad sigue siendo el servidor; esto evita que el cliente vea un total
   // distinto al que se le cobra).
-  const selectedZone = deliveryConfig?.zones?.find((z) => z.name === customer.municipality);
-  const zoneDeliveryPrice =
-    selectedZone && typeof selectedZone.priceDelivery === 'number' ? selectedZone.priceDelivery : null;
-  const deliveryFee =
-    deliveryType === 'delivery' ? (zoneDeliveryPrice ?? Number(deliveryConfig?.fixedPrice || 0)) : 0;
-  const total = itemsSubtotal + deliveryFee;
-  const totalVES = total * exchangeRateVES;
-
-  const handleCopyText = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2500);
-  };
-
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -804,461 +1223,12 @@ export function CartDrawer({
                     )}
                   </div>
 
-                  {/* Payment Methods Grid */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {pagoMovilConfigurado ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('pago_movil')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'pago_movil'
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <span className="text-xs">Pago Móvil VES</span>
-                    </button>
-                    ) : null}
+                  {/* Payment Methods Grid — PR 12: data-driven (payment-methods.tsx) */}
+                  <PaymentMethodGrid buttons={methodButtons} selected={paymentMethodKey} onSelect={setPaymentMethodKey} />
 
-                    {zelleConfigurado ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('zelle')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'zelle'
-                          ? 'border-purple-600 bg-purple-50 text-purple-950 font-bold ring-1 ring-purple-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                      <span className="text-xs">Zelle USD</span>
-                    </button>
-                    ) : null}
-
-                    {binanceConfigurado ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('binance')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'binance'
-                          ? 'border-amber-600 bg-amber-50 text-amber-950 font-bold ring-1 ring-amber-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <span className="text-xs">Binance Pay USDT</span>
-                    </button>
-                    ) : null}
-
-                    {zinliConfigurado ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('zinli')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'zinli'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-indigo-600 flex-shrink-0" />
-                      <span className="text-xs">Zinli USD</span>
-                    </button>
-                    ) : null}
-
-                    {banescoConfigurado ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('banesco_panama')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'banesco_panama'
-                          ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold ring-1 ring-blue-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                      <span className="text-xs">Banesco Panamá</span>
-                    </button>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('cash')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'cash'
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-1 ring-emerald-600 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <DollarSign className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <span className="text-xs">Efectivo ($ / Bs)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethodKey('pos')}
-                      className={`col-span-2 sm:col-span-1 p-2.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                        paymentMethodKey === 'pos'
-                          ? 'border-slate-800 bg-slate-100 text-slate-950 font-bold ring-1 ring-slate-800 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <CreditCard className="w-4 h-4 text-slate-600 flex-shrink-0" />
-                      <span className="text-xs">Punto en Tienda</span>
-                    </button>
-                  </div>
-
-                  {/* Merchant Receptor Card with Per-Field 1-Click Copy */}
-                  {paymentMethodKey === 'pago_movil' && (
-                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
-                          Datos para Pago Móvil
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {/* Banco */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Banco Receptores</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{pmBank}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(pmBank, 'pm_banco')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'pm_banco' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'pm_banco' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Teléfono */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Teléfono</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{pmPhone}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(pmPhone.replace(/\D/g, ''), 'pm_phone')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'pm_phone' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'pm_phone' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* RIF */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">C.I. / RIF</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{pmIdDoc}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(pmIdDoc.replace(/[-.\s]/g, ''), 'pm_rif')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'pm_rif' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'pm_rif' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Titular */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{pmHolder}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(pmHolder, 'pm_titular')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'pm_titular' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'pm_titular' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Monto VES */}
-                        {showVES && (
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <div className="min-w-0">
-                              <span className="text-[10px] text-emerald-400 font-bold block uppercase">Monto Exacto a Transferir</span>
-                              <span className="font-mono font-black text-emerald-400 text-sm truncate">
-                                Bs. {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyText(totalVES.toFixed(2), 'pm_monto')}
-                              className="px-2.5 py-1 bg-emerald-900/60 hover:bg-emerald-800 active:scale-95 text-[10px] text-emerald-300 rounded-lg flex items-center gap-1 transition font-bold border border-emerald-700/50"
-                            >
-                              {copiedKey === 'pm_monto' ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedKey === 'pm_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethodKey === 'zelle' && (
-                    <div className="bg-purple-950 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                      <div className="border-b border-purple-900 pb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-purple-300">
-                          Datos para Pago Zelle
-                        </span>
-                        <span className="text-[10px] text-purple-300/70 font-medium">Toca 'Copiar' en cada campo</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {/* Correo Zelle */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-purple-300 block uppercase">Correo Zelle</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{zelleEmail}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(zelleEmail, 'zelle_email')}
-                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'zelle_email' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zelle_email' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Titular */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-purple-900/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-purple-300 block uppercase">Titular</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{zelleHolder}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(zelleHolder, 'zelle_titular')}
-                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'zelle_titular' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zelle_titular' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Monto USD */}
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-purple-300 font-bold block uppercase">Monto Exacto USD</span>
-                            <span className="font-mono font-black text-purple-200 text-sm truncate">${total.toFixed(2)} USD</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(total.toFixed(2), 'zelle_monto')}
-                            className="px-2.5 py-1 bg-purple-900 hover:bg-purple-800 active:scale-95 text-[10px] text-purple-200 rounded-lg flex items-center gap-1 transition font-bold border border-purple-700/50"
-                          >
-                            {copiedKey === 'zelle_monto' ? <Check className="w-3 h-3 text-purple-300" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zelle_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethodKey === 'binance' && (
-                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
-                          Datos Binance Pay (USDT)
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {/* Pay ID */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Binance Pay ID</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{binancePayId}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(binancePayId, 'binance_payid')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-amber-400 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'binance_payid' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'binance_payid' ? 'Copiado' : 'Copiar ID'}</span>
-                          </button>
-                        </div>
-
-                        {/* Nickname */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Nickname</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{binanceNick}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(binanceNick, 'binance_nick')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'binance_nick' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'binance_nick' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Monto USDT */}
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-amber-400 font-bold block uppercase">Monto Total USDT</span>
-                            <span className="font-mono font-black text-amber-400 text-sm truncate">{total.toFixed(2)} USDT</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(total.toFixed(2), 'binance_monto')}
-                            className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 active:scale-95 text-[10px] text-amber-300 rounded-lg flex items-center gap-1 transition font-bold border border-amber-700/50"
-                          >
-                            {copiedKey === 'binance_monto' ? <Check className="w-3 h-3 text-amber-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'binance_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethodKey === 'zinli' && (
-                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
-                          Datos para Pago Zinli
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {/* Correo Zinli */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Correo Zinli</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{zinliEmail}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(zinliEmail, 'zinli_email')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'zinli_email' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zinli_email' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Titular */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{zinliHolder}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(zinliHolder, 'zinli_titular')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'zinli_titular' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zinli_titular' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Monto USD */}
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-indigo-400 font-bold block uppercase">Monto Total USD</span>
-                            <span className="font-mono font-black text-indigo-400 text-sm truncate">${total.toFixed(2)} USD</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(total.toFixed(2), 'zinli_monto')}
-                            className="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 active:scale-95 text-[10px] text-indigo-300 rounded-lg flex items-center gap-1 transition font-bold border border-indigo-700/50"
-                          >
-                            {copiedKey === 'zinli_monto' ? <Check className="w-3 h-3 text-indigo-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'zinli_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethodKey === 'banesco_panama' && (
-                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 space-y-2 shadow-md">
-                      <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-blue-400">
-                          Banesco Panamá (Transferencia USD)
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Toca 'Copiar' en cada campo</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {/* Banco */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Banco</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">Banesco Panamá</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText('Banesco Panamá', 'bp_banco')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'bp_banco' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'bp_banco' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Cuenta */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">N° Cuenta Corriente</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{banescoAcc}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(banescoAcc.replace(/[-.\s]/g, ''), 'bp_cuenta')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-blue-400 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'bp_cuenta' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'bp_cuenta' ? 'Copiado' : 'Copiar N°'}</span>
-                          </button>
-                        </div>
-
-                        {/* Titular */}
-                        <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/60">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-slate-400 block uppercase">Titular</span>
-                            <span className="font-mono font-bold text-white text-xs truncate">{banescoHolder}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(banescoHolder, 'bp_titular')}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:scale-95 text-[10px] text-slate-200 rounded-lg flex items-center gap-1 transition font-bold"
-                          >
-                            {copiedKey === 'bp_titular' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'bp_titular' ? 'Copiado' : 'Copiar'}</span>
-                          </button>
-                        </div>
-
-                        {/* Monto USD */}
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <div className="min-w-0">
-                            <span className="text-[10px] text-blue-400 font-bold block uppercase">Monto Total USD</span>
-                            <span className="font-mono font-black text-blue-400 text-sm truncate">${total.toFixed(2)} USD</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(total.toFixed(2), 'bp_monto')}
-                            className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 active:scale-95 text-[10px] text-blue-300 rounded-lg flex items-center gap-1 transition font-bold border border-blue-700/50"
-                          >
-                            {copiedKey === 'bp_monto' ? <Check className="w-3 h-3 text-blue-400" /> : <Copy className="w-3 h-3" />}
-                            <span>{copiedKey === 'bp_monto' ? 'Copiado' : 'Copiar Monto'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Cards de cuenta del método — PR 12: data-driven (payment-methods.tsx) */}
+                  {selectedAccountCard && (
+                    <AccountCard card={selectedAccountCard} copiedKey={copiedKey} onCopy={handleCopyText} />
                   )}
 
                   {paymentMethodKey === 'cash' && (
@@ -1285,234 +1255,16 @@ export function CartDrawer({
                     </div>
                   )}
 
-                    {/* Verification Input Fields for Digital Payments */}
-                    {paymentMethodKey === 'pago_movil' && (
-                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-                          Datos de tu Pago Móvil para Verificación:
-                        </span>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Banco Emisor (desde donde pagaste) *
-                          </label>
-                          <select
-                            value={paymentVerification.issuingBank}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, issuingBank: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          >
-                            <option value="Banesco">Banesco</option>
-                            <option value="Banco de Venezuela (BDV)">Banco de Venezuela (BDV)</option>
-                            <option value="Mercantil">Banco Mercantil</option>
-                            <option value="BBVA Provincial">BBVA Provincial</option>
-                            <option value="Bancaribe">Bancaribe</option>
-                            <option value="BNC (Banco Nacional de Crédito)">BNC (Banco Nacional de Crédito)</option>
-                            <option value="Bancamiga">Bancamiga</option>
-                            <option value="Banplus">Banplus</option>
-                            <option value="Banco Plaza">Banco Plaza</option>
-                            <option value="100% Banco">100% Banco</option>
-                            <option value="Otro Banco">Otro Banco</option>
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                              Teléfono Emisor
-                            </label>
-                            <input
-                              type="tel"
-                              placeholder="0414 1234567"
-                              value={paymentVerification.issuingPhone}
-                              onChange={(e) =>
-                                setPaymentVerification({ ...paymentVerification, issuingPhone: e.target.value })
-                              }
-                              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                              N° Referencia (4 a 6 dígitos) *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="Ej: 489201"
-                              value={paymentVerification.referenceNumber}
-                              onChange={(e) =>
-                                setPaymentVerification({ ...paymentVerification, referenceNumber: e.target.value })
-                              }
-                              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                    {/* Formularios de verificación — PR 12: data-driven (payment-methods.tsx) */}
+                    {selectedVerificationForm && (
+                      <VerificationForm
+                        form={selectedVerificationForm}
+                        state={paymentVerification}
+                        onChange={handleVerificationChange}
+                      />
                     )}
 
-                    {paymentMethodKey === 'zelle' && (
-                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-                          Datos de tu Transferencia Zelle:
-                        </span>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Nombre del Titular de la Cuenta Zelle Emisora *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Nombre que figura en tu Zelle"
-                            value={paymentVerification.senderName}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, senderName: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Número de Confirmación / Referencia Zelle *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ej: ZEL-948102"
-                            value={paymentVerification.referenceNumber}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, referenceNumber: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethodKey === 'binance' && (
-                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-                          Datos de tu Pago Binance:
-                        </span>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Tu Pay ID o Nickname de Binance *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ej: TuNickname / 19283746"
-                            value={paymentVerification.binancePayId}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, binancePayId: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Order ID / TXID de Transacción *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ej: 204918273619"
-                            value={paymentVerification.referenceNumber}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, referenceNumber: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethodKey === 'zinli' && (
-                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-                          Datos de tu Pago Zinli:
-                        </span>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Correo o Teléfono de tu Cuenta Zinli *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="tucuenta@email.com o +58..."
-                            value={paymentVerification.senderEmail}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, senderEmail: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Número de Referencia Zinli *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ej: 198274"
-                            value={paymentVerification.referenceNumber}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, referenceNumber: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethodKey === 'banesco_panama' && (
-                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in duration-200">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-                          Datos de Transferencia Banesco Panamá:
-                        </span>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Nombre del Titular de la Cuenta Emisora *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Nombre del emisor"
-                            value={paymentVerification.senderName}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, senderName: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Número de Referencia de la Transferencia *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ej: BP-291840"
-                            value={paymentVerification.referenceNumber}
-                            onChange={(e) =>
-                              setPaymentVerification({ ...paymentVerification, referenceNumber: e.target.value })
-                            }
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Camera and Proof Callout Box */}
-                    <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-950 shadow-xs">
-                      <Camera className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        <span className="font-black block text-[11px] text-amber-900 uppercase tracking-wider">
-                          Paso Final por WhatsApp:
-                        </span>
-                        <p className="text-[11px] text-amber-800 leading-snug">
-                          Al pulsar "Confirmar y Enviar a WhatsApp", por favor adjunta la <strong>captura del comprobante de pago</strong> (o foto de los billetes) y comparte tu <strong>ubicación en tiempo real</strong> para coordinar la entrega.
-                        </p>
-                      </div>
-                    </div>
+                    <WhatsAppProofCallout />
                   </div>
 
                   <div>
