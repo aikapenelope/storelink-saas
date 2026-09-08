@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePaymentDetails } from '../../src/lib/checkout-sanitize';
+import {
+  normalizePaymentDetails,
+  validateCurrencyCode,
+  validateDeliveryTypeEnum,
+  validateMethodKeyEnum,
+} from '../../src/lib/checkout-sanitize';
 
 describe('normalizePaymentDetails', () => {
   it('fuerza paymentStatus pending_verification aunque el cliente envíe verified/rejected', () => {
@@ -47,5 +52,48 @@ describe('normalizePaymentDetails', () => {
     const out = normalizePaymentDetails({ referenceNumber: 12345, senderName: { a: 1 } });
     expect(out).not.toHaveProperty('referenceNumber');
     expect(out).not.toHaveProperty('senderName');
+  });
+});
+
+describe('validateDeliveryTypeEnum (PR 4/A6)', () => {
+  it('rechaza valores fuera del catálogo (deliveryType forjado "teleport")', () => {
+    expect(validateDeliveryTypeEnum('teleport')).toMatch(/inválida/i);
+    expect(validateDeliveryTypeEnum('DRONES')).toMatch(/inválida/i);
+    expect(validateDeliveryTypeEnum(1)).toMatch(/inválida/i);
+  });
+
+  it('acepta el catálogo y la ausencia (default del create)', () => {
+    expect(validateDeliveryTypeEnum('delivery')).toBeNull();
+    expect(validateDeliveryTypeEnum('pickup')).toBeNull();
+    expect(validateDeliveryTypeEnum(undefined)).toBeNull();
+  });
+});
+
+describe('validateMethodKeyEnum (PR 4/A6)', () => {
+  it('rechaza methodKey fuera del catálogo de métodos', () => {
+    expect(validateMethodKeyEnum('paypal')).toMatch(/inválido/i);
+    expect(validateMethodKeyEnum('PAGO_MOVIL')).toMatch(/inválido/i); // case-sensitive
+  });
+
+  it('acepta los métodos habilitados y la ausencia', () => {
+    expect(validateMethodKeyEnum('pago_movil')).toBeNull();
+    expect(validateMethodKeyEnum('zelle')).toBeNull();
+    expect(validateMethodKeyEnum(undefined)).toBeNull();
+    expect(validateMethodKeyEnum('')).toBeNull();
+  });
+});
+
+describe('validateCurrencyCode (PR 4/A6)', () => {
+  it('rechaza monedas con formato no ISO-4217 (inyección en PDF/orden)', () => {
+    expect(validateCurrencyCode('USD<script>')).toMatch(/inválida/i);
+    expect(validateCurrencyCode('usd')).toMatch(/inválida/i);
+    expect(validateCurrencyCode('USDD')).toMatch(/inválida/i);
+    expect(validateCurrencyCode('U$D')).toMatch(/inválida/i);
+  });
+
+  it('acepta códigos ISO de 3 mayúsculas y la ausencia', () => {
+    expect(validateCurrencyCode('USD')).toBeNull();
+    expect(validateCurrencyCode('EUR')).toBeNull();
+    expect(validateCurrencyCode(undefined)).toBeNull();
   });
 });

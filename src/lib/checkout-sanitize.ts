@@ -81,3 +81,49 @@ export function normalizePaymentDetails(raw: unknown): NormalizedPaymentDetails 
 
   return normalized;
 }
+
+/* ------------------------------------------------------------------ */
+/* PR 4 (auditoría 2026-09-07, A6): whitelists de entrada del checkout  */
+/*                                                                      */
+/* El `deliveryType` es select en la colección Orders: un valor inválido */
+/* RECHAZA el payload.create de Payload (validación automática de       */
+/* selects) — pero para entonces el PDF ya habría sido subido a R2      */
+/* (huérfano + cuota quemada). Estas validaciones corren en el boundary */
+/* de entrada (fail-fast, SIN efectos): "never trust client-provided    */
+/* data" antes de cualquier trabajo con efecto. Mensajes genéricos      */
+/* (sin filtrar detalles internos).                                     */
+/* ------------------------------------------------------------------ */
+
+export const CHECKOUT_DELIVERY_TYPES = ['delivery', 'pickup'] as const;
+export type CheckoutDeliveryType = (typeof CHECKOUT_DELIVERY_TYPES)[number];
+
+/**
+ * Modalidad de entrega: undefined/null es válido (el create aplica el default
+ * 'delivery'). Cualquier otro valor fuera del catálogo se rechaza.
+ */
+export function validateDeliveryTypeEnum(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  return (CHECKOUT_DELIVERY_TYPES as readonly unknown[]).includes(value)
+    ? null
+    : 'Modalidad de entrega inválida';
+}
+
+/** methodKey: opcional; si viene, debe pertenecer al catálogo de métodos. */
+export function validateMethodKeyEnum(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  return (METHOD_KEYS as readonly unknown[]).includes(value)
+    ? null
+    : 'Método de pago inválido';
+}
+
+/**
+ * Moneda: opcional (default 'USD' en el create); si viene, código ISO-4217
+ * de 3 letras mayúsculas — evita persistir strings arbitrarios en la orden,
+ * el PDF y el mensaje de WhatsApp.
+ */
+export function validateCurrencyCode(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  return typeof value === 'string' && /^[A-Z]{3}$/.test(value)
+    ? null
+    : 'Moneda inválida';
+}
