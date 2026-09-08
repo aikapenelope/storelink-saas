@@ -201,16 +201,25 @@ export const applyCustomerCrmDelta = async ({
   // Ejecutor AISLADO (adapter.drizzle = conexión del pool, NO la sesión de la
   // tx del request): si este UPDATE falla, no aborta la transacción del
   // pedido/inventario. Solo toca columnas reales del schema actual.
+  //
+  // PR 8 (auditoría 2026-09-07, hallazgo derivado de C5): el CASE produce text
+  // y la columna `tag` es el enum enum_customers_tag generado por Payload
+  // (select) — sin cast explícito Postgres rechazaba el UPDATE COMPLETO con
+  // "column tag is of type enum_customers_tag but expression is of type text",
+  // el catch best-effort lo tragaba y la reconciliación CRM de cancelación/
+  // reactivación/edición/borrado era un NO-OP silencioso: el CRM solo sumaba,
+  // nunca restaba. El nombre del enum es estable (renombrarlo rompería la BD
+  // de Payload; convención enum_<tabla>_<campo>).
   await adapter.drizzle.execute(sql`
     update ${sql.identifier(tableName)}
     set total_orders = greatest(coalesce(total_orders, 0) + ${sign}, 0),
         total_spent = greatest(coalesce(total_spent, 0) + ${signedTotal}, 0),
-        tag = case
+        tag = (case
           when coalesce(total_orders, 0) + ${sign} <= 0 then 'inactivo'
           when coalesce(total_orders, 0) + ${sign} >= 3
             or coalesce(total_spent, 0) + ${signedTotal} >= 50 then 'vip'
           else 'frecuente'
-        end
+        end)::enum_customers_tag
     where tenant_id = ${tenantId} and phone = ${phone}
   `);
   // preferences.averageOrderValue NO se recalcula aquí: en el schema real de
