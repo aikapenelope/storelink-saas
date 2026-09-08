@@ -239,6 +239,49 @@ export const applyCustomerCrmDelta = async ({
   // (que corre vía Local API y pasa por la transformación oficial de Payload).
 };
 
+/**
+ * PR 2 (auditoría 2026-09-07, A3): claim ATÓMICO de la flag crmCounted.
+ *
+ * Sustituye la secuencia TOCTOU del checkout (update crmCounted=true →
+ * findByID → compensar si cancelled): entre el update y el findByID podía
+ * colar una cancelación del admin → el hook de cancelación veía crmCounted
+ * =true y restaba, y la compensación del checkout volvía a restar = doble
+ * decremento del CRM (totalOrders/totalSpent corruptos, etiqueta VIP perdida).
+ *
+ * Un solo UPDATE con RETURNING serializa contra la cancelación por lock de
+ * fila de Postgres: el resultado trae flag+status de LA MISMA fila, sin ventana:
+ *   - status='cancelled' en el retorno → la cancelación committeó ANTES del
+ *     claim (el hook vio crmCounted=false y NO restó) → el caller compensa
+ *     exactamente una vez.
+ *   - status='pending' → el hook de una cancelación futura verá crmCounted
+ *     =true y restará; el caller no compensa.
+ *   - claimed=false (flag ya true, reintento) → NADIE compensa: el ajuste ya
+ *     pasó o pasará por el hook — el claim es idempotente por diseño.
+ *
+ * Usa el EJECUTOR AISLADO (adapter.drizzle): igual que applyCustomerCrmDelta,
+ * corre FUERA de la tx del request del checkout para no abortar el pedido.
+ */
+export const claimOrderCrmCounted = async ({
+  payload,
+  orderId,
+}: {
+  payload: Payload;
+  orderId: number | string;
+}): Promise<{ claimed: boolean; status?: string }> => {
+  const adapter = payload.db as unknown as PostgresAdapterLike;
+  const tableName = adapter.tableNameMap.get('orders') || 'orders';
+
+  const res = (await adapter.drizzle.execute(sql`
+    update ${sql.identifier(tableName)}
+    set crm_counted = true
+    where id = ${orderId} and crm_counted is not true
+    returning status
+  `)) as { rows?: Array<{ status?: string }> };
+
+  const row = res?.rows?.[0];
+  return { claimed: Boolean(row), status: row?.status };
+};
+
 /** Cantidades agregadas por SKU (los ítems sin SKU legacy no son ajustables). */
 const qtyBySkuOf = (
   items: Array<{ sku?: string | null; quantity?: number | null }> | null | undefined,
@@ -675,15 +718,23 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       }
     }
   } else if (isCancelled) {
+    // PR 2 (auditoría 2026-09-07, A4): restaurar lo que FUE DEDUCIDO, no las
+    // cantidades nuevas del mismo save. Si el admin edita cantidad 2→5 y
+    // cancela en UN solo save, isCancelled=true salta la rama de edición
+    // (applyStockDeltasForEdit NUNCA corre) → lo único deducido físicamente
+    // sigue siendo previousDoc.items (qty 2). Restaurar doc.items (qty 5)
+    // repondría 3 unidades jamás deducidas → inflación de stock permanente.
+    // El camino de borrado ya usa el estado final (invariante válido: ahí no
+    // hay edición concurrente posible).
     await restoreStockForItems({
       payload,
       req,
       tenantId,
-      items: doc.items as Array<{
+      items: ((previousDoc?.items ?? doc.items) as Array<{
         sku?: string | null;
         title?: string | null;
         quantity?: number | null;
-      }>,
+      }>),
     });
   }
 

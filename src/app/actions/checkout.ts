@@ -21,7 +21,7 @@ import {
   waitForCheckoutResponse,
 } from '@/lib/checkout-idempotency';
 import { buildCheckoutProcessingResponse } from '@/lib/checkout-response';
-import { applyCustomerCrmDelta } from '@/collections/Orders';
+import { applyCustomerCrmDelta, claimOrderCrmCounted } from '@/collections/Orders';
 import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
@@ -946,24 +946,22 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
       if (crmUpsertSucceeded) {
         try {
-          await payload.update({
-            collection: 'orders',
-            id: orderDoc.id as number,
-            overrideAccess: true,
-            context: { skipInventoryHook: true },
-            data: { crmCounted: true } as never,
+          // PR 2 (auditoría 2026-09-07, A3): claim ATÓMICO de crmCounted.
+          // Un solo UPDATE ... RETURNING status elimina la ventana TOCTOU del
+          // par update→findByID (review Devin #67): una cancelación ya no
+          // puede colar entre ambos y provocar doble decremento del CRM.
+          //   status='cancelled'  → la cancelación pasó ANTES del claim (el
+          //                          hook vio crmCounted=false y no restó) →
+          //                          compensamos exactamente una vez.
+          //   status='pending'    → el hook de una cancelación futura verá
+          //                          crmCounted=true y restará; no compensar.
+          //   claimed=false       → reintento/replay: el ajuste ya pasó o
+          //                          pasará por el hook; idempotente.
+          const { claimed, status } = await claimOrderCrmCounted({
+            payload,
+            orderId: orderDoc.id as number,
           });
-
-          // Race check (review Devin #67): la orden pudo haber sido cancelada
-          // entre su creación y este punto. Si ya está cancelada, aplicar el
-          // decremento AHORA (el hook no lo hará porque crmCounted era false
-          // cuando la cancelación ocurrió).
-          const currentOrder = await payload.findByID({
-            collection: 'orders',
-            id: orderDoc.id as number,
-            overrideAccess: true,
-          });
-          if ((currentOrder as { status?: string }).status === 'cancelled') {
+          if (claimed && status === 'cancelled') {
             await applyCustomerCrmDelta({
               payload,
               tenantId,
@@ -973,12 +971,12 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             });
           }
         } catch (flagErr) {
-          // Opposite partial failure: CRM increment committeó pero la flag no
-          // se pudo actualizar. El incremento es real; si la orden se cancela
+          // Opposite partial failure: CRM increment committeó pero el claim no
+          // se pudo hacer. El incremento es real; si la orden se cancela
           // después, no se restará (flag false) → inflación en el CRM.
           // Se loguea para reconciliación manual. No bloquea el checkout.
           console.error(
-            `[storelink][crm][checkout] CRM increment OK pero crmCounted flag update falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
+            `[storelink][crm][checkout] CRM increment OK pero el claim atómico de crmCounted falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
             flagErr
           );
         }
