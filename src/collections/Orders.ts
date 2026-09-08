@@ -373,9 +373,41 @@ const fetchProductResolver = async ({
   const baseBySku = new Map<string, Product>();
   const variantOwnerBySku = new Map<string, Product>();
   for (const p of batchRes.docs as Product[]) {
-    if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
+    if (p.sku) baseBySku.set(p.sku, p);
     for (const v of Array.isArray(p.variants) ? p.variants : []) {
       if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
+    }
+  }
+
+  // PR 3 (review Devin PR #93 "Duplicate rows hide ordered products"): el
+  // batch con `limit` acotado puede dejar SKUs FUERA de la página cuando
+  // existen duplicados históricos (varios docs para el mismo SKU llenan la
+  // página) → un ítem del pedido quedaría sin deducción = overselling. Los
+  // SKUs sin resolver se buscan individualmente (1 fila, menor id) — el
+  // fallback es determinista y garantiza que NINGÚN sku del pedido quede
+  // sin resolución.
+  const resolvedSkus = new Set<string>([...baseBySku.keys(), ...variantOwnerBySku.keys()]);
+  const missingSkus = skus.filter((s) => !resolvedSkus.has(s));
+  for (const missingSku of missingSkus) {
+    const single = await payload.find({
+      collection: 'products',
+      where: {
+        and: [
+          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+          { or: [{ sku: { equals: missingSku } }, { 'variants.sku': { equals: missingSku } }] },
+        ],
+      },
+      limit: 1,
+      sort: 'id',
+      depth: 0,
+      overrideAccess: true,
+      req,
+    });
+    const doc = single.docs[0] as Product | undefined;
+    if (!doc) continue;
+    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
+    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
     }
   }
 

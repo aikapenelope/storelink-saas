@@ -48,6 +48,7 @@ const productBySku = async (sku: string) => {
   const res = await payload.find({
     collection: 'products',
     where: { and: [{ tenant: { equals: tenantId } }, { sku: { equals: sku } }] },
+    sort: 'id', // determinista: ante duplicados históricos, el de MENOR id
     limit: 1,
     depth: 0,
     overrideAccess: true,
@@ -876,5 +877,131 @@ d('transiciones de inventario (hooks de Orders)', () => {
       data: { price: 12 },
     });
     expect((updated as unknown as { price?: number }).price).toBe(12);
+  }, 60000);
+
+  it('PR 3 (review Devin #93): variante existente queda reutilizable como base de OTRO producto → rechazo', async () => {
+    const baseSku = uniqueSku('VB');
+    const variantSku = uniqueSku('VV');
+
+    // Producto P1: base baseSku + variante variantSku
+    await payload.create({
+      collection: 'products',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        title: 'P1 con variante',
+        price: 10,
+        sku: baseSku,
+        variants: [{ name: 'V', sku: variantSku, price: 10 }],
+      } as never,
+    });
+
+    // P2 quiere usar variantSku (solo existe como VARIANTE de P1) → rechazo
+    await expect(
+      payload.create({
+        collection: 'products',
+        overrideAccess: true,
+        data: { tenant: tenantId, title: 'P2 clon variante', price: 5, sku: variantSku },
+      } as never)
+    ).rejects.toThrow(/ya existente en este comercio/i);
+  }, 60000);
+
+  it('PR 3 (review Devin #93): update parcial valida el PRODUCTO RESULTANTE (no solo los campos enviados)', async () => {
+    // Caso 1: update cambia el base a un valor que ya es variante PROPIA no enviada
+    const baseA = uniqueSku('RB');
+    const variantA = uniqueSku('RV');
+    const p1 = await payload.create({
+      collection: 'products',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        title: 'P1 resultante',
+        price: 10,
+        sku: baseA,
+        variants: [{ name: 'V', sku: variantA, price: 10 }],
+      } as never,
+    });
+    await expect(
+      payload.update({
+        collection: 'products',
+        id: p1.id,
+        overrideAccess: true,
+        data: { sku: variantA }, // base pasa a chocar con su propia variante
+      } as never)
+    ).rejects.toThrow(/repetido dentro del mismo producto/i);
+
+    // Caso 2: update reemplaza variantes con un SKU que ya es el base propio no enviado
+    const p2 = await createProduct(uniqueSku('RB2'), 10);
+    await expect(
+      payload.update({
+        collection: 'products',
+        id: p2.id,
+        overrideAccess: true,
+        data: {
+          variants: [{ name: 'V', sku: (p2 as unknown as { sku: string }).sku, price: 10 }],
+        },
+      } as never)
+    ).rejects.toThrow(/repetido dentro del mismo producto/i);
+  }, 60000);
+
+  it('PR 3 (review Devin #93): duplicado HISTÓRICO no omite la deducción de los demás SKUs del pedido', async () => {
+    // Simula datos previos al fix: dos productos con el MISMO SKU (el hook
+    // nuevo impide crearlos, así que el duplicado se siembra por SQL directo).
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const dupSku = uniqueSku('HIST');
+    const otherSku = uniqueSku('HISTO');
+
+    await createProduct(dupSku, 5); // producto A (menor id)
+    await createProduct(otherSku, 4); // producto C (otro SKU)
+
+    const tenantRow = await payload.db.drizzle.execute(
+      sql`SELECT id FROM tenants WHERE slug LIKE 'inv-test-%' ORDER BY id DESC LIMIT 1`
+    );
+    const tenantNumeric = (tenantRow.rows[0] as { id: number }).id;
+    const inserted = (await payload.db.drizzle.execute(
+      sql`INSERT INTO products (title, sku, price, track_stock, stock_quantity, stock_status, tenant_id, created_at, updated_at)
+          VALUES ('Duplicado histórico', ${dupSku}, 10, true, 5, 'in_stock', ${tenantNumeric}, now(), now())
+          RETURNING id`
+    )) as { rows?: Array<{ id: number }> };
+    const duplicateId = inserted.rows?.[0]?.id;
+    expect(duplicateId).toBeTruthy();
+
+    // Pedido de 2 SKUs: el batch (limit = nº de SKUs) trae A+B (duplicados del
+    // mismo sku, sort id) y C se quedaría FUERA → sin fallback no se deduciría.
+    const order = await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        status: 'pending',
+        orderNumber: `INV-DUP-${Date.now()}`,
+        customer: { name: 'Cliente Dup', phone: '+584129990010', email: 'dup@test.local' },
+        items: [
+          { sku: dupSku, title: 'Duplicado', price: 10, quantity: 1, subtotal: 10 },
+          { sku: otherSku, title: 'Otro', price: 10, quantity: 1, subtotal: 10 },
+        ],
+        totalAmount: 20,
+        currency: 'USD',
+      } as never,
+    });
+
+    // Ambos deducidos exactamente una vez:
+    // El SKU duplicado: A (menor id) deducido → 4; el cludo SQL intacto → 5.
+    const dupDocs = await payload.find({
+      collection: 'products',
+      where: { and: [{ tenant: { equals: tenantId } }, { sku: { equals: dupSku } }] },
+      sort: 'id',
+      depth: 0,
+      overrideAccess: true,
+    });
+    const dupStocks = (dupDocs.docs as Array<{ stockQuantity?: number }>)
+      .map((d) => d.stockQuantity)
+      .sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(dupStocks).toEqual([4, 5]);
+    expect(await stockOf(otherSku)).toBe(3); // C deducido — antes del fallback quedaba 4 (omisión silenciosa)
+
+    // Limpieza del duplicado crudo
+    await payload.db.drizzle.execute(sql`DELETE FROM products WHERE id = ${duplicateId}`);
+    await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
   }, 60000);
 });

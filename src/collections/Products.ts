@@ -147,18 +147,28 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
   const tenantId = dataTenantId ?? originalTenantId;
   if (tenantId == null) return data; // el guard A1 (beforeChange) cubre tenant ausente
 
-  const ownId = operation === 'update' ? originalDoc?.id : undefined;
+  // Review Devin PR #93 ("Partial updates bypass SKU checks"): se valida el
+  // PRODUCTO RESULTANTE, no solo los campos enviados — un update parcial que
+  // cambia el base debe chocar contra las variantes NO enviadas (y
+  // viceversa), y esas viven en originalDoc.
+  const dataBase = typeof data?.sku === 'string' && data.sku.trim() ? data.sku.trim() : undefined;
+  const effectiveBase =
+    dataBase ?? (operation === 'update' && typeof originalDoc?.sku === 'string' && originalDoc.sku.trim()
+      ? originalDoc.sku.trim()
+      : undefined);
 
-  const collectSkus = (): { base?: string; variants: string[] } => {
-    const base = typeof data?.sku === 'string' && data.sku.trim() ? data.sku.trim() : undefined;
-    const variants = (Array.isArray(data?.variants) ? data.variants : [])
-      .map((v) => (typeof v?.sku === 'string' ? v.sku.trim() : ''))
-      .filter((s): s is string => s.length > 0);
-    return { base, variants };
-  };
+  const incomingVariants: Array<{ sku?: string | null }> = Array.isArray(data?.variants)
+    ? (data.variants as Array<{ sku?: string | null }>)
+    : operation === 'update'
+      ? ((originalDoc?.variants ?? []) as Array<{ sku?: string | null }>)
+      : [];
+  const effectiveVariants = incomingVariants
+    .map((v) => (typeof v?.sku === 'string' ? v.sku.trim() : ''))
+    .filter((s) => s.length > 0);
 
-  const { base, variants } = collectSkus();
-  const allSkus = [base, ...variants].filter((s): s is string => Boolean(s));
+  const allSkus = [effectiveBase, ...effectiveVariants].filter(
+    (s): s is string => Boolean(s),
+  );
   if (allSkus.length === 0) return data;
 
   // Un producto no puede repetir SKU consigo mismo (base == variante, dos
@@ -171,13 +181,17 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
     seen.add(sku);
   }
 
-  // SKUs ya usados por OTRO producto del tenant
+  const ownId = operation === 'update' ? originalDoc?.id : undefined;
+
+  // SKUs ya usados por OTRO producto del tenant — base O variante (review
+  // Devin PR #93 "Variant SKUs remain reusable": sin el or de variants.sku,
+  // un SKU existente solo como variante quedaba reutilizable).
   const res = await req.payload.find({
     collection: 'products',
     where: {
       and: [
         { tenant: { equals: tenantId } },
-        { sku: { in: allSkus } },
+        { or: [{ sku: { in: allSkus } }, { 'variants.sku': { in: allSkus } }] },
         ...(ownId !== undefined ? [{ id: { not_equals: ownId } }] : []),
       ],
     },
