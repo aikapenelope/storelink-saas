@@ -616,7 +616,39 @@ d('transiciones de inventario (hooks de Orders)', () => {
       sign: -1,
       req: req2,
     });
-    await payload.db.commitTransaction(tx2);
+
+    // Review Devin ronda 3: interrupción DESPUÉS del update del cliente — la
+    // pareja claim+compensación comparte UNA sola tx: al abortar ANTES del
+    // commit, NINGUNO de los dos debe aterrizar (flag en false, CRM intacto).
+    await payload.db.rollbackTransaction(tx2);
+
+    const custAfterInterruptedCommit = await readCustomer();
+    expect(custAfterInterruptedCommit.totalOrders).toBe(2); // intacto
+    expect(Number(custAfterInterruptedCommit.totalSpent)).toBe(60); // intacto
+    const orderAfterInterrupted = (await payload.findByID({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { crmCounted?: boolean };
+    expect(orderAfterInterrupted.crmCounted).toBe(false); // la flag también volvió
+
+    // Tercer intento (el "proceso se recupera"): completa exactamente una vez
+    const tx3 = await payload.db.beginTransaction();
+    if (tx3 === null) throw new Error('beginTransaction (3er intento) devolvió null');
+    const req3 = { transactionID: tx3 };
+    const third = await claimOrderCrmCounted({ payload, orderId: order.id as number, req: req3 });
+    expect(third.claimed).toBe(true);
+    expect(third.status).toBe('cancelled');
+    await applyCustomerCrmDelta({
+      payload,
+      tenantId,
+      phone,
+      totalAmount: 10,
+      sign: -1,
+      req: req3,
+    });
+    await payload.db.commitTransaction(tx3);
 
     const cust = await readCustomer();
     expect(cust.totalOrders).toBe(1); // 2 − 1 — completada EXACTAMENTE una vez

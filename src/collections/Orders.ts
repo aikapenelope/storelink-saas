@@ -234,7 +234,11 @@ export const applyCustomerCrmDelta = async ({
   // reactivación/edición/borrado era un NO-OP silencioso: el CRM solo sumaba,
   // nunca restaba. El nombre del enum es estable (renombrarlo rompería la BD
   // de Payload; convención enum_<tabla>_<campo>).
-  await adapter.drizzle.execute(sql`
+  // Review Devin PR #92 ronda 3 ("CRM compensation escapes its transaction"):
+  // el UPDATE corre por el EXECUTOR SELECCIONADO — con req transaccional
+  // comparte la sesión de la tx del claim (commit/rollback conjunto); sin
+  // req mantiene el ejecutor aislado de siempre.
+  await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set total_orders = greatest(coalesce(total_orders, 0) + ${ordersDelta}, 0),
         total_spent = greatest(coalesce(total_spent, 0) + ${signedTotal}, 0),
