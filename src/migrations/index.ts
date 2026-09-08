@@ -22,6 +22,7 @@ import * as migration_20260902_alter_orders_exchange_rate_numeric from './202609
 import * as migration_20260905_tenant_catalog_plan from './20260905_tenant_catalog_plan';
 import * as migration_20260908_backfill_trim_product_skus from './20260908_backfill_trim_product_skus';
 import * as migration_20260908_jobs_reconcile_task_slug from './20260908_jobs_reconcile_task_slug';
+import * as migration_20260908_rls_customers_tables from './20260908_rls_customers_tables';
 
 export const migrations = [
   {
@@ -140,5 +141,10 @@ export const migrations = [
     up: migration_20260908_jobs_reconcile_task_slug.up,
     down: migration_20260908_jobs_reconcile_task_slug.down,
     name: '20260908_jobs_reconcile_task_slug',
+  },
+  {
+    up: migration_20260908_rls_customers_tables.up,
+    down: migration_20260908_rls_customers_tables.down,
+    name: '20260908_rls_customers_tables',
   },
 ];
