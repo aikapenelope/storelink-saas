@@ -187,6 +187,7 @@ export const applyCustomerCrmDelta = async ({
   totalAmount,
   sign,
   orderCountDelta,
+  req,
 }: {
   payload: Payload;
   tenantId: number | string;
@@ -202,15 +203,28 @@ export const applyCustomerCrmDelta = async ({
    * contada no puede crear/quitar órdenes fantasma en el CRM.
    */
   orderCountDelta?: number;
+  /**
+   * Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): SIN req
+   * (default) usa el ejecutor aislado (adapter.drizzle) — un fallo del CRM
+   * jamás aborta el pedido (contrato de los hooks de lifecycle). CON req,
+   * el caller EXIGE compartir la sesión de una transacción explícita (claim
+   * atómico del checkout): el delta comparte el destino de la flag. Se tipa
+   * como Pick estructural: solo la sesión de la tx interesa aquí.
+   */
+  req?: Pick<PayloadRequest, 'transactionID'>;
 }): Promise<void> => {
   const adapter = payload.db as unknown as PostgresAdapterLike;
   const tableName = adapter.tableNameMap.get('customers') || 'customers';
   const signedTotal = sign * totalAmount;
   const ordersDelta = orderCountDelta ?? sign;
+  const txId = req?.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
 
-  // Ejecutor AISLADO (adapter.drizzle = conexión del pool, NO la sesión de la
-  // tx del request): si este UPDATE falla, no aborta la transacción del
-  // pedido/inventario. Solo toca columnas reales del schema actual.
+  // Ejecutor: AISLADO por defecto (adapter.drizzle = conexión del pool, NO la
+  // sesión de la tx del request) — si este UPDATE falla, no aborta la
+  // transacción del pedido/inventario. CON req explícito comparte la sesión
+  // de la tx del caller (ver doc del parámetro). Solo columnas reales.
   //
   // PR 8 (auditoría 2026-09-07, hallazgo derivado de C5): el CASE produce text
   // y la columna `tag` es el enum enum_customers_tag generado por Payload
@@ -220,7 +234,11 @@ export const applyCustomerCrmDelta = async ({
   // reactivación/edición/borrado era un NO-OP silencioso: el CRM solo sumaba,
   // nunca restaba. El nombre del enum es estable (renombrarlo rompería la BD
   // de Payload; convención enum_<tabla>_<campo>).
-  await adapter.drizzle.execute(sql`
+  // Review Devin PR #92 ronda 3 ("CRM compensation escapes its transaction"):
+  // el UPDATE corre por el EXECUTOR SELECCIONADO — con req transaccional
+  // comparte la sesión de la tx del claim (commit/rollback conjunto); sin
+  // req mantiene el ejecutor aislado de siempre.
+  await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set total_orders = greatest(coalesce(total_orders, 0) + ${ordersDelta}, 0),
         total_spent = greatest(coalesce(total_spent, 0) + ${signedTotal}, 0),
@@ -237,6 +255,63 @@ export const applyCustomerCrmDelta = async ({
   // crudo sobre el JSONB incurre en el riesgo de naming documentado en
   // AGENTS.md. Se recalcula en la migración P0-B (backfill) y en upsertCustomerCrm
   // (que corre vía Local API y pasa por la transformación oficial de Payload).
+};
+
+/**
+ * PR 2 (auditoría 2026-09-07, A3): claim ATÓMICO de la flag crmCounted.
+ *
+ * Sustituye la secuencia TOCTOU del checkout (update crmCounted=true →
+ * findByID → compensar si cancelled): entre el update y el findByID podía
+ * colar una cancelación del admin → el hook de cancelación veía crmCounted
+ * =true y restaba, y la compensación del checkout volvía a restar = doble
+ * decremento del CRM (totalOrders/totalSpent corruptos, etiqueta VIP perdida).
+ *
+ * Un solo UPDATE con RETURNING serializa contra la cancelación por lock de
+ * fila de Postgres: el resultado trae flag+status de LA MISMA fila, sin ventana:
+ *   - status='cancelled' en el retorno → la cancelación committeó ANTES del
+ *     claim (el hook vio crmCounted=false y NO restó) → el caller compensa
+ *     exactamente una vez.
+ *   - status='pending' → el hook de una cancelación futura verá crmCounted
+ *     =true y restará; el caller no compensa.
+ *   - claimed=false (flag ya true, reintento) → NADIE compensa: el ajuste ya
+ *     pasó o pasará por el hook — el claim es idempotente por diseño.
+ *
+ * Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): cuando el
+ * caller va a compensar (status='cancelled'), el claim y la compensación
+ * DEBEN ser atómicos entre sí — si la compensación fallara con la flag ya
+ * committeada, el reintento vería claimed=false y la compensación perdida
+ * jamás se recuperaría. Por eso este helper acepta `req` opcional: con req
+ * (caller del checkout) usa la SESIÓN de la transacción del request (misma
+ * semántica que los deltas de stock: patrón oficial transactions.mdx) y la
+ * flag comparte el destino de la compensación — un fallo revierte AMBAS y el
+ * reintento puede volver a reclamar. Sin req (futuros usos server-side de
+ * confianza) mantiene el executor aislado documentado.
+ */
+export const claimOrderCrmCounted = async ({
+  payload,
+  orderId,
+  req,
+}: {
+  payload: Payload;
+  orderId: number | string;
+  /** Sesión de tx explícita del caller (checkout); Pick estructural: solo la sesión interesa. */
+  req?: Pick<PayloadRequest, 'transactionID'>;
+}): Promise<{ claimed: boolean; status?: string }> => {
+  const adapter = payload.db as unknown as PostgresAdapterLike;
+  const txId = req?.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
+  const tableName = adapter.tableNameMap.get('orders') || 'orders';
+
+  const res = (await executor.execute(sql`
+    update ${sql.identifier(tableName)}
+    set crm_counted = true
+    where id = ${orderId} and crm_counted is not true
+    returning status
+  `)) as { rows?: Array<{ status?: string }> };
+
+  const row = res?.rows?.[0];
+  return { claimed: Boolean(row), status: row?.status };
 };
 
 /** Cantidades agregadas por SKU (los ítems sin SKU legacy no son ajustables). */
@@ -675,15 +750,23 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
       }
     }
   } else if (isCancelled) {
+    // PR 2 (auditoría 2026-09-07, A4): restaurar lo que FUE DEDUCIDO, no las
+    // cantidades nuevas del mismo save. Si el admin edita cantidad 2→5 y
+    // cancela en UN solo save, isCancelled=true salta la rama de edición
+    // (applyStockDeltasForEdit NUNCA corre) → lo único deducido físicamente
+    // sigue siendo previousDoc.items (qty 2). Restaurar doc.items (qty 5)
+    // repondría 3 unidades jamás deducidas → inflación de stock permanente.
+    // El camino de borrado ya usa el estado final (invariante válido: ahí no
+    // hay edición concurrente posible).
     await restoreStockForItems({
       payload,
       req,
       tenantId,
-      items: doc.items as Array<{
+      items: ((previousDoc?.items ?? doc.items) as Array<{
         sku?: string | null;
         title?: string | null;
         quantity?: number | null;
-      }>,
+      }>),
     });
   }
 
@@ -693,9 +776,25 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // resta (sign -1), reactivación suma (sign +1). El delta usa un EJECUTOR
   // AISLADO de la tx (adapter.drizzle) y SOLO columnas reales → un fallo del
   // CRM nunca aborta el pedido ni la reposición de stock. Best-effort igualmente.
-  const customerPhone =
-    doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
-  const totalAmount = Number(doc.totalAmount);
+  //
+  // Review Devin PR #92 ("Same-save cancellation corrupts customer totals"):
+  // la CANCELACIÓN revierte el incremento CRM que existía al momento en que la
+  // orden estaba ACTIVA y contada — es decir, el teléfono y el total de
+  // previousDoc (los valores que el incremento original aplicó). Usar
+  // doc.customer/doc.totalAmount corrompía al admin cuando editaba teléfono o
+  // total y cancelaba en UN mismo save: restaba el total NUEVO del teléfono
+  // NUEVO, ninguno de los cuales había sido contado. La REACTIVACIÓN usa los
+  // valores ACTUALES (doc): re-activa la orden tal como quedó tras la edición,
+  // consistente con que el stock de reactivación también deduce doc.items.
+  const cancelledPhone =
+    isCancelled && previousDoc?.customer && typeof previousDoc.customer === 'object'
+      ? previousDoc.customer.phone
+      : doc.customer && typeof doc.customer === 'object'
+        ? doc.customer.phone
+        : undefined;
+  const cancelledTotal = isCancelled ? Number(previousDoc?.totalAmount) : Number(doc.totalAmount);
+  const customerPhone = cancelledPhone;
+  const totalAmount = isCancelled ? cancelledTotal : Number(doc.totalAmount);
   if (
     CRM_RECONCILIATION_ENABLED &&
     (isCancelled || isReactivated) &&

@@ -3,6 +3,7 @@ import path from 'path';
 import { getPayload } from 'payload';
 import type { Payload } from 'payload';
 import config from '../payload.config';
+import { claimOrderCrmCounted } from '@/collections/Orders';
 
 /**
  * PR 8 del roadmap post-auditoría 2026-09-07 (hallazgo C5):
@@ -404,5 +405,351 @@ d('transiciones de inventario (hooks de Orders)', () => {
       overrideAccess: true,
       data: { status: 'cancelled' },
     });
+  }, 60000);
+
+  it('PR 2/A4: editar cantidad y cancelar en el MISMO save repone solo lo deducido (previousDoc.items)', async () => {
+    const sku = uniqueSku('EDITCANCEL');
+    await createProduct(sku, 10);
+
+    // Alta: qty 2 deducidas → stock 8
+    const order = await createOrder({ sku, qty: 2, total: 20 });
+    expect(await stockOf(sku)).toBe(8);
+
+    // Save simultáneo: cantidad 2→5 + status cancelled. Lo deducido FÍSICAMENTE
+    // es 2 (la rama de edición no corre cuando isCancelled). La reposición
+    // debe ser de 2 (previousDoc), NO de 5 (doc) → stock 10, no 13.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        status: 'cancelled',
+        items: [{ sku, title: `Producto ${sku}`, price: 10, quantity: 5, subtotal: 50 }],
+        totalAmount: 50,
+      },
+    } as never);
+
+    expect(await stockOf(sku)).toBe(10); // antes del fix: 13 (deriva +3)
+  }, 60000);
+
+  it('PR 2/A3: claim atómico de crmCounted — cancelación pre-claim compensa UNA sola vez; post-claim la hace el hook', async () => {
+    const sku = uniqueSku('CLAIM');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}C`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente Claim',
+        phone,
+        email: 'claim@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    // Simula el checkout: orden creada, CRM incrementado, y el admin cancela
+    // ANTES de que el claim corra (el hook vio crmCounted=false → no restó).
+    const order = await createOrder({ sku, qty: 1, total: 10, phone, crmCounted: false });
+    const { claimed, status } = await claimOrderCrmCounted({
+      payload,
+      orderId: order.id as number,
+    });
+
+    // Caso simulado: cancelamos la orden ANTES de reclamar (secuencia de la
+    // ventana del bug). El primer claim sobre orden viva:
+    expect(claimed).toBe(true);
+    expect(status).toBe('pending');
+
+    // Cancelar: el hook ve crmCounted=true (el claim ya committeó) → resta.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: { status: 'cancelled' },
+    });
+    let cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1 (una sola resta)
+    expect(Number(cust.totalSpent)).toBe(50); // 60 − 10
+
+    // Idempotencia del claim: reclamar de nuevo → claimed=false, NADIE compensa
+    const second = await claimOrderCrmCounted({ payload, orderId: order.id as number });
+    expect(second.claimed).toBe(false);
+    cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // sigue igual — sin doble resta
+    expect(Number(cust.totalSpent)).toBe(50);
+  }, 60000);
+
+  it('PR 2/A3 (variante cancelada-pre-claim): el claim devuelve status=cancelled y el caller compensa una única vez', async () => {
+    const sku = uniqueSku('CLAIMCANCEL');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}D`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente Claim Cancel',
+        phone,
+        email: 'claimc@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    // La orden nace viva, el admin la cancela ANTES del claim (crmCounted=false
+    // → el hook NO restó). El claim ATÓMICO trae status de esa misma fila.
+    const order = await createOrder({ sku, qty: 1, total: 10, phone });
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: { status: 'cancelled' },
+    });
+
+    const { claimed, status } = await claimOrderCrmCounted({
+      payload,
+      orderId: order.id as number,
+    });
+    expect(claimed).toBe(true);
+    expect(status).toBe('cancelled'); // → el caller del checkout compensa
+
+    // El caller (checkout) aplica la compensación única:
+    const { applyCustomerCrmDelta } = await import('@/collections/Orders');
+    await applyCustomerCrmDelta({
+      payload,
+      tenantId,
+      phone,
+      totalAmount: 10,
+      sign: -1,
+    });
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1 exactamente
+    expect(Number(cust.totalSpent)).toBe(50);
+  }, 60000);
+
+  it('PR 2/A3 (review Devin #92): rollback de claim+compensación deja la flag recuperable — el reintento completa exactamente una vez', async () => {
+    const sku = uniqueSku('TXROLL');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}T`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente TxRoll',
+        phone,
+        email: 'txroll@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    const order = await createOrder({ sku, qty: 1, total: 10, phone });
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: { status: 'cancelled' },
+    });
+
+    // Simula el flujo del checkout: claim dentro de una tx explícita...
+    const { applyCustomerCrmDelta, claimOrderCrmCounted } = await import('@/collections/Orders');
+    const txId = await payload.db.beginTransaction();
+    if (txId === null) throw new Error('beginTransaction devolvió null (¿transacciones deshabilitadas?)');
+    const req = { transactionID: txId };
+    const claim = await claimOrderCrmCounted({ payload, orderId: order.id as number, req });
+    expect(claim.claimed).toBe(true);
+    expect(claim.status).toBe('cancelled');
+
+    // ...y el proceso MUERE antes de compensar → rollback total (flag incluida)
+    await payload.db.rollbackTransaction(txId);
+
+    // La flag NO quedó consumida: el reintento puede reclamar y completar
+    const orderAfterRollback = (await payload.findByID({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { crmCounted?: boolean };
+    expect(orderAfterRollback.crmCounted).toBe(false); // recuperable
+
+    const tx2 = await payload.db.beginTransaction();
+    if (tx2 === null) throw new Error('beginTransaction (reintento) devolvió null');
+    const req2 = { transactionID: tx2 };
+    const retry = await claimOrderCrmCounted({ payload, orderId: order.id as number, req: req2 });
+    expect(retry.claimed).toBe(true); // el reintento SÍ puede reclamar
+    expect(retry.status).toBe('cancelled');
+    await applyCustomerCrmDelta({
+      payload,
+      tenantId,
+      phone,
+      totalAmount: 10,
+      sign: -1,
+      req: req2,
+    });
+
+    // Review Devin ronda 3: interrupción DESPUÉS del update del cliente — la
+    // pareja claim+compensación comparte UNA sola tx: al abortar ANTES del
+    // commit, NINGUNO de los dos debe aterrizar (flag en false, CRM intacto).
+    await payload.db.rollbackTransaction(tx2);
+
+    const custAfterInterruptedCommit = await readCustomer();
+    expect(custAfterInterruptedCommit.totalOrders).toBe(2); // intacto
+    expect(Number(custAfterInterruptedCommit.totalSpent)).toBe(60); // intacto
+    const orderAfterInterrupted = (await payload.findByID({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { crmCounted?: boolean };
+    expect(orderAfterInterrupted.crmCounted).toBe(false); // la flag también volvió
+
+    // Tercer intento (el "proceso se recupera"): completa exactamente una vez
+    const tx3 = await payload.db.beginTransaction();
+    if (tx3 === null) throw new Error('beginTransaction (3er intento) devolvió null');
+    const req3 = { transactionID: tx3 };
+    const third = await claimOrderCrmCounted({ payload, orderId: order.id as number, req: req3 });
+    expect(third.claimed).toBe(true);
+    expect(third.status).toBe('cancelled');
+    await applyCustomerCrmDelta({
+      payload,
+      tenantId,
+      phone,
+      totalAmount: 10,
+      sign: -1,
+      req: req3,
+    });
+    await payload.db.commitTransaction(tx3);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1 — completada EXACTAMENTE una vez
+    expect(Number(cust.totalSpent)).toBe(50);
+  }, 60000);
+
+  it('PR 2/A4 (review Devin #92): cancelación con edición de total en el MISMO save resta el total PREVIO del CRM', async () => {
+    const sku = uniqueSku('EDITTOTALC');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}U`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente EditTotalC',
+        phone,
+        email: 'edittc@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    // Orden contada con total 10
+    const order = await createOrder({ sku, qty: 1, total: 10, phone, crmCounted: true });
+
+    // Mismo save: total 10→40 + status cancelled. El incremento CRM contó $10:
+    // la reversa debe ser $10 del teléfono original, NO $40 del nuevo doc.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        status: 'cancelled',
+        items: [{ sku, title: `Producto ${sku}`, price: 40, quantity: 1, subtotal: 40 }],
+        totalAmount: 40,
+      },
+    } as never);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1
+    expect(Number(cust.totalSpent)).toBe(50); // 60 − 10 (el total PREVIO, no 40)
+  }, 60000);
+
+  it('PR 2/A4 (review Devin #92): cancelación con cambio de teléfono en el MISMO save resta del teléfono PREVIO', async () => {
+    const sku = uniqueSku('EDITPHONEC');
+    await createProduct(sku, 10);
+    const oldPhone = `+58${Date.now().toString().slice(-9)}V`;
+    const newPhone = `+58${Date.now().toString().slice(-9)}W`;
+
+    // Cliente ORIGINAL con historial: fue el teléfono contado en el alta
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente EditPhoneC',
+        phone: oldPhone,
+        email: 'editpc@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    const order = await createOrder({ sku, qty: 1, total: 10, phone: oldPhone, crmCounted: true });
+
+    // Mismo save: cambia el teléfono del customer + status cancelled. La reversa
+    // debe tocar el teléfono VIEJO (el contado), no el nuevo.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        status: 'cancelled',
+        customer: {
+          name: 'Cliente EditPhoneC',
+          phone: newPhone,
+          email: 'editpc@test.local',
+        },
+      },
+    } as never);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // el teléfono ORIGINAL recibió la resta
+    expect(Number(cust.totalSpent)).toBe(50);
   }, 60000);
 });

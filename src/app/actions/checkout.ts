@@ -21,7 +21,7 @@ import {
   waitForCheckoutResponse,
 } from '@/lib/checkout-idempotency';
 import { buildCheckoutProcessingResponse } from '@/lib/checkout-response';
-import { applyCustomerCrmDelta } from '@/collections/Orders';
+import { applyCustomerCrmDelta, claimOrderCrmCounted } from '@/collections/Orders';
 import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
@@ -945,43 +945,78 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       }
 
       if (crmUpsertSucceeded) {
-        try {
-          await payload.update({
-            collection: 'orders',
-            id: orderDoc.id as number,
-            overrideAccess: true,
-            context: { skipInventoryHook: true },
-            data: { crmCounted: true } as never,
-          });
-
-          // Race check (review Devin #67): la orden pudo haber sido cancelada
-          // entre su creación y este punto. Si ya está cancelada, aplicar el
-          // decremento AHORA (el hook no lo hará porque crmCounted era false
-          // cuando la cancelación ocurrió).
-          const currentOrder = await payload.findByID({
-            collection: 'orders',
-            id: orderDoc.id as number,
-            overrideAccess: true,
-          });
-          if ((currentOrder as { status?: string }).status === 'cancelled') {
-            await applyCustomerCrmDelta({
+        // Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): el
+        // claim y la compensación comparten UNA transacción explícita (API
+        // oficial beginTransaction/commit/rollback). Si la compensación falla,
+        // el rollback deja crm_counted en false → el reintento del comprador
+        // puede reclamar de nuevo y completar el ajuste exactamente una vez.
+        // Sin la compensación (status != cancelled) el claim es autocommit y
+        // best-effort como siempre: nunca bloquea el pedido.
+        const mustCompensate = await (async () => {
+          // beginTransaction puede devolver null (transacciones deshabilitadas
+          // en el adapter): en ese caso se degrada al claim autocommit aislado
+          // (best-effort documentado) — sin compensación atómica, pero el
+          // pedido nunca se bloquea.
+          const txId = await payload.db.beginTransaction();
+          if (txId === null) {
+            const { claimed, status } = await claimOrderCrmCounted({
               payload,
-              tenantId,
-              phone: safePhone,
-              totalAmount: total,
-              sign: -1,
+              orderId: orderDoc.id as number,
             });
+            if (claimed && status === 'cancelled') {
+              await applyCustomerCrmDelta({
+                payload,
+                tenantId,
+                phone: safePhone,
+                totalAmount: total,
+                sign: -1,
+              });
+              return true;
+            }
+            return false;
           }
-        } catch (flagErr) {
-          // Opposite partial failure: CRM increment committeó pero la flag no
-          // se pudo actualizar. El incremento es real; si la orden se cancela
-          // después, no se restará (flag false) → inflación en el CRM.
-          // Se loguea para reconciliación manual. No bloquea el checkout.
+          try {
+            const req = { transactionID: txId };
+            const { claimed, status } = await claimOrderCrmCounted({
+              payload,
+              orderId: orderDoc.id as number,
+              req,
+            });
+            if (claimed && status === 'cancelled') {
+              await applyCustomerCrmDelta({
+                payload,
+                tenantId,
+                phone: safePhone,
+                totalAmount: total,
+                sign: -1,
+                req,
+              });
+            }
+            await payload.db.commitTransaction(txId);
+            return claimed && status === 'cancelled';
+          } catch (txErr) {
+            try {
+              await payload.db.rollbackTransaction(txId);
+            } catch {
+              // El rollback falló (conexión muerta): la sesión se cae sola.
+            }
+            throw txErr;
+          }
+        })().catch((flagErr: unknown) => {
+          // Opposite partial failure: CRM increment committeó pero la pareja
+          // claim+compensación no pudo completarse (ambos revertidos). La flag
+          // quedó false → si la orden se cancela después, el hook no restará
+          // → inflación pendiente. Se loguea para reconciliación manual. No
+          // bloquea el checkout: el pedido ya existe.
           console.error(
-            `[storelink][crm][checkout] CRM increment OK pero crmCounted flag update falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
+            `[storelink][crm][checkout] CRM increment OK pero la transacción claim+compensación falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
             flagErr
           );
-        }
+          return false;
+        });
+        // `mustCompensate` solo informa al log: la compensación ya ocurrió
+        // dentro de la tx o el flujo se degradó a best-effort documentado.
+        void mustCompensate;
       }
 
       // Despacho asíncrono vía Jobs Queue oficial
