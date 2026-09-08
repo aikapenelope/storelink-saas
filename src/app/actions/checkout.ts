@@ -181,6 +181,7 @@ async function verifyAndPriceItems({
       ],
     },
     limit: Math.max(skus.length, 1),
+    sort: 'id',
     depth: 0,
     overrideAccess: true,
   });
@@ -188,6 +189,34 @@ async function verifyAndPriceItems({
   const baseBySku = new Map<string, Product>();
   const variantOwnerBySku = new Map<string, Product>();
   for (const doc of candidatesRes.docs as Product[]) {
+    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
+    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
+    }
+  }
+
+  // PR 3 (review Devin PR #93 "Duplicate rows hide ordered products"): SKUs
+  // que el batch dejó fuera por duplicados históricos se resuelven
+  // individualmente (1 fila, menor id). Sin esto, un sku válido daba error
+  // falso "Producto no disponible en el catálogo" (fail-closed, pero
+  // confuso para el comprador) ante datos duplicados previos al fix.
+  const missingSkus = skus.filter((s) => !baseBySku.has(s) && !variantOwnerBySku.has(s));
+  for (const missingSku of missingSkus) {
+    const single = await payload.find({
+      collection: 'products',
+      where: {
+        and: [
+          { tenant: { equals: tenantId } },
+          { or: [{ sku: { equals: missingSku } }, { 'variants.sku': { equals: missingSku } }] },
+        ],
+      },
+      limit: 1,
+      sort: 'id',
+      depth: 0,
+      overrideAccess: true,
+    });
+    const doc = single.docs[0] as Product | undefined;
+    if (!doc) continue;
     if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
     for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
       if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);

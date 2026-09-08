@@ -2,10 +2,12 @@ import { revalidatePath } from 'next/cache';
 import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
+  CollectionBeforeValidateHook,
   CollectionConfig,
   PayloadRequest,
   TextField,
 } from 'payload';
+import { APIError } from 'payload';
 import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname, normalizeProductImageUrl } from '@/lib/image-hosts';
@@ -114,10 +116,131 @@ const revalidateProductOnDelete: CollectionAfterDeleteHook = async ({ doc, req }
   return doc;
 };
 
+/**
+ * PR 3 (auditoría 2026-09-07, C4): unicidad de SKU por tenant.
+ *
+ * `products.sku` no es unique global (multitenant: el mismo SKU puede existir
+ * en comercios distintos) y la unicidad de variante no existe a nivel BD.
+ * Ante dos productos del MISMO tenant con el mismo SKU (error de captura o
+ * import), el pricing del checkout y la deducción de stock resolvían "el
+ * primero del find" SIN sort → no determinista: se podía cobrar el stock del
+ * producto A mostrando el B. Este hook cierra la fuente: rechaza el create/
+ * update que introduzca un SKU (base o de variante) ya usado por OTRO producto
+ * del mismo tenant. El sort determinista (checkout.ts + Orders.ts) queda como
+ * defensa en profundidad para datos históricos.
+ *
+ * beforeValidate de colección: corre en TODOS los canales (admin, REST, Local
+ * API) antes de la validación de campos, con `req` (participa de la tx del
+ * request — patrón oficial transactions.mdx).
+ */
+const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  // Review Devin PR #93 ronda 2 ("Whitespace bypasses SKU uniqueness"): el
+  // valor guardado se NORMALIZA (trim) en el boundary — si se almacenara
+  // " X " y el chequeo comparara "X", ambos productos convivirían. Patrón
+  // oficial beforeValidate: formatear la data antes de la validación.
+  if (typeof data?.sku === 'string') {
+    data.sku = data.sku.trim();
+  }
+  if (Array.isArray(data?.variants)) {
+    for (const variant of data.variants) {
+      if (variant && typeof variant === 'object' && typeof variant.sku === 'string') {
+        variant.sku = variant.sku.trim();
+      }
+    }
+  }
+
+  // En updates parciales el payload puede no traer `tenant`: el documento
+  // original es la fuente autorizada (el producto no cambia de tenant).
+  const dataTenantId = typeof data?.tenant === 'object' ? data?.tenant?.id : data?.tenant;
+  const originalTenantId =
+    typeof originalDoc?.tenant === 'object' ? originalDoc?.tenant?.id : originalDoc?.tenant;
+  const tenantId = dataTenantId ?? originalTenantId;
+  if (tenantId == null) return data; // el guard A1 (beforeChange) cubre tenant ausente
+
+  // Review Devin PR #93 ("Partial updates bypass SKU checks"): se valida el
+  // PRODUCTO RESULTANTE, no solo los campos enviados — un update parcial que
+  // cambia el base debe chocar contra las variantes NO enviadas (y
+  // viceversa), y esas viven en originalDoc.
+  const dataBase = typeof data?.sku === 'string' && data.sku.trim() ? data.sku.trim() : undefined;
+  const effectiveBase =
+    dataBase ?? (operation === 'update' && typeof originalDoc?.sku === 'string' && originalDoc.sku.trim()
+      ? originalDoc.sku.trim()
+      : undefined);
+
+  const incomingVariants: Array<{ sku?: string | null }> = Array.isArray(data?.variants)
+    ? (data.variants as Array<{ sku?: string | null }>)
+    : operation === 'update'
+      ? ((originalDoc?.variants ?? []) as Array<{ sku?: string | null }>)
+      : [];
+  const effectiveVariants = incomingVariants
+    .map((v) => (typeof v?.sku === 'string' ? v.sku.trim() : ''))
+    .filter((s) => s.length > 0);
+
+  const allSkus = [effectiveBase, ...effectiveVariants].filter(
+    (s): s is string => Boolean(s),
+  );
+  if (allSkus.length === 0) return data;
+
+  // Un producto no puede repetir SKU consigo mismo (base == variante, dos
+  // variantes iguales) — eso también hace no determinista el resolver.
+  const seen = new Set<string>();
+  for (const sku of allSkus) {
+    if (seen.has(sku)) {
+      throw new APIError(`El SKU "${sku}" está repetido dentro del mismo producto.`, 400);
+    }
+    seen.add(sku);
+  }
+
+  const ownId = operation === 'update' ? originalDoc?.id : undefined;
+
+  // SKUs ya usados por OTRO producto del tenant — base O variante (review
+  // Devin PR #93 "Variant SKUs remain reusable": sin el or de variants.sku,
+  // un SKU existente solo como variante quedaba reutilizable).
+  const res = await req.payload.find({
+    collection: 'products',
+    where: {
+      and: [
+        { tenant: { equals: tenantId } },
+        { or: [{ sku: { in: allSkus } }, { 'variants.sku': { in: allSkus } }] },
+        ...(ownId !== undefined ? [{ id: { not_equals: ownId } }] : []),
+      ],
+    },
+    limit: Math.max(allSkus.length, 1),
+    depth: 0,
+    overrideAccess: true,
+    req,
+  });
+
+  if (res.docs.length > 0) {
+    const existing = new Map<string, string>();
+    for (const doc of res.docs as Array<{ id: number; sku?: string; variants?: Array<{ sku?: string | null }> }>) {
+      if (doc.sku) existing.set(doc.sku, doc.sku);
+      for (const v of doc.variants ?? []) {
+        if (v.sku) existing.set(v.sku, doc.sku ?? v.sku);
+      }
+    }
+    const conflicts = allSkus.filter((s) => existing.has(s));
+    if (conflicts.length > 0) {
+      throw new APIError(
+        `SKU ya existente en este comercio: ${conflicts.join(', ')}. Los códigos deben ser únicos por tienda.`,
+        400,
+      );
+    }
+  }
+
+  return data;
+};
+
 export const Products: CollectionConfig = {
   slug: 'products',
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
+    beforeValidate: [rejectDuplicateSkuPerTenant],
     beforeChange: [createTenantWriteGuard()],
     afterChange: [revalidateProductStorefront],
     afterDelete: [revalidateProductOnDelete],

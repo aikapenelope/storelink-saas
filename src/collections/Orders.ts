@@ -360,6 +360,10 @@ const fetchProductResolver = async ({
           ],
         },
         limit: Math.max(skus.length, 1),
+        // PR 3 (C4): sort determinista — si existieran SKUs duplicados por
+        // error de captura, el "primero del find" debe ser SIEMPRE el mismo
+        // (menor id = el más antiguo), no el que decida el plan de la query.
+        sort: 'id',
         depth: 0,
         overrideAccess: true,
         req,
@@ -369,9 +373,45 @@ const fetchProductResolver = async ({
   const baseBySku = new Map<string, Product>();
   const variantOwnerBySku = new Map<string, Product>();
   for (const p of batchRes.docs as Product[]) {
+    // Review Devin PR #93 ronda 2 ("Duplicate catalogs debit the wrong
+    // product"): mismo criterio que el pricing del checkout — ante duplicados
+    // históricos GANA EL PRIMERO (menor id). Sin el guard, el último set
+    // pisaba con el más nuevo → se cobraba un producto y se descontaba otro.
     if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
     for (const v of Array.isArray(p.variants) ? p.variants : []) {
       if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
+    }
+  }
+
+  // PR 3 (review Devin PR #93 "Duplicate rows hide ordered products"): el
+  // batch con `limit` acotado puede dejar SKUs FUERA de la página cuando
+  // existen duplicados históricos (varios docs para el mismo SKU llenan la
+  // página) → un ítem del pedido quedaría sin deducción = overselling. Los
+  // SKUs sin resolver se buscan individualmente (1 fila, menor id) — el
+  // fallback es determinista y garantiza que NINGÚN sku del pedido quede
+  // sin resolución.
+  const resolvedSkus = new Set<string>([...baseBySku.keys(), ...variantOwnerBySku.keys()]);
+  const missingSkus = skus.filter((s) => !resolvedSkus.has(s));
+  for (const missingSku of missingSkus) {
+    const single = await payload.find({
+      collection: 'products',
+      where: {
+        and: [
+          ...(tenantId ? [{ tenant: { equals: tenantId } }] : []),
+          { or: [{ sku: { equals: missingSku } }, { 'variants.sku': { equals: missingSku } }] },
+        ],
+      },
+      limit: 1,
+      sort: 'id',
+      depth: 0,
+      overrideAccess: true,
+      req,
+    });
+    const doc = single.docs[0] as Product | undefined;
+    if (!doc) continue;
+    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
+    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
+      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
     }
   }
 
@@ -1089,6 +1129,21 @@ export const Orders: CollectionConfig = {
           type: 'number',
           label: 'Cantidad',
           required: true,
+          // PR 3 (auditoría 2026-09-07, A5): antes sin min/validate → por
+          // admin/REST podían pasar quantity:-5 (el hook de inventario la
+          // interpretaba como delta +5 y AUMENTABA el stock) o quantity:0
+          // (Number(0) || 1 → deducía 1 unidad fantasma). El validate custom
+          // REEMPLAZA el default de Payload (que es quien aplica min), así que
+          // valida entero + rango 1..999 en una sola función.
+          min: 1,
+          max: 999,
+          validate: (value: number | null | undefined): string | true => {
+            if (value === null || value === undefined) return true; // required se encarga
+            if (!Number.isInteger(value)) return 'La cantidad debe ser un número entero';
+            if (value < 1) return 'La cantidad mínima es 1';
+            if (value > 999) return 'La cantidad máxima por línea es 999';
+            return true;
+          },
         },
         {
           name: 'subtotal',

@@ -20,6 +20,7 @@ import * as migration_20260902_repair_customers_crm_schema from './20260902_repa
 import * as migration_20260902_backfill_normalize_drive_image_urls from './20260902_backfill_normalize_drive_image_urls';
 import * as migration_20260902_alter_orders_exchange_rate_numeric from './20260902_alter_orders_exchange_rate_numeric';
 import * as migration_20260905_tenant_catalog_plan from './20260905_tenant_catalog_plan';
+import * as migration_20260908_backfill_trim_product_skus from './20260908_backfill_trim_product_skus';
 
 export const migrations = [
   {
@@ -128,5 +129,10 @@ export const migrations = [
     up: migration_20260905_tenant_catalog_plan.up,
     down: migration_20260905_tenant_catalog_plan.down,
     name: '20260905_tenant_catalog_plan',
+  },
+  {
+    up: migration_20260908_backfill_trim_product_skus.up,
+    down: migration_20260908_backfill_trim_product_skus.down,
+    name: '20260908_backfill_trim_product_skus',
   },
 ];
