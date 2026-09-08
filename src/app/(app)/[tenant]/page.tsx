@@ -12,7 +12,7 @@ import {
   type TenantConfig,
 } from '@/components/storefront-client';
 
-import { notFound } from 'next/navigation';
+import { notFound, unstable_rethrow } from 'next/navigation';
 import { issueCheckoutNonce } from '@/lib/checkout-nonce';
 import { getTenantBySlug } from '@/lib/tenants';
 import { getCatalogLimit } from '@/lib/tenant-plans';
@@ -182,17 +182,28 @@ export default async function TenantStorefrontPage({
     }
 
   } catch (err: unknown) {
-    const errorObject = err as { digest?: string; message?: string } | null;
-    if (errorObject?.digest?.startsWith('NEXT_NOT_FOUND') || errorObject?.message === 'NEXT_NOT_FOUND') {
-      throw err;
-    }
+    // PR 5 (SPEC-20260907-5, auditoría C1/3E-P2-1): un catch genérico que
+    // llama notFound() convierte CUALQUIER fallo de infra (BD caída 30s,
+    // Redis, etc.) en un 404 ISR-cacheado 5 min de una tienda viva.
+    //
+    // Patrón oficial Next 15 (unstable_rethrow): re-lanza primero los
+    // errores de control-flow del framework (notFound/redirect/postpone)
+    // para que el framework los maneje; cualquier OTRO error es de infra
+    // y se propaga (throw) → error boundary → 500 SIN cachear el 404.
+    // Nota: el check anterior `digest.startsWith('NEXT_NOT_FOUND')` era
+    // código muerto en Next 15 (el digest real es NEXT_HTTP_ERROR_FALLBACK;404).
+    unstable_rethrow(err);
+
     // Higiene de logs (auditoría 2026-09-04): el error crudo puede traer PII;
     // se loguea el digest para correlacionar con Vercel y el tenant afectado.
     console.error(
-      `[storelink][storefront] Error cargando productos del tenant "${tenantSlug}":`,
-      errorObject?.digest ?? errorObject?.message ?? 'unknown error'
+      `[storelink][storefront] Error cargando la tienda "${tenantSlug}" — propagando 500 (no 404):`,
+      (err as { digest?: string } | null)?.digest ??
+        (err instanceof Error ? err.message : 'unknown error')
     );
-    notFound();
+
+    // Fallo de infra → propagar: Next responde 500 y NO lo cachea como 404.
+    throw err;
   }
 
   // Auditoría 2026-09-04 (P1 SEO): JSON-LD estructurado (schema.org ItemList →
