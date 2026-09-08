@@ -64,10 +64,10 @@ const stockOf = async (
   if (variantSku) {
     const v = (prod.variants ?? []).find(
       (x: { sku?: string | null }) => x.sku === variantSku
-    ) as { stockQuantity?: number } | undefined;
-    return v?.stockQuantity;
+    ) as { stockQuantity?: number | null } | undefined;
+    return v?.stockQuantity ?? undefined;
   }
-  return prod.stockQuantity;
+  return prod.stockQuantity ?? undefined;
 };
 
 const createProduct = async (sku: string, stock: number) =>
@@ -330,5 +330,79 @@ d('transiciones de inventario (hooks de Orders)', () => {
     // Invariante de cierre: las 2 órdenes qty 1 se crearon (−1 c/u) y ambas
     // cancelaciones repusieron → el stock vuelve al inicial.
     expect(await stockOf(sku)).toBe(10);
+  }, 60000);
+
+  it('CRM (review Devin PR #91): editar el total de una orden contada NO altera totalOrders', async () => {
+    const sku = uniqueSku('CRMEDIT');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}E`; // único por corrida
+
+    // Cliente con historial: 2 órdenes / $60
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente CRM Edit',
+        phone,
+        email: 'crmedit@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    const order = await createOrder({ sku, qty: 1, total: 10, phone, crmCounted: true });
+
+    // Sube el total 10 → 40 (misma cantidad de ítems): solo gasto +30
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        items: [{ sku, title: `Producto ${sku}`, price: 40, quantity: 1, subtotal: 40 }],
+        totalAmount: 40,
+      },
+    } as never);
+
+    const afterEdit = (await readCustomer()) as unknown as {
+      totalOrders?: number;
+      totalSpent?: number;
+    };
+    expect(afterEdit.totalOrders).toBe(2); // INTACTO — antes: 3 (orden fantasma)
+    expect(Number(afterEdit.totalSpent)).toBe(90); // 60 + 30 (solo la diferencia)
+
+    // Baja el total 40 → 25: solo gasto −15
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        items: [{ sku, title: `Producto ${sku}`, price: 25, quantity: 1, subtotal: 25 }],
+        totalAmount: 25,
+      },
+    } as never);
+
+    const afterSecondEdit = (await readCustomer()) as unknown as {
+      totalOrders?: number;
+      totalSpent?: number;
+    };
+    expect(afterSecondEdit.totalOrders).toBe(2); // sigue INTACTO
+    expect(Number(afterSecondEdit.totalSpent)).toBe(75); // 90 − 15
+
+    // Limpieza: restaurar el stock deducido por la orden (queda activa)
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: { status: 'cancelled' },
+    });
   }, 60000);
 });
