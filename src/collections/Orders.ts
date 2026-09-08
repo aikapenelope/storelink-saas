@@ -373,7 +373,11 @@ const fetchProductResolver = async ({
   const baseBySku = new Map<string, Product>();
   const variantOwnerBySku = new Map<string, Product>();
   for (const p of batchRes.docs as Product[]) {
-    if (p.sku) baseBySku.set(p.sku, p);
+    // Review Devin PR #93 ronda 2 ("Duplicate catalogs debit the wrong
+    // product"): mismo criterio que el pricing del checkout — ante duplicados
+    // históricos GANA EL PRIMERO (menor id). Sin el guard, el último set
+    // pisaba con el más nuevo → se cobraba un producto y se descontaba otro.
+    if (p.sku && !baseBySku.has(p.sku)) baseBySku.set(p.sku, p);
     for (const v of Array.isArray(p.variants) ? p.variants : []) {
       if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, p);
     }

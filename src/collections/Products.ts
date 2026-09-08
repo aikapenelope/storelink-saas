@@ -139,6 +139,21 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
   originalDoc,
   req,
 }) => {
+  // Review Devin PR #93 ronda 2 ("Whitespace bypasses SKU uniqueness"): el
+  // valor guardado se NORMALIZA (trim) en el boundary — si se almacenara
+  // " X " y el chequeo comparara "X", ambos productos convivirían. Patrón
+  // oficial beforeValidate: formatear la data antes de la validación.
+  if (typeof data?.sku === 'string') {
+    data.sku = data.sku.trim();
+  }
+  if (Array.isArray(data?.variants)) {
+    for (const variant of data.variants) {
+      if (variant && typeof variant === 'object' && typeof variant.sku === 'string') {
+        variant.sku = variant.sku.trim();
+      }
+    }
+  }
+
   // En updates parciales el payload puede no traer `tenant`: el documento
   // original es la fuente autorizada (el producto no cambia de tenant).
   const dataTenantId = typeof data?.tenant === 'object' ? data?.tenant?.id : data?.tenant;

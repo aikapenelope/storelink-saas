@@ -1004,4 +1004,75 @@ d('transiciones de inventario (hooks de Orders)', () => {
     await payload.db.drizzle.execute(sql`DELETE FROM products WHERE id = ${duplicateId}`);
     await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
   }, 60000);
+
+  it('PR 3 (review Devin #93 ronda 2): pricing y descuento apuntan al MISMO producto ante duplicados históricos', async () => {
+    // Orden de creación clave: A(X) → D(X, SQL) → C(Y). El batch sort id con
+    // limit=2 trae [A, D] (mismo SKU X) y C cae al fallback. Sin el guard
+    // `!baseBySku.has`, el último set pisaba con D (más nuevo): el pricing del
+    // checkout apuntaba a A pero el descuento iría a D → overselling del A.
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const dupSku = uniqueSku('R2X');
+    const otherSku = uniqueSku('R2Y');
+
+    await createProduct(dupSku, 5); // A (id menor)
+
+    const tenantRow = await payload.db.drizzle.execute(
+      sql`SELECT id FROM tenants WHERE slug LIKE 'inv-test-%' ORDER BY id DESC LIMIT 1`
+    );
+    const tenantNumeric = (tenantRow.rows[0] as { id: number }).id;
+    const inserted = (await payload.db.drizzle.execute(
+      sql`INSERT INTO products (title, sku, price, track_stock, stock_quantity, stock_status, tenant_id, created_at, updated_at)
+          VALUES ('Duplicado r2', ${dupSku}, 10, true, 5, 'in_stock', ${tenantNumeric}, now(), now())
+          RETURNING id`
+    )) as { rows?: Array<{ id: number }> };
+    const duplicateId = inserted.rows?.[0]?.id;
+
+    const other = await createProduct(otherSku, 4); // C (id entre A y D)
+
+    const order = await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        status: 'pending',
+        orderNumber: `INV-R2-${Date.now()}`,
+        customer: { name: 'Cliente R2', phone: '+584129990011', email: 'r2@test.local' },
+        items: [
+          { sku: dupSku, title: 'Dup', price: 10, quantity: 1, subtotal: 10 },
+          { sku: otherSku, title: 'Otro', price: 10, quantity: 1, subtotal: 10 },
+        ],
+        totalAmount: 20,
+        currency: 'USD',
+      } as never,
+    });
+
+    // El descuento cayó en A (menor id, el mismo que elegiría el pricing):
+    expect(await stockOf(dupSku)).toBe(4); // A deducido
+    expect(await stockOf(otherSku)).toBe(3); // C (vía fallback) deducido
+
+    // Limpieza
+    await payload.db.drizzle.execute(sql`DELETE FROM products WHERE id = ${duplicateId}`);
+    await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
+    await payload.delete({ collection: 'products', id: other.id, overrideAccess: true });
+  }, 60000);
+
+  it('PR 3 (review Devin #93 ronda 2): el SKU se normaliza (trim) al guardar — sin bypass por espacios', async () => {
+    const padded = `  ${uniqueSku('PAD')}  `;
+    const created = await payload.create({
+      collection: 'products',
+      overrideAccess: true,
+      data: { tenant: tenantId, title: 'Con espacios', price: 5, sku: padded },
+    } as never);
+    const storedSku = (created as unknown as { sku: string }).sku;
+    expect(storedSku).toBe(storedSku.trim()); // quedó normalizado
+
+    // El mismo SKU ya trimado choca con el almacenado → rechazo
+    await expect(
+      payload.create({
+        collection: 'products',
+        overrideAccess: true,
+        data: { tenant: tenantId, title: 'Clon trimado', price: 5, sku: storedSku },
+      } as never)
+    ).rejects.toThrow(/ya existente en este comercio/i);
+  }, 60000);
 });
