@@ -7,7 +7,8 @@ import { getPayload, type Payload } from 'payload';
 import config from '@payload-config';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
-import type { Tenant, Product, Customer } from '@/payload-types';
+import type { Tenant, Customer } from '@/payload-types';
+import { loadProductIndexBySku } from '@/lib/product-index';
 import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
@@ -183,58 +184,15 @@ async function verifyAndPriceItems({
   rawItems: CheckoutItemData[];
 }): Promise<{ ok: true; verifiedItems: CheckoutItemData[]; itemsSubtotal: number } | { ok: false; error: string }> {
   const skus = Array.from(new Set(rawItems.map((i) => i.sku).filter(Boolean)));
-  const candidatesRes = await payload.find({
-    collection: 'products',
-    where: {
-      and: [
-        { tenant: { equals: tenantId } },
-        {
-          or: [{ sku: { in: skus } }, { 'variants.sku': { in: skus } }],
-        },
-      ],
-    },
-    limit: Math.max(skus.length, 1),
-    sort: 'id',
-    depth: 0,
-    overrideAccess: true,
+  // PR 10 (thermo D1): el índice SKU→producto vive en el helper compartido
+  // src/lib/product-index.ts (misma query batch + first-wins + fallback que
+  // el hook de Orders) — el cobro del checkout y la deducción de stock ya no
+  // pueden divergir por copias desincronizadas.
+  const { baseBySku, variantOwnerBySku } = await loadProductIndexBySku({
+    payload,
+    tenantId,
+    skus,
   });
-
-  const baseBySku = new Map<string, Product>();
-  const variantOwnerBySku = new Map<string, Product>();
-  for (const doc of candidatesRes.docs as Product[]) {
-    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
-    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
-      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
-    }
-  }
-
-  // PR 3 (review Devin PR #93 "Duplicate rows hide ordered products"): SKUs
-  // que el batch dejó fuera por duplicados históricos se resuelven
-  // individualmente (1 fila, menor id). Sin esto, un sku válido daba error
-  // falso "Producto no disponible en el catálogo" (fail-closed, pero
-  // confuso para el comprador) ante datos duplicados previos al fix.
-  const missingSkus = skus.filter((s) => !baseBySku.has(s) && !variantOwnerBySku.has(s));
-  for (const missingSku of missingSkus) {
-    const single = await payload.find({
-      collection: 'products',
-      where: {
-        and: [
-          { tenant: { equals: tenantId } },
-          { or: [{ sku: { equals: missingSku } }, { 'variants.sku': { equals: missingSku } }] },
-        ],
-      },
-      limit: 1,
-      sort: 'id',
-      depth: 0,
-      overrideAccess: true,
-    });
-    const doc = single.docs[0] as Product | undefined;
-    if (!doc) continue;
-    if (doc.sku && !baseBySku.has(doc.sku)) baseBySku.set(doc.sku, doc);
-    for (const v of Array.isArray(doc.variants) ? doc.variants : []) {
-      if (v.sku && !variantOwnerBySku.has(v.sku)) variantOwnerBySku.set(v.sku, doc);
-    }
-  }
 
   const verifiedItems: CheckoutItemData[] = [];
 
