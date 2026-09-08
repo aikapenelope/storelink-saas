@@ -546,4 +546,178 @@ d('transiciones de inventario (hooks de Orders)', () => {
     expect(cust.totalOrders).toBe(1); // 2 − 1 exactamente
     expect(Number(cust.totalSpent)).toBe(50);
   }, 60000);
+
+  it('PR 2/A3 (review Devin #92): rollback de claim+compensación deja la flag recuperable — el reintento completa exactamente una vez', async () => {
+    const sku = uniqueSku('TXROLL');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}T`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente TxRoll',
+        phone,
+        email: 'txroll@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    const order = await createOrder({ sku, qty: 1, total: 10, phone });
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: { status: 'cancelled' },
+    });
+
+    // Simula el flujo del checkout: claim dentro de una tx explícita...
+    const { applyCustomerCrmDelta, claimOrderCrmCounted } = await import('@/collections/Orders');
+    const txId = await payload.db.beginTransaction();
+    if (txId === null) throw new Error('beginTransaction devolvió null (¿transacciones deshabilitadas?)');
+    const req = { transactionID: txId };
+    const claim = await claimOrderCrmCounted({ payload, orderId: order.id as number, req });
+    expect(claim.claimed).toBe(true);
+    expect(claim.status).toBe('cancelled');
+
+    // ...y el proceso MUERE antes de compensar → rollback total (flag incluida)
+    await payload.db.rollbackTransaction(txId);
+
+    // La flag NO quedó consumida: el reintento puede reclamar y completar
+    const orderAfterRollback = (await payload.findByID({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { crmCounted?: boolean };
+    expect(orderAfterRollback.crmCounted).toBe(false); // recuperable
+
+    const tx2 = await payload.db.beginTransaction();
+    if (tx2 === null) throw new Error('beginTransaction (reintento) devolvió null');
+    const req2 = { transactionID: tx2 };
+    const retry = await claimOrderCrmCounted({ payload, orderId: order.id as number, req: req2 });
+    expect(retry.claimed).toBe(true); // el reintento SÍ puede reclamar
+    expect(retry.status).toBe('cancelled');
+    await applyCustomerCrmDelta({
+      payload,
+      tenantId,
+      phone,
+      totalAmount: 10,
+      sign: -1,
+      req: req2,
+    });
+    await payload.db.commitTransaction(tx2);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1 — completada EXACTAMENTE una vez
+    expect(Number(cust.totalSpent)).toBe(50);
+  }, 60000);
+
+  it('PR 2/A4 (review Devin #92): cancelación con edición de total en el MISMO save resta el total PREVIO del CRM', async () => {
+    const sku = uniqueSku('EDITTOTALC');
+    await createProduct(sku, 10);
+    const phone = `+58${Date.now().toString().slice(-9)}U`;
+
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente EditTotalC',
+        phone,
+        email: 'edittc@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    // Orden contada con total 10
+    const order = await createOrder({ sku, qty: 1, total: 10, phone, crmCounted: true });
+
+    // Mismo save: total 10→40 + status cancelled. El incremento CRM contó $10:
+    // la reversa debe ser $10 del teléfono original, NO $40 del nuevo doc.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        status: 'cancelled',
+        items: [{ sku, title: `Producto ${sku}`, price: 40, quantity: 1, subtotal: 40 }],
+        totalAmount: 40,
+      },
+    } as never);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // 2 − 1
+    expect(Number(cust.totalSpent)).toBe(50); // 60 − 10 (el total PREVIO, no 40)
+  }, 60000);
+
+  it('PR 2/A4 (review Devin #92): cancelación con cambio de teléfono en el MISMO save resta del teléfono PREVIO', async () => {
+    const sku = uniqueSku('EDITPHONEC');
+    await createProduct(sku, 10);
+    const oldPhone = `+58${Date.now().toString().slice(-9)}V`;
+    const newPhone = `+58${Date.now().toString().slice(-9)}W`;
+
+    // Cliente ORIGINAL con historial: fue el teléfono contado en el alta
+    const customer = await payload.create({
+      collection: 'customers',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        name: 'Cliente EditPhoneC',
+        phone: oldPhone,
+        email: 'editpc@test.local',
+        totalOrders: 2,
+        totalSpent: 60,
+      } as never,
+    });
+
+    const readCustomer = async () =>
+      (await payload.findByID({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        depth: 0,
+      })) as unknown as { totalOrders?: number | null; totalSpent?: number | null };
+
+    const order = await createOrder({ sku, qty: 1, total: 10, phone: oldPhone, crmCounted: true });
+
+    // Mismo save: cambia el teléfono del customer + status cancelled. La reversa
+    // debe tocar el teléfono VIEJO (el contado), no el nuevo.
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      overrideAccess: true,
+      data: {
+        status: 'cancelled',
+        customer: {
+          name: 'Cliente EditPhoneC',
+          phone: newPhone,
+          email: 'editpc@test.local',
+        },
+      },
+    } as never);
+
+    const cust = await readCustomer();
+    expect(cust.totalOrders).toBe(1); // el teléfono ORIGINAL recibió la resta
+    expect(Number(cust.totalSpent)).toBe(50);
+  }, 60000);
 });

@@ -187,6 +187,7 @@ export const applyCustomerCrmDelta = async ({
   totalAmount,
   sign,
   orderCountDelta,
+  req,
 }: {
   payload: Payload;
   tenantId: number | string;
@@ -202,15 +203,28 @@ export const applyCustomerCrmDelta = async ({
    * contada no puede crear/quitar órdenes fantasma en el CRM.
    */
   orderCountDelta?: number;
+  /**
+   * Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): SIN req
+   * (default) usa el ejecutor aislado (adapter.drizzle) — un fallo del CRM
+   * jamás aborta el pedido (contrato de los hooks de lifecycle). CON req,
+   * el caller EXIGE compartir la sesión de una transacción explícita (claim
+   * atómico del checkout): el delta comparte el destino de la flag. Se tipa
+   * como Pick estructural: solo la sesión de la tx interesa aquí.
+   */
+  req?: Pick<PayloadRequest, 'transactionID'>;
 }): Promise<void> => {
   const adapter = payload.db as unknown as PostgresAdapterLike;
   const tableName = adapter.tableNameMap.get('customers') || 'customers';
   const signedTotal = sign * totalAmount;
   const ordersDelta = orderCountDelta ?? sign;
+  const txId = req?.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
 
-  // Ejecutor AISLADO (adapter.drizzle = conexión del pool, NO la sesión de la
-  // tx del request): si este UPDATE falla, no aborta la transacción del
-  // pedido/inventario. Solo toca columnas reales del schema actual.
+  // Ejecutor: AISLADO por defecto (adapter.drizzle = conexión del pool, NO la
+  // sesión de la tx del request) — si este UPDATE falla, no aborta la
+  // transacción del pedido/inventario. CON req explícito comparte la sesión
+  // de la tx del caller (ver doc del parámetro). Solo columnas reales.
   //
   // PR 8 (auditoría 2026-09-07, hallazgo derivado de C5): el CASE produce text
   // y la columna `tag` es el enum enum_customers_tag generado por Payload
@@ -258,20 +272,34 @@ export const applyCustomerCrmDelta = async ({
  *   - claimed=false (flag ya true, reintento) → NADIE compensa: el ajuste ya
  *     pasó o pasará por el hook — el claim es idempotente por diseño.
  *
- * Usa el EJECUTOR AISLADO (adapter.drizzle): igual que applyCustomerCrmDelta,
- * corre FUERA de la tx del request del checkout para no abortar el pedido.
+ * Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): cuando el
+ * caller va a compensar (status='cancelled'), el claim y la compensación
+ * DEBEN ser atómicos entre sí — si la compensación fallara con la flag ya
+ * committeada, el reintento vería claimed=false y la compensación perdida
+ * jamás se recuperaría. Por eso este helper acepta `req` opcional: con req
+ * (caller del checkout) usa la SESIÓN de la transacción del request (misma
+ * semántica que los deltas de stock: patrón oficial transactions.mdx) y la
+ * flag comparte el destino de la compensación — un fallo revierte AMBAS y el
+ * reintento puede volver a reclamar. Sin req (futuros usos server-side de
+ * confianza) mantiene el executor aislado documentado.
  */
 export const claimOrderCrmCounted = async ({
   payload,
   orderId,
+  req,
 }: {
   payload: Payload;
   orderId: number | string;
+  /** Sesión de tx explícita del caller (checkout); Pick estructural: solo la sesión interesa. */
+  req?: Pick<PayloadRequest, 'transactionID'>;
 }): Promise<{ claimed: boolean; status?: string }> => {
   const adapter = payload.db as unknown as PostgresAdapterLike;
+  const txId = req?.transactionID ? await req.transactionID : undefined;
+  const executor =
+    (txId !== undefined ? adapter.sessions[String(txId)]?.db : undefined) ?? adapter.drizzle;
   const tableName = adapter.tableNameMap.get('orders') || 'orders';
 
-  const res = (await adapter.drizzle.execute(sql`
+  const res = (await executor.execute(sql`
     update ${sql.identifier(tableName)}
     set crm_counted = true
     where id = ${orderId} and crm_counted is not true
@@ -744,9 +772,25 @@ const manageOrderInventoryHook: CollectionAfterChangeHook = async ({
   // resta (sign -1), reactivación suma (sign +1). El delta usa un EJECUTOR
   // AISLADO de la tx (adapter.drizzle) y SOLO columnas reales → un fallo del
   // CRM nunca aborta el pedido ni la reposición de stock. Best-effort igualmente.
-  const customerPhone =
-    doc.customer && typeof doc.customer === 'object' ? doc.customer.phone : undefined;
-  const totalAmount = Number(doc.totalAmount);
+  //
+  // Review Devin PR #92 ("Same-save cancellation corrupts customer totals"):
+  // la CANCELACIÓN revierte el incremento CRM que existía al momento en que la
+  // orden estaba ACTIVA y contada — es decir, el teléfono y el total de
+  // previousDoc (los valores que el incremento original aplicó). Usar
+  // doc.customer/doc.totalAmount corrompía al admin cuando editaba teléfono o
+  // total y cancelaba en UN mismo save: restaba el total NUEVO del teléfono
+  // NUEVO, ninguno de los cuales había sido contado. La REACTIVACIÓN usa los
+  // valores ACTUALES (doc): re-activa la orden tal como quedó tras la edición,
+  // consistente con que el stock de reactivación también deduce doc.items.
+  const cancelledPhone =
+    isCancelled && previousDoc?.customer && typeof previousDoc.customer === 'object'
+      ? previousDoc.customer.phone
+      : doc.customer && typeof doc.customer === 'object'
+        ? doc.customer.phone
+        : undefined;
+  const cancelledTotal = isCancelled ? Number(previousDoc?.totalAmount) : Number(doc.totalAmount);
+  const customerPhone = cancelledPhone;
+  const totalAmount = isCancelled ? cancelledTotal : Number(doc.totalAmount);
   if (
     CRM_RECONCILIATION_ENABLED &&
     (isCancelled || isReactivated) &&
