@@ -360,6 +360,10 @@ const fetchProductResolver = async ({
           ],
         },
         limit: Math.max(skus.length, 1),
+        // PR 3 (C4): sort determinista — si existieran SKUs duplicados por
+        // error de captura, el "primero del find" debe ser SIEMPRE el mismo
+        // (menor id = el más antiguo), no el que decida el plan de la query.
+        sort: 'id',
         depth: 0,
         overrideAccess: true,
         req,
@@ -1089,6 +1093,21 @@ export const Orders: CollectionConfig = {
           type: 'number',
           label: 'Cantidad',
           required: true,
+          // PR 3 (auditoría 2026-09-07, A5): antes sin min/validate → por
+          // admin/REST podían pasar quantity:-5 (el hook de inventario la
+          // interpretaba como delta +5 y AUMENTABA el stock) o quantity:0
+          // (Number(0) || 1 → deducía 1 unidad fantasma). El validate custom
+          // REEMPLAZA el default de Payload (que es quien aplica min), así que
+          // valida entero + rango 1..999 en una sola función.
+          min: 1,
+          max: 999,
+          validate: (value: number | null | undefined): string | true => {
+            if (value === null || value === undefined) return true; // required se encarga
+            if (!Number.isInteger(value)) return 'La cantidad debe ser un número entero';
+            if (value < 1) return 'La cantidad mínima es 1';
+            if (value > 999) return 'La cantidad máxima por línea es 999';
+            return true;
+          },
         },
         {
           name: 'subtotal',

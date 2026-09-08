@@ -181,6 +181,7 @@ async function verifyAndPriceItems({
       ],
     },
     limit: Math.max(skus.length, 1),
+    sort: 'id',
     depth: 0,
     overrideAccess: true,
   });

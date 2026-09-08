@@ -752,4 +752,129 @@ d('transiciones de inventario (hooks de Orders)', () => {
     expect(cust.totalOrders).toBe(1); // el teléfono ORIGINAL recibió la resta
     expect(Number(cust.totalSpent)).toBe(50);
   }, 60000);
+
+  it('PR 3/A5: quantity inválida por el canal admin es rechazada por validación de colección', async () => {
+    const sku = uniqueSku('QTYVAL');
+
+    // quantity negativa: antes pasaba y el hook la interpretaba como delta +5
+    // (AUMENTABA el stock). Ahora la validación de campo la rechaza ANTES del hook.
+    await expect(
+      createOrder({ sku, qty: -5, total: -50 })
+    ).rejects.toThrow();
+
+    // quantity 0: antes pasaba y Number(0) || 1 deducía 1 unidad fantasma
+    await expect(
+      createOrder({ sku, qty: 0, total: 0 })
+    ).rejects.toThrow();
+
+    // quantity fraccionada (2.5 unidades): entero requerido
+    await expect(
+      payload.create({
+        collection: 'orders',
+        overrideAccess: true,
+        data: {
+          tenant: tenantId,
+          status: 'pending',
+          orderNumber: `INV-QTY-${Date.now()}`,
+          customer: { name: 'Cliente Qty', phone: '+584129990009', email: 'qty@test.local' },
+          items: [{ sku, title: `Producto ${sku}`, price: 10, quantity: 2.5, subtotal: 25 }],
+          totalAmount: 25,
+          currency: 'USD',
+        } as never,
+      })
+    ).rejects.toThrow();
+
+    // quantity 999 (límite superior del carrito): válida, debe pasar la
+    // validación de campo (la deducción se rechaza por stock aparte)
+    // → usamos un producto sin trackStock para aislar SOLO la validación.
+    const freeSku = uniqueSku('QTYFREE');
+    await payload.create({
+      collection: 'products',
+      overrideAccess: true,
+      data: {
+        tenant: tenantId,
+        title: `Producto ${freeSku}`,
+        price: 10,
+        sku: freeSku,
+        trackStock: false,
+      } as never,
+    });
+    const valid = await createOrder({ sku: freeSku, qty: 999, total: 9990 });
+    expect(valid).toBeTruthy();
+  }, 60000);
+
+  it('PR 3/C4: SKU duplicado dentro del mismo tenant es rechazado (base y variantes)', async () => {
+    const skuA = uniqueSku('DUPA');
+    const skuB = uniqueSku('DUPB');
+
+    await createProduct(skuA, 10);
+
+    // Otro producto del MISMO tenant con el mismo SKU base → rechazo
+    await expect(
+      payload.create({
+        collection: 'products',
+        overrideAccess: true,
+        data: {
+          tenant: tenantId,
+          title: 'Clon A',
+          price: 5,
+          sku: skuA,
+        } as never,
+      })
+    ).rejects.toThrow(/ya existente en este comercio/i);
+
+    // Variante con el SKU base de otro producto → rechazo
+    await expect(
+      payload.create({
+        collection: 'products',
+        overrideAccess: true,
+        data: {
+          tenant: tenantId,
+          title: 'Variante Clon',
+          price: 5,
+          sku: skuB,
+          variants: [{ name: 'V', sku: skuA, price: 5 }],
+        } as never,
+      })
+    ).rejects.toThrow(/ya existente en este comercio/i);
+
+    // SKU repetido DENTRO del mismo producto (dos variantes con el MISMO SKU)
+    const dupVariantSku = uniqueSku('SELFX');
+    await expect(
+      payload.create({
+        collection: 'products',
+        overrideAccess: true,
+        data: {
+          tenant: tenantId,
+          title: 'Auto-conflicto',
+          price: 5,
+          sku: uniqueSku('SELF'),
+          variants: [
+            { name: 'V1', sku: dupVariantSku, price: 5 },
+            { name: 'V2', sku: dupVariantSku, price: 5 },
+          ],
+        } as never,
+      })
+    ).rejects.toThrow(/repetido dentro del mismo producto/i);
+
+    // EDITAR un producto existente para colisionar con otro → rechazo
+    const prodB = await createProduct(skuB, 10);
+    await expect(
+      payload.update({
+        collection: 'products',
+        id: prodB.id,
+        overrideAccess: true,
+        data: { sku: skuA },
+      } as never)
+    ).rejects.toThrow(/ya existente en este comercio/i);
+
+    // Editar el MISMO producto sin cambiar su SKU → OK (id: not_equals self)
+    const updated = await payload.update({
+      collection: 'products',
+      id: prodB.id,
+      overrideAccess: true,
+      data: { price: 12 },
+    });
+    expect((updated as unknown as { price?: number }).price).toBe(12);
+  }, 60000);
 });
