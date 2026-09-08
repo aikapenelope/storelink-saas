@@ -97,6 +97,10 @@ const catalogImportRows: TaskConfig = {
     { name: 'updated', type: 'number' },
     { name: 'errorCount', type: 'number' },
     { name: 'limitReached', type: 'checkbox' },
+    // Review Devin #96 hallazgo 4: contador de URLs de imagen DESCARTADAS por
+    // host no permitido — el descarte silencioso dejaba al comerciante sin
+    // saber que una foto no entró (pedía "reportar" pero nadie lo producía).
+    { name: 'rejectedImageUrls', type: 'number' },
   ],
   handler: async ({ input, req }) => {
     const { payload } = req;
@@ -137,6 +141,10 @@ const catalogImportRows: TaskConfig = {
       let updatedCount = 0;
       let errorCount = 0;
       let limitReached = false;
+      // Review Devin #96 hallazgo 4: total de URLs de imagen descartadas por
+      // host fuera de la whitelist (cuenta URLs, no filas — una fila puede
+      // descartar varias).
+      let rejectedImageUrls = 0;
 
       // Puerta de cuota por plan (auditoría 2026-09-05, P1-1): el límite es
       // sobre el TOTAL de productos del tenant. Los UPDATES de SKUs existentes
@@ -199,12 +207,23 @@ const catalogImportRows: TaskConfig = {
         // Auditoría final 2026-09-01 (CRÍTICO): descartar URLs con host fuera de
         // la whitelist (src/lib/image-hosts.ts). Un host no listado hacía que
         // next/image lanzara en render y tumbara el storefront entero del tenant.
+        // Review Devin #96 hallazgo 4: el descarte de imágenes ya NO es
+        // silencioso — se cuenta cada URL rechazada por la whitelist de hosts
+        // y el total viaja en el output del job (rejectedImageUrls) para que
+        // el admin lo vea en el polling. La normalización de Drive/Docs
+        // (image-hosts) corre ANTES del filtro: solo se descartan hosts
+        // genuinamente no permitidos.
         const imageUrls =
           imgIdx !== -1 && cols[imgIdx]
             ? cols[imgIdx]
                 .split(/[,;\n\r]+/)
                 .map((u) => normalizeProductImageUrl(sanitizeCsvCell(u).trim()))
-                .filter((u) => Boolean(u) && isAllowedImageUrl(u))
+                .filter((u) => {
+                  if (!u) return false;
+                  if (isAllowedImageUrl(u)) return true;
+                  rejectedImageUrls++;
+                  return false;
+                })
                 .slice(0, 6)
             : [];
 
@@ -340,7 +359,15 @@ const catalogImportRows: TaskConfig = {
       // ISR, o los cambios no se ven hasta 3 min después.
       await invalidateProductsCache(tenantId);
 
-      return { output: { created: createdCount, updated: updatedCount, errorCount, limitReached } };
+      return {
+        output: {
+          created: createdCount,
+          updated: updatedCount,
+          errorCount,
+          limitReached,
+          rejectedImageUrls,
+        },
+      };
     } finally {
       await releaseTenantImportLock(tenantId);
     }

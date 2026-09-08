@@ -1258,6 +1258,7 @@ export interface TaskCatalogImportRows {
     updated?: number | null;
     errorCount?: number | null;
     limitReached?: boolean | null;
+    rejectedImageUrls?: number | null;
   };
 }
 /**

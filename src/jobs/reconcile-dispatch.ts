@@ -59,43 +59,20 @@ const reconcileDispatchOrders: TaskConfig = {
       Date.now() - RECONCILE_WINDOW_HOURS * 60 * 60 * 1000
     ).toISOString();
 
-    // Órdenes con despacho incompleto dentro de la ventana. La condición
-    // `or` cubre los tres estados de huérfanas: sentinel '__pending__' (job
-    // murió a mitad de la tarjeta), trelloCardUrl null/vacío (nunca se creó
-    // la tarjeta), y email pendiente (checkbox NOT NULL default false en BD
-    // — verificado: not_equals:true es seguro). Canceladas excluidas: no
-    // tienen despacho pendiente.
-    const orphansRes = await payload.find({
-      collection: 'orders',
-      where: {
-        and: [
-          { createdAt: { greater_than: windowStart } },
-          { status: { not_equals: 'cancelled' } },
-          {
-            or: [
-              { trelloCardUrl: { like: '__pending__' } },
-              { trelloCardUrl: { exists: false } },
-              { emailConfirmationSent: { not_equals: true } },
-            ],
-          },
-        ],
-      },
-      limit: RECONCILE_BATCH_LIMIT,
-      sort: '-createdAt',
-      overrideAccess: true,
-      depth: 0,
-    });
-
-    const candidates = orphansRes.totalDocs;
-    let requeued = 0;
+    // ------------------------------------------------------------------
+    // Exclusiones PRIMERO (review Devin #96 hallazgo 2): el batch limit de
+    // 50 debe aplicar a órdenes ELEGIBLES, no a la query cruda. Si el límite
+    // cortara la query inicial, un bloque de 50 órdenes recientes con job
+    // vivo (o cota agotada) monopolizaría cada pasada y las huérfanas más
+    // viejas jamás serían examinadas hasta salir de la ventana de 48h.
+    // ------------------------------------------------------------------
 
     // "Sin job vivo" (SPEC-20260907-6): una orden que ya tiene un job
     // order-created en cola (no completado, sin error) será despachada por
-    // el runner — re-encolarla apila duplicados. Se consultan los jobs
-    // PENDIENTES del workflow y se excluyen esas órdenes. La colección
-    // interna 'payload-jobs' existe en runtime y BD (migración
-    // 20260822_jobs_queue) aunque no en el union CollectionSlug — mismo
-    // cast documentado que cleanup-jobs/jobs-health.
+    // el runner — re-encolarla apila duplicados. La colección interna
+    // 'payload-jobs' existe en runtime y BD (migración 20260822_jobs_queue)
+    // aunque no en el union CollectionSlug — mismo cast documentado que
+    // cleanup-jobs/jobs-health.
     const pendingJobsRes = (await payload.find({
       collection: 'payload-jobs' as never,
       where: {
@@ -152,32 +129,85 @@ const reconcileDispatchOrders: TaskConfig = {
       }
     }
 
-    for (const order of orphansRes.docs as Order[]) {
-      const orderIdNum = Number(order.id);
-      if (dispatchedOrderIds.has(orderIdNum)) {
-        continue; // ya hay un job vivo para esta orden
+    // ------------------------------------------------------------------
+    // Candidatas con paginación: se recorren páginas de la query de huérfanas
+    // (la más reciente primero) aplicando las exclusiones hasta acumular
+    // RECONCILE_BATCH_LIMIT órdenes ELEGIBLES o agotar las páginas — así un
+    // bloque de órdenes no-elegibles jamás oculta a las más viejas.
+    // ------------------------------------------------------------------
+    let candidates = 0;
+    let requeued = 0;
+    const PAGE_SIZE = 200;
+    let page = 1;
+    let eligibleCollected = 0;
+
+    while (eligibleCollected < RECONCILE_BATCH_LIMIT) {
+      // Órdenes con despacho incompleto dentro de la ventana. La condición
+      // `or` cubre los tres estados de huérfanas: sentinel '__pending__' (job
+      // murió a mitad de la tarjeta), trelloCardUrl null/vacío (nunca se creó
+      // la tarjeta), y email pendiente (checkbox NOT NULL default false en
+      // BD — verificado: not_equals:true es seguro). Canceladas excluidas.
+      const orphansRes = await payload.find({
+        collection: 'orders',
+        where: {
+          and: [
+            { createdAt: { greater_than: windowStart } },
+            { status: { not_equals: 'cancelled' } },
+            {
+              or: [
+                { trelloCardUrl: { like: '__pending__' } },
+                { trelloCardUrl: { exists: false } },
+                { emailConfirmationSent: { not_equals: true } },
+              ],
+            },
+          ],
+        },
+        limit: PAGE_SIZE,
+        page,
+        sort: '-createdAt',
+        overrideAccess: true,
+        depth: 0,
+      });
+
+      if (orphansRes.docs.length === 0) break;
+      candidates += orphansRes.docs.length;
+
+      for (const order of orphansRes.docs as Order[]) {
+        if (eligibleCollected >= RECONCILE_BATCH_LIMIT) break;
+        const orderIdNum = Number(order.id);
+        if (dispatchedOrderIds.has(orderIdNum)) {
+          continue; // ya hay un job vivo para esta orden
+        }
+        if ((completedAttemptsByOrder.get(orderIdNum) ?? 0) >= MAX_RECONCILE_ATTEMPTS) {
+          continue; // agotada la cota de reconciliación: requiere revisión manual
+        }
+        eligibleCollected++;
+        try {
+          await payload.jobs.queue({
+            workflow: 'order-created',
+            input: { orderId: order.id as number },
+            req,
+          });
+          requeued++;
+        } catch (err) {
+          console.error(
+            `[storelink][reconcile-dispatch] no se pudo re-encolar la orden ${order.id} (orderNumber ${order.orderNumber}):`,
+            err instanceof Error ? err.message : 'unknown error'
+          );
+        }
       }
-      if ((completedAttemptsByOrder.get(orderIdNum) ?? 0) >= MAX_RECONCILE_ATTEMPTS) {
-        continue; // agotada la cota de reconciliación: requiere revisión manual
-      }
-      try {
-        await payload.jobs.queue({
-          workflow: 'order-created',
-          input: { orderId: order.id as number },
-          req,
-        });
-        requeued++;
-      } catch (err) {
-        console.error(
-          `[storelink][reconcile-dispatch] no se pudo re-encolar la orden ${order.id} (orderNumber ${order.orderNumber}):`,
-          err instanceof Error ? err.message : 'unknown error'
-        );
-      }
+
+      // Fin de páginas alcanzado.
+      if (orphansRes.docs.length < PAGE_SIZE) break;
+      page++;
+      // Cota de seguridad de paginación (ventana 48h — no puede haber
+      // millones, pero el while jamás debe vivir más allá de lo razonable).
+      if (page > 50) break;
     }
 
     if (requeued > 0) {
       console.log(
-        `[storelink][reconcile-dispatch] ${requeued}/${candidates} órdenes re-encoladas para despacho (ventana ${RECONCILE_WINDOW_HOURS}h)`
+        `[storelink][reconcile-dispatch] ${requeued}/${candidates} órdenes re-encoladas para despacho (ventana ${RECONCILE_WINDOW_HOURS}h, límite de elegibles ${RECONCILE_BATCH_LIMIT})`
       );
     }
 

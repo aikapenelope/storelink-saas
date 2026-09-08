@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { Redis } from '@upstash/redis';
 import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
@@ -253,12 +254,67 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
  *
  * El context.skipCatalogLimitGate lo desactiva para el import y scripts de
  * mantenimiento (que ya cuentan con su propia puerta acotada por tenant).
- * Nota: el conteo es un snapshot — dos admins creando a la vez pueden
- * superar el límite por 1; el sweep del import y la puerta del job acotan
- * el drift en la ingesta masiva, y el bypass manual ocasional de ±1 no
- * tiene impacto operativo (el límite es una cota comercial, no de
- * integridad de datos).
+ *
+ * Review Devin #96 hallazgo 5 (atomicidad): dos creates simultáneos en el
+ * último cupo podían ambos pasar el count y committear (límite excedido por
+ * 1). Serialización por tenant con el MISMO lock Redis del import (SET NX
+ * EX, patrón review Devin #84 — reutilizado a propósito, no inventamos
+ * infra): con el lock, el conteo del segundo create ve el commit del
+ * primero. FAIL-OPEN decidido con el dueño (lib/rate-limit): si Upstash no
+ * responde, el gate corre sin serializar (deriva de ±1 posible, cota
+ * comercial — documentado). El import usa la misma clave: manual y bulk
+ * quedan coordinados bajo UN solo lock por tenant.
  */
+const CATALOG_LIMIT_LOCK_TTL_SECONDS = 30; // acota locks huérfanos si una función muere a mitad
+const CATALOG_LIMIT_LOCK_WAIT_MS = 4000; // espera máxima por el lock (admin manual, no bulk)
+
+let catalogLimitLockRedis: Redis | null | undefined;
+
+function getCatalogLimitLockRedis(): Redis | null {
+  if (catalogLimitLockRedis !== undefined) return catalogLimitLockRedis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  catalogLimitLockRedis = url && token ? new Redis({ url, token }) : null;
+  return catalogLimitLockRedis;
+}
+
+const catalogLimitLockKey = (tenantId: number | string): string =>
+  `storelink:import-lock:${tenantId}`; // MISMA clave del import (coordinación única)
+
+async function acquireCatalogLimitLock(tenantId: number | string): Promise<() => void> {
+  const redis = getCatalogLimitLockRedis();
+  // Fail-open: sin Redis, el gate corre sin serializar (deriva ±1 acotada).
+  if (!redis) return () => undefined;
+  const deadline = Date.now() + CATALOG_LIMIT_LOCK_WAIT_MS;
+  let acquired = false;
+  try {
+    while (Date.now() < deadline) {
+      const res = await redis.set(catalogLimitLockKey(tenantId), 'locked', {
+        nx: true,
+        ex: CATALOG_LIMIT_LOCK_TTL_SECONDS,
+      });
+      if (res === 'OK') {
+        acquired = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  } catch (err) {
+    console.warn('[storelink][products] lock de cupo no disponible (fail-open):', err);
+    return () => undefined;
+  }
+  if (!acquired) {
+    // Otra operación (import bulk o create manual) sostiene el lock del
+    // tenant: no esperar más — el gate corre igual (fail-open acotado).
+    return () => undefined;
+  }
+  return () => {
+    void redis.del(catalogLimitLockKey(tenantId)).catch(() => {
+      // El TTL acota la vida del lock si el DEL falla.
+    });
+  };
+}
+
 const enforceCatalogLimitOnCreate: CollectionBeforeChangeHook = async ({
   data,
   operation,
@@ -275,30 +331,38 @@ const enforceCatalogLimitOnCreate: CollectionBeforeChangeHook = async ({
       : (tenantValue as number | string | undefined);
   if (tenantId == null) return data; // el guard A1 (beforeChange) cubre tenant ausente
 
-  const tenantDoc = (await req.payload.findByID({
-    collection: 'tenants',
-    id: Number(tenantId),
-    depth: 0,
-    overrideAccess: true,
-  }).catch(() => null)) as { plan?: string | null } | null;
+  // Review Devin #96: serializar creates concurrentes del mismo tenant bajo
+  // el lock compartido con el import antes de contar.
+  const releaseLock = await acquireCatalogLimitLock(tenantId);
 
-  const limit = getCatalogLimit(tenantDoc?.plan);
+  try {
+    const tenantDoc = (await req.payload.findByID({
+      collection: 'tenants',
+      id: Number(tenantId),
+      depth: 0,
+      overrideAccess: true,
+    }).catch(() => null)) as { plan?: string | null } | null;
 
-  const countRes = await req.payload.count({
-    collection: 'products',
-    where: { tenant: { equals: tenantId } },
-    overrideAccess: true,
-    req,
-  });
+    const limit = getCatalogLimit(tenantDoc?.plan);
 
-  if (countRes.totalDocs >= limit) {
-    throw new APIError(
-      `Límite del plan alcanzado: este comercio ya tiene ${countRes.totalDocs} productos y su plan admite hasta ${limit}. ${describeCatalogLimit(tenantDoc?.plan)}. Elimina productos o actualiza el plan para seguir agregando.`,
-      403,
-    );
+    const countRes = await req.payload.count({
+      collection: 'products',
+      where: { tenant: { equals: tenantId } },
+      overrideAccess: true,
+      req,
+    });
+
+    if (countRes.totalDocs >= limit) {
+      throw new APIError(
+        `Límite del plan alcanzado: este comercio ya tiene ${countRes.totalDocs} productos y su plan admite hasta ${limit}. ${describeCatalogLimit(tenantDoc?.plan)}. Elimina productos o actualiza el plan para seguir agregando.`,
+        403,
+      );
+    }
+
+    return data;
+  } finally {
+    releaseLock();
   }
-
-  return data;
 };
 
 export const Products: CollectionConfig = {

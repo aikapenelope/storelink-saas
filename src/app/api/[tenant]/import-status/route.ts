@@ -102,7 +102,6 @@ export async function GET(
     const hasError = job.hasError === true;
     const completedAt = typeof job.completedAt === 'string' ? job.completedAt : null;
     const processing = job.processing === true;
-    const output = (job.output ?? null) as ImportOutput | null;
 
     const status: 'queued' | 'running' | 'completed' | 'error' = hasError
       ? 'error'
@@ -112,10 +111,43 @@ export async function GET(
           ? 'running'
           : 'queued';
 
+    // Review Devin #96 hallazgo 3: el job PERSISTIDO no tiene `output` — los
+    // resultados de los tasks viven en payload_jobs_log (fila del task con
+    // state='succeeded' y su output jsonb) o en taskStatus virtual. Se lee el
+    // log de la tabla hija por el executor directo (la colección interna no
+    // expone la relación log por find; verificado contra la BD de test: la
+    // fila catalogImportRows state='succeeded' lleva {created, updated,
+    // errorCount, limitReached}).
+    let output: ImportOutput | null = null;
+    if (status === 'completed') {
+      const logsRes = (await (
+        payload.db as unknown as {
+          execute: (query: unknown) => Promise<{ rows?: unknown[] }>;
+        }
+      ).execute(
+        // Drizzle raw contra payload_jobs_log (mismo executor del adapter).
+        (
+          await import('@payloadcms/db-postgres/drizzle')
+        ).sql`
+          select l.output as output
+          from payload_jobs_log l
+          where l._parent_id = ${jobId}
+            and l.task_slug = 'catalogImportRows'
+            and l.state = 'succeeded'
+          order by l._order desc
+          limit 1
+        `
+      )) as { rows?: Array<{ output?: unknown }> };
+      const row = logsRes.rows?.[0];
+      if (row && typeof row.output === 'object' && row.output !== null) {
+        output = row.output as ImportOutput;
+      }
+    }
+
     return NextResponse.json({
       jobId,
       status,
-      output: status === 'completed' ? output : undefined,
+      output: status === 'completed' ? (output ?? undefined) : undefined,
     });
   } catch (err) {
     console.error('[storelink][import-status] error:', err);

@@ -1,33 +1,36 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres';
 
 /**
- * PR 6a (SPEC-20260907-6): valor nuevo del enum `enum_payload_jobs_task_slug`
- * para el task `reconcileDispatchOrders` (sweep de reconciliación de
- * despachos, schedule cada 30 min).
+ * PR 6 (SPEC-20260907-6) — review Devin #96 hallazgo 1.
  *
- * DDL idéntico al que Payload genera con `migrate:create` al registrar un
- * task nuevo (verificado contra la BD de test: el push de drizzle crea el
- * enum con los slugs de config.jobs.tasks; en producción el ALTER TYPE ADD
- * VALUE es la forma canónica de extenderlo). ADD VALUE es aditivo y no
- * bloquea; el valor se usa a partir del deploy que registra el task.
+ * HISTORIA: la primera versión de esta migración hacía
+ * `ALTER TYPE enum_payload_jobs_task_slug ADD VALUE 'reconcileDispatchOrders'`
+ * — pero PRODUCCIÓN no tiene ese enum: la migración 20260822_jobs_queue
+ * creó `payload_jobs.task_slug` como VARCHAR (solo la tabla hija
+ * payload_jobs_log tiene enums de task_slug en BDs nuevas). El ALTER TYPE
+ * habría fallado en el primer deploy y bloqueado la plataforma entera.
  *
- * Nota: `ALTER TYPE ... ADD VALUE` NO puede correr dentro de una transacción
- * con el tipo en uso en la misma tx en Postgres <12; en PG 12+ (Supabase es
- * 15+) es seguro. Payload ejecuta migraciones en tx por defecto: si el
- * runner fallara con "cannot alter type ... because it is already in use",
- * el fallback documentado es ejecutarlo manualmente por conexión directa.
+ * VERIFICADO en producción (Supabase, 2026-09-08):
+ *   payload_jobs.task_slug → character varying (varchar)
+ *
+ * CONCLUSIÓN: registrar el task `reconcileDispatchOrders` en
+ * config.jobs.tasks NO requiere NINGÚN cambio de BD en producción — la
+ * columna varchar acepta el slug nuevo. Esta migración queda como no-op
+ * documentado (la fila en payload_migrations marca el punto de registro).
+ * En BDs pusheadas por drizzle (test/local) el enum de la tabla HIJA
+ * (payload_jobs_log) se regenera con el valor nuevo automáticamente vía
+ * push:true — tampoco requiere ALTER (verificado en la BD de test).
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  await db.execute(sql`
-    ALTER TYPE "enum_payload_jobs_task_slug" ADD VALUE IF NOT EXISTS 'reconcileDispatchOrders';
-  `);
+  // No-op intencional: la columna task_slug de payload_jobs es varchar en
+  // producción (migración 20260822) y acepta el slug del task nuevo sin DDL.
+  // El SELECT solo documenta-verifica que la tabla existe (falla ruidoso si
+  // el esquema de jobs no está aplicado).
+  await db.execute(sql`SELECT 1 FROM "payload_jobs" LIMIT 1`);
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
-  // Postgres no soporta REMOVE VALUE en enums: el down es no-op documentado
-  // (el valor queda huérfano pero inerte si el task se retira del config).
-  // eslint-disable-next-line no-console
-  console.warn(
-    '[migration 20260908_jobs_reconcile_task_slug] down(): ALTER TYPE DROP VALUE no existe en Postgres; el valor reconcileDispatchOrders permanece en el enum (inerte sin el task registrado).'
-  );
+  // No-op simétrico: nada que revertir (la columna varchar ya aceptaba el
+  // valor; retirar el task del config es suficiente).
+  await db.execute(sql`SELECT 1`);
 }
