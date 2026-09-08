@@ -301,7 +301,12 @@ const catalogImportRows: TaskConfig = {
             const created = await payload.create({
               collection: 'products',
               overrideAccess: true,
-              context: { skipRevalidate: true },
+              // La puerta de cupo del import vive DENTRO del job (snapshot
+              // exacto bajo lock por tenant, review Devin #84); se salta la
+              // puerta por-create del hook para no contar dos veces y para
+              // que una fila ya autorizada por el snapshot no falle al llegar
+              // aquí (PR 6b: context.skipCatalogLimitGate).
+              context: { skipRevalidate: true, skipCatalogLimitGate: true },
               data: {
                 title,
                 sku,

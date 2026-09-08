@@ -24,6 +24,7 @@ import { Customers } from './collections/Customers';
 import { Media } from './collections/Media';
 import { orderJobs } from './jobs/order-created';
 import { catalogImportJobs } from './jobs/catalog-import';
+import { reconcileJobs } from './jobs/reconcile-dispatch';
 import type { Product, Tenant } from './payload-types';
 
 const filename = fileURLToPath(import.meta.url);
@@ -172,7 +173,11 @@ export default buildConfig({
   admin: {
     user: Users.slug,
     components: {
-      beforeDashboard: ['@/components/admin/StoreUrlBanner#StoreUrlBanner'],
+      beforeDashboard: [
+        '@/components/admin/StoreUrlBanner#StoreUrlBanner',
+        // PR 6b: aviso de cupo agotado del plan en el admin (auditoría B3).
+        '@/components/admin/CatalogLimitBanner#CatalogLimitBanner',
+      ],
       views: {
         analytics: {
           Component: '@/components/admin/AnalyticsView#AnalyticsView',
@@ -214,11 +219,16 @@ export default buildConfig({
   // Actions → GET /api/payload-jobs/run, con x-cron-secret) reintenta fallos;
   // access.run valida ese secreto sobre el endpoint REST oficial.
   jobs: {
-    // R2 (plan v2): explícito a propósito — el default oficial SOLO borra los
-    // exitosos; los fallidos (hasError) persisten y los purga el endpoint
-    // /api/admin/cleanup-jobs vía runner externo.
-    deleteJobOnComplete: true,
-    tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
+    // PR 6b (SPEC-20260907-6, auditoría B2): deleteJobOnComplete en false —
+    // los jobs EXITOSOS persisten con completedAt seteado y el runner los
+    // excluye nativamente (query `completedAt exists:false`), así que no se
+    // re-ejecutan. Sin esto, el output del import (created/updated/
+    // errorCount/limitReached) muere con el job y el admin jamás ve el
+    // reporte ("N importadas, M omitidas por cupo"). La retención la
+    // controla /api/admin/cleanup-jobs: completados >24h (sobra para el
+    // polling del admin), fallidos >30d.
+    deleteJobOnComplete: false,
+    tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks, ...reconcileJobs.tasks],
     workflows: orderJobs.workflows,
     // Auditoría 2026-09-04 (P1): el CRUD REST de la colección interna
     // `payload-jobs` quedaba en defaultAccess (Boolean(user)) — cualquier

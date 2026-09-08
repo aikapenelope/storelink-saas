@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
+  CollectionBeforeChangeHook,
   CollectionBeforeValidateHook,
   CollectionConfig,
   PayloadRequest,
@@ -12,6 +13,7 @@ import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname, normalizeProductImageUrl } from '@/lib/image-hosts';
 import { invalidateProductsCache, schedulePostCommitInvalidation } from '@/lib/storefront-cache';
+import { describeCatalogLimit, getCatalogLimit } from '@/lib/tenant-plans';
 
 /**
  * Helper compartido (review Devin #64): resuelve el tenant del producto y
@@ -236,12 +238,75 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
   return data;
 };
 
+/**
+ * PR 6b (SPEC-20260907-6, auditoría B3): puerta de cupo del plan en la
+ * CREACIÓN MANUAL de productos (admin/REST). El import (CSV/Sheets) ya
+ * tiene su propia puerta dentro del job (src/jobs/catalog-import.ts), que
+ * decide fila por fila con un snapshot exacto bajo lock por tenant; este
+ * hook cubre el hueco restante — el admin y la REST API podían crear
+ * productos por encima del límite del plan sin ninguna validación.
+ *
+ * beforeChange de colección: corre en TODOS los canales dentro de la tx del
+ * request (patrón oficial transactions.mdx). Solo aplica a `create` —
+ * un update de un producto existente nunca consume cupo (misma semántica
+ * que el import: los updates de SKUs existentes no gastan cupo).
+ *
+ * El context.skipCatalogLimitGate lo desactiva para el import y scripts de
+ * mantenimiento (que ya cuentan con su propia puerta acotada por tenant).
+ * Nota: el conteo es un snapshot — dos admins creando a la vez pueden
+ * superar el límite por 1; el sweep del import y la puerta del job acotan
+ * el drift en la ingesta masiva, y el bypass manual ocasional de ±1 no
+ * tiene impacto operativo (el límite es una cota comercial, no de
+ * integridad de datos).
+ */
+const enforceCatalogLimitOnCreate: CollectionBeforeChangeHook = async ({
+  data,
+  operation,
+  req,
+}) => {
+  if (operation !== 'create') return data;
+  if (req.context?.skipCatalogLimitGate) return data;
+
+  const tenantValue =
+    (data as Record<string, unknown> | undefined)?.tenant;
+  const tenantId =
+    typeof tenantValue === 'object' && tenantValue !== null
+      ? (tenantValue as { id?: number | string }).id
+      : (tenantValue as number | string | undefined);
+  if (tenantId == null) return data; // el guard A1 (beforeChange) cubre tenant ausente
+
+  const tenantDoc = (await req.payload.findByID({
+    collection: 'tenants',
+    id: Number(tenantId),
+    depth: 0,
+    overrideAccess: true,
+  }).catch(() => null)) as { plan?: string | null } | null;
+
+  const limit = getCatalogLimit(tenantDoc?.plan);
+
+  const countRes = await req.payload.count({
+    collection: 'products',
+    where: { tenant: { equals: tenantId } },
+    overrideAccess: true,
+    req,
+  });
+
+  if (countRes.totalDocs >= limit) {
+    throw new APIError(
+      `Límite del plan alcanzado: este comercio ya tiene ${countRes.totalDocs} productos y su plan admite hasta ${limit}. ${describeCatalogLimit(tenantDoc?.plan)}. Elimina productos o actualiza el plan para seguir agregando.`,
+      403,
+    );
+  }
+
+  return data;
+};
+
 export const Products: CollectionConfig = {
   slug: 'products',
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeValidate: [rejectDuplicateSkuPerTenant],
-    beforeChange: [createTenantWriteGuard()],
+    beforeChange: [createTenantWriteGuard(), enforceCatalogLimitOnCreate],
     afterChange: [revalidateProductStorefront],
     afterDelete: [revalidateProductOnDelete],
   },

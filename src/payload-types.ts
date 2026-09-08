@@ -111,6 +111,7 @@ export interface Config {
       trelloDispatchOrder: TaskTrelloDispatchOrder;
       sendOrderConfirmationEmail: TaskSendOrderConfirmationEmail;
       catalogImportRows: TaskCatalogImportRows;
+      reconcileDispatchOrders: TaskReconcileDispatchOrders;
       inline: {
         input: unknown;
         output: unknown;
@@ -640,7 +641,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'trelloDispatchOrder' | 'sendOrderConfirmationEmail' | 'catalogImportRows';
+        taskSlug: 'inline' | 'trelloDispatchOrder' | 'sendOrderConfirmationEmail' | 'catalogImportRows' | 'reconcileDispatchOrders';
         taskID: string;
         input?:
           | {
@@ -674,7 +675,7 @@ export interface PayloadJob {
       }[]
     | null;
   workflowSlug?: 'order-created' | null;
-  taskSlug?: ('inline' | 'trelloDispatchOrder' | 'sendOrderConfirmationEmail' | 'catalogImportRows') | null;
+  taskSlug?: ('inline' | 'trelloDispatchOrder' | 'sendOrderConfirmationEmail' | 'catalogImportRows' | 'reconcileDispatchOrders') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
@@ -1256,6 +1257,18 @@ export interface TaskCatalogImportRows {
     created?: number | null;
     updated?: number | null;
     errorCount?: number | null;
+    limitReached?: boolean | null;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskReconcileDispatchOrders".
+ */
+export interface TaskReconcileDispatchOrders {
+  input: Record<string, never>;
+  output: {
+    candidates?: number | null;
+    requeued?: number | null;
   };
 }
 /**
