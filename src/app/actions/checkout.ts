@@ -12,7 +12,7 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
-import { normalizePaymentDetails } from '@/lib/checkout-sanitize';
+import { normalizePaymentDetails, validateDeliveryTypeEnum, validateMethodKeyEnum, validateCurrencyCode } from '@/lib/checkout-sanitize';
 import {
   buildIdempotencyKey,
   releaseCheckoutReservation,
@@ -152,6 +152,19 @@ function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: f
   if (!emailRegex.test(email)) {
     return { ok: false, error: 'Por favor introduce un correo electrónico válido' };
   }
+
+  // PR 4 (auditoría 2026-09-07, A6): whitelists de entrada — fail-fast ANTES
+  // de pricing/PDF/R2. Payload también rechazaría el deliveryType inválido
+  // (validación automática de selects), pero para entonces el PDF ya habría
+  // sido subido a R2 (huérfano + cuota quemada por cada intento provocable).
+  const deliveryTypeError = validateDeliveryTypeEnum(customer.deliveryType);
+  if (deliveryTypeError) return { ok: false, error: deliveryTypeError };
+
+  const methodKeyError = validateMethodKeyEnum(customer.paymentDetails?.methodKey);
+  if (methodKeyError) return { ok: false, error: methodKeyError };
+
+  const currencyError = validateCurrencyCode(request.currency);
+  if (currencyError) return { ok: false, error: currencyError };
 
   return { ok: true };
 }
@@ -375,6 +388,8 @@ function buildWhatsappMessagePayload({
   vesRate,
   showVESEffective,
   pdfUrl,
+  safePhone,
+  safeEmail,
 }: {
   tenantDoc: Tenant;
   storeName?: string;
@@ -387,6 +402,9 @@ function buildWhatsappMessagePayload({
   vesRate: number | null;
   showVESEffective: boolean;
   pdfUrl?: string;
+  /** PR 4: sanitización calculada ANTES del create (la orden la persiste). */
+  safePhone: string;
+  safeEmail: string;
 }): { whatsappUrl: string; safePhone: string; safeEmail: string } {
   const targetPhone = tenantDoc.whatsappPhone || '';
   const cleanTargetPhone = targetPhone.replace(/\D/g, '');
@@ -401,10 +419,9 @@ function buildWhatsappMessagePayload({
   const paymentLabel = sanitizePlainText(rawPaymentLabel);
 
   const safeName = sanitizePlainText(customer.name);
-  const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
-  const safePhone = cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
-  const rawEmail = customer.email ? customer.email.trim().toLowerCase() : '';
-  const safeEmail = sanitizePlainText(rawEmail);
+  // PR 4: safePhone/safeEmail llegan como parámetros (calculados en
+  // processOrder ANTES del create — la orden los persiste). Misma
+  // normalización, única fuente.
   const safeNotes = sanitizePlainText(customer.notes);
   const safeAddress = sanitizePlainText(customer.address);
   const safeBuilding = sanitizePlainText(customer.deliveryDetails?.buildingHouse);
@@ -819,60 +836,22 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     });
 
     // ------------------------------------------------------------------
-    // 5. Generate Official Delivery Note PDF & Upload to R2
-    // ------------------------------------------------------------------
-    let pdfBase64: string | undefined = undefined;
-    let pdfUrl: string | undefined = undefined;
-    try {
-      const pdfBytes = generateDeliveryNotePDF({
-        storeName: tenantDoc?.name || storeName || 'Flow Store',
-        orderNumber,
-        date: dateFormatted,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        paymentMethod: customer.paymentMethod,
-        notes: customer.notes,
-        currency: currency || 'USD',
-        deliveryType: customer.deliveryType,
-        deliveryFee,
-        subtotal: itemsSubtotal,
-        total,
-        totalVES,
-        exchangeRateVES: vesRate ?? 0,
-        showVES: showVESEffective,
-        items: verifiedItems,
-      });
-      pdfBase64 = Buffer.from(pdfBytes).toString('base64');
-
-      const uploaded = await uploadDeliveryNotePdf(orderNumber, pdfBytes);
-      if (uploaded) {
-        pdfUrl = (await getDeliveryNoteUrl(orderNumber)) ?? undefined;
-      }
-    } catch (pdfErr) {
-      console.warn('PDF generation warning:', pdfErr);
-    }
-
-    // ------------------------------------------------------------------
-    // 6. Build Structured WhatsApp Message & Sanitize Customer Data
-    // ------------------------------------------------------------------
-    const { whatsappUrl, safePhone, safeEmail } = buildWhatsappMessagePayload({
-      tenantDoc,
-      storeName,
-      orderNumber,
-      customer,
-      verifiedItems,
-      deliveryFee,
-      total,
-      totalVES,
-      vesRate,
-      showVESEffective,
-      pdfUrl,
-    });
-
-    // ------------------------------------------------------------------
     // 7. Persist Order in Orders Collection & Enqueue Async Job
     // ------------------------------------------------------------------
+    // PR 4 (auditoría 2026-09-07, A6): el PDF y el WhatsApp se generan DESPUÉS
+    // de este create (secciones 7bis/7ter) — antes vivían aquí arriba y un
+    // fallo provocable del create (validación de select, carrera de stock del
+    // hook) dejaba un PDF huérfano en R2 + jsPDF quemado por cada intento
+    // (~2,1M ops Class A/mes teóricas de abuso sobre el free tier).
+    // ------------------------------------------------------------------
+    // Teléfono/correo sanitizados ANTES del create (la orden los persiste);
+    // el builder de WhatsApp los reutiliza como parámetros — única fuente.
+    const cleanedPhone = customer.phone.trim().replace(/[^\d+\s-]/g, '');
+    const safePhone =
+      cleanedPhone.length > 0 ? cleanedPhone : sanitizePlainText(customer.phone.trim());
+    const safeEmail = sanitizePlainText(
+      customer.email ? customer.email.trim().toLowerCase() : ''
+    );
     try {
       const orderDoc = await payload.create({
         collection: 'orders',
@@ -909,22 +888,82 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       orderCreated = true;
 
       // ------------------------------------------------------------------
-      // 7bis. Replay DURADERO de idempotencia en la frontera de creación
+      // 7bis. Generate Official Delivery Note PDF & Upload to R2 (A6)
+      // ------------------------------------------------------------------
+      // MOVIDO: antes corría ANTES del create — cualquier fallo provocable del
+      // create (validación de select, carrera de stock del hook de inventario)
+      // dejaba un PDF huérfano en R2. Ahora la orden ya existe cuando el PDF
+      // nace: R2 solo recibe notas de pedidos reales. El fallo de PDF/R2 sigue
+      // siendo no-bloqueante (el pedido sobrevive sin PDF, igual que hoy).
+      let pdfBase64: string | undefined = undefined;
+      let pdfUrl: string | undefined = undefined;
+      try {
+        const pdfBytes = generateDeliveryNotePDF({
+          storeName: tenantDoc?.name || storeName || 'Flow Store',
+          orderNumber,
+          date: dateFormatted,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerAddress: customer.address,
+          paymentMethod: customer.paymentMethod,
+          notes: customer.notes,
+          currency: currency || 'USD',
+          deliveryType: customer.deliveryType,
+          deliveryFee,
+          subtotal: itemsSubtotal,
+          total,
+          totalVES,
+          exchangeRateVES: vesRate ?? 0,
+          showVES: showVESEffective,
+          items: verifiedItems,
+        });
+        pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+
+        const uploaded = await uploadDeliveryNotePdf(orderNumber, pdfBytes);
+        if (uploaded) {
+          pdfUrl = (await getDeliveryNoteUrl(orderNumber)) ?? undefined;
+        }
+      } catch (pdfErr) {
+        console.warn('PDF generation warning:', pdfErr);
+      }
+
+      // ------------------------------------------------------------------
+      // 7ter. Build Structured WhatsApp Message & Sanitize Customer Data
+      // ------------------------------------------------------------------
+      const { whatsappUrl } = buildWhatsappMessagePayload({
+        tenantDoc,
+        storeName,
+        orderNumber,
+        customer,
+        verifiedItems,
+        deliveryFee,
+        total,
+        totalVES,
+        vesRate,
+        showVESEffective,
+        pdfUrl,
+        safePhone,
+        safeEmail,
+      });
+
+      // ------------------------------------------------------------------
+      // 8. Replay DURADERO de idempotencia en la frontera de creación
       // ------------------------------------------------------------------
       // Review Devin #74 (2ª ronda, "Make the idempotency outcome durable"):
       // reemplazar ATÓMICAMENTE la reserva ('reserved') por la respuesta de
       // replay INMEDIATAMENTE después de payload.create. Todo lo que compone
       // la respuesta (orderNumber, WhatsApp, PDF/R2, totales) ya está
-      // calculado ANTES del create — el CRM, la cola y la revalidación son
-      // pasos posteriores no bloqueantes. Si el proceso serverless muere tras
-      // crear la orden pero antes de escribir la respuesta final, el reintento
-      // con el mismo token recupera ESTA respuesta y ve su pantalla de éxito
-      // en vez de crear una segunda orden. SET con EX es un reemplazo atómico
-      // (nunca convive con el sentinel 'reserved'); releaseCheckoutReservation
-      // solo borra valores 'reserved', así que jamás borra este replay.
-      // Endurecimiento futuro (opción A de Devin): clave idempotente en la
-      // orden con constraint UNIQUE en BD — requiere migración del owner
-      // (anotado en el roadmap, Sprint 1 PR 2).
+      // calculado AQUÍ — entre el create (7) y esta frontera corren SOLO los
+      // pasos que alimentan la respuesta; el CRM, la cola y la revalidación
+      // son pasos posteriores no bloqueantes. Si el proceso serverless muere
+      // tras crear la orden pero antes de escribir la respuesta final, el
+      // reintento con el mismo token recupera ESTA respuesta y ve su pantalla
+      // de éxito en vez de crear una segunda orden. SET con EX es un
+      // reemplazo atómico (nunca convive con el sentinel 'reserved');
+      // releaseCheckoutReservation solo borra valores 'reserved', así que
+      // jamás borra este replay. Endurecimiento futuro (opción A de Devin):
+      // clave idempotente en la orden con constraint UNIQUE en BD — requiere
+      // migración del owner (anotado en el roadmap, Sprint 1 PR 2).
       const builtResponse: CheckoutResponse = {
         success: true,
         orderNumber,
@@ -941,7 +980,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       await storeCheckoutResponse(idempotencyKey, builtResponse);
 
       // ------------------------------------------------------------------
-      // 8. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
+      // 9. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
       // ------------------------------------------------------------------
       // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
       // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
