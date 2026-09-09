@@ -16,6 +16,13 @@ import { verifyCronSecret } from '@/lib/cron-secret';
  *    reales está fallando y requiere intervención.
  *  - Job pendiente más viejo que 30 min: el runner dejó de procesar (schedule
  *    muerto, endpoint caído o cola atascada).
+ *
+ * PR 2.2 (plan sprints 2026-09-09, N5): TELEMETRÍA de profundidad —
+ * queueDepth (pendientes totales) y processingStuck (processing:true sin
+ * completar >1h — los zombies del PR 2.1 antes de que el cleanup los
+ * resetee). Telemetría pura: los criterios de 503 NO cambian (evita falsos
+ * positivos nuevos hasta estabilizar); el dashboard del runner GHA las
+ * reporta en cada golpe.
  */
 
 const OLDEST_PENDING_ALARM_MINUTES = 30;
@@ -64,6 +71,45 @@ export async function GET(request: Request) {
       ? Math.round((Date.now() - new Date(oldestPending.createdAt).getTime()) / 60000)
       : 0;
 
+    // PR 2.2 (N5): profundidad de cola — misma condición de "pendiente real"
+    // del query de arriba (sin completedAt), pero contando TODOS (limit:0 =
+    // sin docs, solo totalDocs). Un zombie aparece aquí como pendiente
+    // indistinguible hasta que el cleanup del PR 2.1 lo resetee.
+    const queueDepthRes = await payload.find({
+      collection: 'payload-jobs' as never,
+      where: {
+        and: [
+          { hasError: { not_equals: true } },
+          { completedAt: { exists: false } },
+        ],
+      },
+      limit: 0,
+      overrideAccess: true,
+    });
+    const queueDepth = queueDepthRes.totalDocs ?? 0;
+
+    // processingStuck: processing:true sin completar ni error y updated_at
+    // >1h — el estado zombie PREVIO al reset del PR 2.1 (si el cleanup
+    // corre sano, debe ser casi siempre 0; >0 sostenido = el cleanup no
+    // está llegando o los jobs mueren más rápido de lo que se purgan).
+    const stuckCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const stuckRes = await payload.find({
+      collection: 'payload-jobs' as never,
+      where: {
+        and: [
+          { processing: { equals: true } },
+          { completedAt: { exists: false } },
+          { hasError: { not_equals: true } },
+          { updatedAt: { less_than: stuckCutoff } },
+        ],
+      },
+      limit: 100,
+      overrideAccess: true,
+    });
+    const processingStuck = stuckRes.docs.length;
+
+    // Criterios de 503 SIN cambio (PR 2.2): queueDepth/processingStuck son
+    // telemetría — no disparan unhealthy por sí solos.
     const healthy = failedJobs === 0 && oldestPendingMinutes < OLDEST_PENDING_ALARM_MINUTES;
 
     return NextResponse.json(
@@ -72,6 +118,8 @@ export async function GET(request: Request) {
         failedJobs,
         oldestPendingMinutes,
         oldestPendingThresholdMinutes: OLDEST_PENDING_ALARM_MINUTES,
+        queueDepth,
+        processingStuck,
       },
       { status: healthy ? 200 : 503 }
     );

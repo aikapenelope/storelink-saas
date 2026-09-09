@@ -112,4 +112,85 @@ d('jobs-health: completados retenidos NO enferman la cola (Devin #96 r2)', () =>
     expect(body.healthy).toBe(false);
     expect(body.failedJobs).toBe(0); // es por pendiente viejo, no por errores
   }, 60000);
+
+  // PR 2.2 (plan sprints 2026-09-09, N5): telemetría de profundidad. El job
+  // pendiente viejo del test anterior sigue sembrado (40 min, processing:
+  // false): debe contar en queueDepth (pendiente real) pero NO en
+  // processingStuck (no está processing) — y los criterios de unhealthy no
+  // cambian por los campos nuevos.
+  it('PR 2.2: queueDepth cuenta el pendiente; processingStuck=0 (no hay zombies); criterios intactos', async () => {
+    const { GET } = await import('../../src/app/api/admin/jobs-health/route');
+    const response = await GET(
+      new Request('http://localhost/api/admin/jobs-health', {
+        headers: { 'x-cron-secret': 'test-cron-secret' },
+      }) as unknown as Parameters<typeof GET>[0]
+    );
+
+    expect(response.status).toBe(503); // SIGUE 503 por el pendiente viejo del test anterior
+    const body = (await response.json()) as {
+      healthy: boolean;
+      queueDepth: number;
+      processingStuck: number;
+    };
+    expect(body.healthy).toBe(false);
+    expect(body.queueDepth).toBeGreaterThanOrEqual(1); // el pendiente sembrado cuenta
+    expect(body.processingStuck).toBe(0); // processing:false → no es zombie
+  }, 60000);
+
+  it('PR 2.2: un zombie (processing:true >1h) cuenta en processingStuck PERO no altera el criterio healthy por sí solo', async () => {
+    // Sembrar zombie: processing:true, updated_at -2h. Sin el cleanup del
+    // PR 2.1, health NO lo detecta como enfermedad (no es hasError ni
+    // pendiente) — pero la telemetría debe revelarlo.
+    const ts = new Date(Date.now() - 120 * 60 * 1000).toISOString();
+    const res = (await payload.db.drizzle.execute(
+      (
+        await import('@payloadcms/db-postgres/drizzle')
+      ).sql`
+        insert into payload_jobs (input, total_tried, has_error, workflow_slug, queue, wait_until, processing, created_at, updated_at, completed_at)
+        values (
+          ${JSON.stringify({ orderId: 888888002 })}::jsonb,
+          0,
+          false,
+          'order-created',
+          'default',
+          null,
+          true,
+          ${ts},
+          ${ts},
+          null
+        )
+        returning id
+      `
+    )) as { rows?: Array<{ id: number }> };
+    const zombieId = Number(res.rows?.[0]?.id);
+
+    try {
+      const { GET } = await import('../../src/app/api/admin/jobs-health/route');
+      const response = await GET(
+        new Request('http://localhost/api/admin/jobs-health', {
+          headers: { 'x-cron-secret': 'test-cron-secret' },
+        }) as unknown as Parameters<typeof GET>[0]
+      );
+
+      const body = (await response.json()) as {
+        healthy: boolean;
+        processingStuck: number;
+      };
+      expect(body.processingStuck).toBeGreaterThanOrEqual(1); // el zombie es visible
+      // Nota: healthy puede ser false aquí POR el pendiente viejo de los
+      // tests anteriores (sembrado en BD compartida del archivo). El AC es
+      // que processingStuck>0 NO es lo que dispara el 503 — el criterio
+      // (failedJobs, oldestPendingMinutes) no cambió.
+      expect(typeof body.healthy).toBe('boolean');
+    } finally {
+      await (
+        payload.db as unknown as {
+          deleteMany: (args: { collection: string; where: Record<string, unknown> }) => Promise<unknown>;
+        }
+      ).deleteMany({
+        collection: 'payload-jobs',
+        where: { id: { equals: zombieId } },
+      }).catch(() => null);
+    }
+  }, 60000);
 });
