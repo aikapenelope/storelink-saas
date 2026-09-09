@@ -100,16 +100,20 @@
   - [ ] Creación manual del producto 501 en plan básico → rechazo con mensaje claro.
   - [ ] Si 6b opción A: migración generada con `migrate:create`, revisada, registrada en `index.ts`, `generate:types` al día — commit atómico.
 
-## PR 7 — `security(db)`: RLS en tablas de customers expuestas al Data API
+## PR 7 — `security(db)`: RLS en tablas de customers expuestas al Data API — ✅ APLICADO 2026-09-08
 - **ID:** SPEC-20260907-7 · **Origen:** C3 (advisors ERROR de Supabase) · **Esfuerzo:** S · **Riesgo:** Bajo · **Schema:** BD-only (no Payload)
 - **Problema:** `customers_purchase_history` y `customers_preferences_preferred_categories` en schema `public` sin RLS → lectura anónima potencial vía anon key.
-- **Cambios (requiere APROBACIÓN del dueño — DDL directo por Supabase MCP/conexión directa, nunca pooler):**
+- **Cambios (APROBADO por el dueño; DDL aplicado vía Supabase MCP/execute_sql, nunca pooler):**
   ```sql
   ALTER TABLE public.customers_purchase_history ENABLE ROW LEVEL SECURITY;
   ALTER TABLE public.customers_preferences_preferred_categories ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY payload_server_full_access ON public.customers_purchase_history FOR ALL TO postgres USING (true) WITH CHECK (true);
+  CREATE POLICY payload_server_full_access ON public.customers_preferences_preferred_categories FOR ALL TO postgres USING (true) WITH CHECK (true);
   ```
-  Sin policies = deny-all para anon/authenticated; el owner de Payload lo bypassa (la app queda intacta). No se registra en `payload_migrations` (Payload no modela RLS y `prodMigrations` no lo ejecutará); se documenta aquí.
-- **AC:** [ ] advisors de seguridad → 0 errores; [ ] smoke CRM en preview sigue funcionando.
+  Policies `payload_server_full_access` (`TO postgres`, patrón idéntico a las otras 26 tablas del repo) por consistencia: `postgres` tiene `rolbypassrls=true` (verificado), así que la app queda intacta; para `anon`/`authenticated` = deny-all (ninguna policy les aplica).
+- **Review Devin #97 (🟥 fresh databases omit RLS):** el DDL vivía SOLO en la BD de producción — una BD restaurada o recién provisionada recreaba las tablas SIN RLS (Payload no modela RLS) y el hallazgo C3 reaparecía. **Corregido**: migración `20260908_rls_customers_tables` registrada en `src/migrations/index.ts` → `prodMigrations` reproduce el estado en TODO arranque nuevo. Idempotente (DO blocks con detección en `pg_class`/`pg_policies` — `CREATE POLICY` no soporta `IF NOT EXISTS`); crea el role `postgres` si falta (BDs locales con otro owner). En el deploy de producción corre como no-op (el DDL ya está aplicado vía MCP); la fila queda registrada en `payload_migrations`.
+- **AC:** [x] advisors de seguridad → **0 errores** (verificado: lint 0013 eliminado; solo quedan 2 INFO 0008 de `payload_jobs`/`payload_jobs_log`, intencionales y preexistentes); [x] smoke CRM: CRUD completo sobre `customers_purchase_history` como `postgres` (rol del pooler de Payload) OK en tx con ROLLBACK, y lectura de `customers` de producción intacta (totales CRM correctos); [x] DDL durable en migraciones (review Devin #97).
+- **Rollback:** `DROP POLICY` + `ALTER TABLE ... DISABLE ROW LEVEL SECURITY` (no necesario; estado inicial era el hallazgo C3).
 
 ## PR 8 — `test(inventory)`: corregir no-op + regresiones de transiciones
 - **ID:** SPEC-20260907-8 · **Origen:** C5 (3B) · **Esfuerzo:** M · **Riesgo:** Bajo · **Schema:** No
