@@ -48,7 +48,12 @@ function buildOutcome(status: 'completed' | 'error', output?: ImportOutput): Imp
   const created = o.created ?? 0;
   const updated = o.updated ?? 0;
   const rejected = o.rejectedImageUrls ?? 0;
-  const omittedByLimit = o.limitReached ? Math.max(0, (o.errorCount ?? 0) - rejected) : 0;
+  // Review Devin #96 ronda 2 (hallazgo 3): errorCount solo cuenta FILAS
+  // fallidas (las URLs de imagen rechazadas NO lo incrementan — se reportan
+  // aparte en rejectedImageUrls). Antes, con limitReached, este cálculo
+  // restaba las URLs del total de filas-omitis y las omisiones por cupo
+  // quedaban subestimadas o desaparecían del mensaje.
+  const omittedByLimit = o.limitReached ? (o.errorCount ?? 0) : 0;
   let message = `¡Importación completada! ${created} producto(s) creado(s), ${updated} actualizado(s).`;
   if (omittedByLimit > 0) {
     message += ` ⚠️ ${omittedByLimit} fila(s) fueron omitidas por alcanzar el límite de productos del plan (las filas restantes no se importaron).`;

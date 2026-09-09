@@ -60,40 +60,13 @@ const reconcileDispatchOrders: TaskConfig = {
     ).toISOString();
 
     // ------------------------------------------------------------------
-    // Exclusiones PRIMERO (review Devin #96 hallazgo 2): el batch limit de
-    // 50 debe aplicar a órdenes ELEGIBLES, no a la query cruda. Si el límite
-    // cortara la query inicial, un bloque de 50 órdenes recientes con job
-    // vivo (o cota agotada) monopolizaría cada pasada y las huérfanas más
-    // viejas jamás serían examinadas hasta salir de la ventana de 48h.
+    // Review Devin #96 ronda 2 (hallazgo 2): las exclusiones se consultan
+    // POR CHUNK de candidatos (query acotada a los orderIds de la página en
+    // curso), no en 2 queries masivas de 500. Antes, con >500 jobs del
+    // workflow, la primera página sin ordenar omitía órdenes con job vivo o
+    // cota agotada → re-encolado duplicado. Con queries acotadas al chunk,
+    // cada candidato se evalúa contra TODOS sus jobs relevantes.
     // ------------------------------------------------------------------
-
-    // "Sin job vivo" (SPEC-20260907-6): una orden que ya tiene un job
-    // order-created en cola (no completado, sin error) será despachada por
-    // el runner — re-encolarla apila duplicados. La colección interna
-    // 'payload-jobs' existe en runtime y BD (migración 20260822_jobs_queue)
-    // aunque no en el union CollectionSlug — mismo cast documentado que
-    // cleanup-jobs/jobs-health.
-    const pendingJobsRes = (await payload.find({
-      collection: 'payload-jobs' as never,
-      where: {
-        and: [
-          { workflowSlug: { equals: 'order-created' } },
-          { completedAt: { exists: false } },
-          { hasError: { not_equals: true } },
-        ],
-      },
-      limit: 500,
-      overrideAccess: true,
-      depth: 0,
-    } as never)) as unknown as {
-      docs: Array<{ input?: { orderId?: number | string } }>;
-    };
-
-    const dispatchedOrderIds = new Set(
-      (pendingJobsRes.docs ?? [])
-        .map((j) => Number(j.input?.orderId))
-        .filter((n) => Number.isFinite(n))
-    );
 
     // Cota anti-loop (tenant sin Trello ni email configurados): una orden
     // cuyo despacho YA corrió completos N veces sin dejar los flags en true
@@ -106,34 +79,59 @@ const reconcileDispatchOrders: TaskConfig = {
     // admin de órdenes).
     const MAX_RECONCILE_ATTEMPTS = 3;
 
-    const completedJobsRes = (await payload.find({
-      collection: 'payload-jobs' as never,
-      where: {
-        and: [
-          { workflowSlug: { equals: 'order-created' } },
-          { completedAt: { exists: true } },
-        ],
-      },
-      limit: 500,
-      overrideAccess: true,
-      depth: 0,
-    } as never)) as unknown as {
-      docs: Array<{ input?: { orderId?: number | string } }>;
-    };
-
-    const completedAttemptsByOrder = new Map<number, number>();
-    for (const j of completedJobsRes.docs ?? []) {
-      const id = Number(j.input?.orderId);
-      if (Number.isFinite(id)) {
-        completedAttemptsByOrder.set(id, (completedAttemptsByOrder.get(id) ?? 0) + 1);
+    // "Sin job vivo" (SPEC-20260907-6): una orden que ya tiene un job
+    // order-created en cola (no completado, sin error) será despachada por
+    // el runner — re-encolarla apila duplicados. La colección interna
+    // 'payload-jobs' existe en runtime y BD (migración 20260822_jobs_queue)
+    // aunque no en el union CollectionSlug — mismo cast documentado que
+    // cleanup-jobs/jobs-health.
+    const jobsOfChunk = async (
+      orderIds: number[],
+      completed: boolean,
+    ): Promise<Map<number, number>> => {
+      const result = new Map<number, number>();
+      if (orderIds.length === 0) return result;
+      const CHUNK = 100;
+      for (let i = 0; i < orderIds.length; i += CHUNK) {
+        const slice = orderIds.slice(i, i + CHUNK);
+        const res = (await payload.find({
+          collection: 'payload-jobs' as never,
+          where: {
+            and: [
+              { workflowSlug: { equals: 'order-created' } },
+              // 'input.orderId' es jsonb anidado: nested-properties de la
+              // Query API oficial (mismo patrón que 'variants.sku').
+              { 'input.orderId': { in: slice } },
+              completed
+                ? { completedAt: { exists: true } }
+                : { and: [{ completedAt: { exists: false } }, { hasError: { not_equals: true } }] },
+            ],
+          },
+          // Sin límite: la query ya está acotada al chunk (≤100 órdenes ×
+          // intentos + re-encolados del sweep — pocas filas por orden).
+          limit: 1000,
+          overrideAccess: true,
+          depth: 0,
+        } as never)) as unknown as {
+          docs: Array<{ input?: { orderId?: number | string } }>;
+        };
+        for (const j of res.docs ?? []) {
+          const id = Number(j.input?.orderId);
+          if (Number.isFinite(id)) {
+            result.set(id, (result.get(id) ?? 0) + 1);
+          }
+        }
       }
-    }
+      return result;
+    };
 
     // ------------------------------------------------------------------
     // Candidatas con paginación: se recorren páginas de la query de huérfanas
-    // (la más reciente primero) aplicando las exclusiones hasta acumular
-    // RECONCILE_BATCH_LIMIT órdenes ELEGIBLES o agotar las páginas — así un
-    // bloque de órdenes no-elegibles jamás oculta a las más viejas.
+    // (la más reciente primero). Por cada página, las exclusiones se evalúan
+    // contra los jobs REALES de esos orderIds (chunk acotado) hasta acumular
+    // RECONCILE_BATCH_LIMIT órdenes ELEGIBLES o agotar las páginas — así ni
+    // un bloque de órdenes no-elegibles monopoliza el batch (ronda 1) ni las
+    // exclusiones se cortan a los 500 jobs (ronda 2).
     // ------------------------------------------------------------------
     let candidates = 0;
     let requeued = 0;
@@ -172,13 +170,20 @@ const reconcileDispatchOrders: TaskConfig = {
       if (orphansRes.docs.length === 0) break;
       candidates += orphansRes.docs.length;
 
+      // Exclusiones de ESTA página (jobs reales de estos orderIds).
+      const pageOrderIds = (orphansRes.docs as Order[]).map((o) => Number(o.id));
+      const [pendingByOrder, completedByOrder] = await Promise.all([
+        jobsOfChunk(pageOrderIds, false),
+        jobsOfChunk(pageOrderIds, true),
+      ]);
+
       for (const order of orphansRes.docs as Order[]) {
         if (eligibleCollected >= RECONCILE_BATCH_LIMIT) break;
         const orderIdNum = Number(order.id);
-        if (dispatchedOrderIds.has(orderIdNum)) {
+        if ((pendingByOrder.get(orderIdNum) ?? 0) > 0) {
           continue; // ya hay un job vivo para esta orden
         }
-        if ((completedAttemptsByOrder.get(orderIdNum) ?? 0) >= MAX_RECONCILE_ATTEMPTS) {
+        if ((completedByOrder.get(orderIdNum) ?? 0) >= MAX_RECONCILE_ATTEMPTS) {
           continue; // agotada la cota de reconciliación: requiere revisión manual
         }
         eligibleCollected++;
