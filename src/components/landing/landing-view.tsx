@@ -13,9 +13,14 @@ const THEME_COUNT = THEME_METAS.length;
 /** WhatsApp de contacto comercial de Flow (antes triplicado inline en wa.me). */
 const FLOW_WHATSAPP_PHONE = '584149189169';
 
-/** Año del build — default del footer (estable en SSR e hidratación; el
- * useEffect lo corrige al año del cliente tras montar). */
-const BUILD_YEAR = new Date().getFullYear().toString();
+/** Año del footer — placeholder ESTABLE e idéntico en server y cliente.
+ * Review Devin #102: NO evaluar new Date() en scope de módulo — corría
+ * independientemente en el prerender del build Y al cargar el bundle del
+ * cliente, así que un deploy que sigue vivo al año siguiente hidrataba con
+ * años distintos → hydration mismatch ANTES del useEffect. El placeholder
+ * no diverge (mismo string en ambos runtimes) y el useEffect lo reemplaza
+ * por el año real del visitante tras montar — sin flash perceptible. */
+const FOOTER_YEAR_PLACEHOLDER = '2026';
 
 /** FAQs del diagnóstico (data-driven — textos EXACTOS del original). */
 const LANDING_FAQS = [
@@ -78,9 +83,11 @@ export default function FlowLandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [workflowExpanded, setWorkflowExpanded] = useState(false);
   const [faqExpanded, setFaqExpanded] = useState(false);
-  const [currentYear, setCurrentYear] = useState(BUILD_YEAR);
+  const [currentYear, setCurrentYear] = useState(FOOTER_YEAR_PLACEHOLDER);
 
   useEffect(() => {
+    // Devin #102: el año real del visitante SOLO tras montar — el estado
+    // inicial (placeholder) es idéntico en server y cliente, sin mismatch.
     setCurrentYear(new Date().getFullYear().toString());
   }, []);
 
