@@ -53,15 +53,35 @@ let chainBootstrapped = false;
 let skippedNoBaseline = false;
 
 /**
- * Baseline real = la primera migración SOLO crea tablas (sin ALTER sobre
- * tablas que asume preexistentes). 20260819_add_theme… mezcla ALTER tenants
- * con CREATE TABLE IF NOT EXISTS de tablas hijas, así que un chequeo solo de
- * CREATE TABLE daría falso positivo.
+ * Baseline real = la primera migración crea las tablas que luego altera.
+ * 20260819_add_theme… mezclaba ALTER tenants con CREATE TABLE IF NOT EXISTS
+ * de tablas hijas → un chequeo solo de CREATE TABLE daba falso positivo.
+ *
+ * PR 3.2 (plan sprints 2026-09-09): el baseline generado por el core
+ * (20260909_baseline_schema) contiene ALTER TABLE ADD CONSTRAINT legítimos
+ * (PKs/FKs que drizzle-kit añade tras crear las tablas) — el chequeo
+ * anterior (ningún ALTER) los rechazaba. Semántica correcta: es baseline
+ * si TODA tabla que la primera migración ALTERa fue creada por ella misma
+ * (ALTER sobre tabla autogenerada = parte del CREATE, no dependencia
+ * externa).
  */
 async function chainHasBaseline(): Promise<boolean> {
   const { migrations } = await import('../../src/migrations');
   const firstUp = String(migrations[0]?.up ?? '');
-  return /create\s+table/i.test(firstUp) && !/alter\s+table/i.test(firstUp);
+  if (!/create\s+table/i.test(firstUp)) return false;
+
+  // Tablas creadas por la primera migración (CREATE TABLE "nombre").
+  const created = new Set<string>();
+  for (const m of firstUp.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?"([a-z_]+)"/gi)) {
+    created.add(m[1]);
+  }
+
+  // Todo ALTER TABLE debe recaer sobre una tabla del propio set (o ser
+  // ALTER TABLE ... ADD CONSTRAINT sobre las mismas).
+  for (const m of firstUp.matchAll(/alter\s+table\s+(?:only\s+)?"?([a-z_]+)"?/gi)) {
+    if (!created.has(m[1])) return false;
+  }
+  return true;
 }
 
 /** Evita que un socket de pool muerto por el DROP WITH FORCE tumbe el proceso. */
