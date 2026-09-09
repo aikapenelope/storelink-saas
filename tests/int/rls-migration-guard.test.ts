@@ -2,6 +2,10 @@ import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import { getPayload } from 'payload';
 import type { Payload } from 'payload';
 import { up, down } from '../../src/migrations/20260908_rls_customers_tables';
+import {
+  up as jobsStatsUp,
+  down as jobsStatsDown,
+} from '../../src/migrations/20260909_jobs_stats_schema';
 
 /**
  * Review Devin #97 ronda 2: la migración RLS debe seguir el invariante de
@@ -167,3 +171,148 @@ d('migración RLS 20260908_rls_customers_tables (Devin #97 r2)', () => {
 // El vi.mock del import dinámico de config no es necesario: los tests int usan
 // tests/payload.config.ts (push:true — el esquema ya existe).
 void vi;
+
+// ---------------------------------------------------------------------------
+// PR 1.1 (plan sprints 2026-09-09): migración jobs.stats (meta +
+// payload_jobs_stats) — mismo invariante de 3 pasos contra la BD de test
+// (tests/payload.config.ts monta reconcileJobs → el esquema de test YA tiene
+// meta + payload_jobs_stats: exactamente el estado "producción tras aplicar").
+// ---------------------------------------------------------------------------
+const jobsStatsState = async (): Promise<{
+  hasMeta: boolean;
+  hasStatsTable: boolean;
+  statsRls: boolean;
+  statsPolicies: number;
+}> => {
+  const res = (await dbOf(payload).execute(
+    (
+      await import('@payloadcms/db-postgres/drizzle')
+    ).sql`
+      SELECT
+        (SELECT count(*) FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='payload_jobs'
+            AND column_name='meta') AS has_meta,
+        (SELECT count(*) FROM information_schema.tables
+          WHERE table_schema='public' AND table_name='payload_jobs_stats') AS has_stats_table,
+        (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname='public' AND c.relname='payload_jobs_stats' AND c.relrowsecurity) AS stats_rls,
+        (SELECT count(*) FROM pg_policies
+          WHERE schemaname='public' AND tablename='payload_jobs_stats'
+            AND policyname='payload_server_full_access') AS stats_policies
+    `
+  )) as { rows: Array<{ has_meta?: string; has_stats_table?: string; stats_rls?: string; stats_policies?: string }> };
+  const r = res.rows[0];
+  return {
+    hasMeta: Number(r?.has_meta) > 0,
+    hasStatsTable: Number(r?.has_stats_table) > 0,
+    statsRls: Number(r?.stats_rls) > 0,
+    statsPolicies: Number(r?.stats_policies ?? 0),
+  };
+};
+
+d('migración jobs.stats 20260909_jobs_stats_schema (PR 1.1, P0 N1)', () => {
+  it('guardia anti-pooler: DDL pendiente + pooler 6543 → BLOCKED (nunca DDL por PgBouncer)', async () => {
+    // Estado pendiente: quitar meta + tabla stats (simula BD de producción
+    // actual, donde el drift vive).
+    await dbOf(payload).execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`
+        DROP POLICY IF EXISTS payload_server_full_access ON public.payload_jobs_stats;
+      `
+    );
+    await dbOf(payload).execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`
+        DROP TABLE IF EXISTS public.payload_jobs_stats CASCADE;
+      `
+    );
+    await dbOf(payload).execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`
+        ALTER TABLE public.payload_jobs DROP COLUMN IF EXISTS meta;
+      `
+    );
+
+    const state = await jobsStatsState();
+    expect(state.hasMeta).toBe(false); // DDL pendiente
+    expect(state.hasStatsTable).toBe(false);
+
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI =
+      'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    try {
+      await expect(jobsStatsUp({ db: dbOf(payload) } as never)).rejects.toThrow(
+        '[BLOCKED_TRANSACTION_POOLER_DDL]'
+      );
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+    // Nada cambió: la guardia bloqueó ANTES de cualquier DDL.
+    const after = await jobsStatsState();
+    expect(after.hasMeta).toBe(false);
+    expect(after.hasStatsTable).toBe(false);
+  }, 60000);
+
+  it('conexión directa: aplica meta + payload_jobs_stats + RLS sobre la tabla nueva', async () => {
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await jobsStatsUp({ db: dbOf(payload) } as never);
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    const state = await jobsStatsState();
+    expect(state.hasMeta).toBe(true);
+    expect(state.hasStatsTable).toBe(true);
+    expect(state.statsRls).toBe(true);
+    expect(state.statsPolicies).toBe(1);
+  }, 60000);
+
+  it('idempotente: estado producción (todo aplicado) → up() es no-op', async () => {
+    // Estado exacto de producción tras el flujo de emergencia: meta + tabla
+    // + RLS ya aplicados. El deploy real corre aquí y NO debe tocar nada.
+    const before = await jobsStatsState();
+    expect(before.hasMeta && before.hasStatsTable && before.statsRls).toBe(true);
+
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await jobsStatsUp({ db: dbOf(payload) } as never); // no-op, no throw
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    const after = await jobsStatsState();
+    expect(after).toEqual(before); // intacto
+  }, 60000);
+
+  it('down() simétrico: guardia anti-pooler + reversa completa', async () => {
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI =
+      'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    try {
+      await expect(jobsStatsDown({ db: dbOf(payload) } as never)).rejects.toThrow(
+        '[BLOCKED_TRANSACTION_POOLER_DDL]'
+      );
+    } finally {
+      if (savedUri === undefined) delete (process.env as Record<string, string | undefined>).DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    await jobsStatsDown({ db: dbOf(payload) } as never);
+    const state = await jobsStatsState();
+    expect(state.hasMeta).toBe(false);
+    expect(state.hasStatsTable).toBe(false);
+    expect(state.statsPolicies).toBe(0);
+
+    // Restaurar el esquema de test (push:true lo creó con jobs.stats): sin
+    // esto, los tests que corren DESPUÉS en la suite (reconcile-dispatch,
+    // order-workflow) heredan un payload_jobs sin meta y fallan. Re-aplicar
+    // up() es idempotente-seguro (mismo flujo que el test anterior).
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    await jobsStatsUp({ db: dbOf(payload) } as never);
+    const restored = await jobsStatsState();
+    expect(restored.hasMeta && restored.hasStatsTable && restored.statsRls).toBe(true);
+  }, 60000);
+});
