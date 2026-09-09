@@ -453,7 +453,9 @@ async function upsertCustomerCrm({
         overrideAccess: true,
       });
 
-    const applyOrderToCustomerSql = async (cust: Customer): Promise<void> => {
+    const applyOrderToCustomerSql = async (
+      cust: Customer,
+    ): Promise<{ totalOrders: number; totalSpent: number } | null> => {
       const adapter = payload.db as unknown as {
         drizzle: { execute: (query: unknown) => Promise<unknown> };
         tableNameMap?: Map<string, string>;
@@ -484,6 +486,11 @@ async function upsertCustomerCrm({
           data: { tag: nextTag },
         });
       }
+
+      // PR 13 (thermo D4): los totales del RETURNING son la fuente de verdad
+      // post-delta atómico — el caller evita recalcular en JS leyendo el doc
+      // VIEJO (deriva bajo checkouts concurrentes del mismo cliente).
+      return updatedRow ? { totalOrders: ordersCount, totalSpent: spentTotal } : null;
     };
 
     const existingCust = (await findCustomerByTenantPhone()).docs[0] as Customer | undefined;
@@ -513,8 +520,8 @@ async function upsertCustomerCrm({
     };
 
     if (existingCust) {
-      await applyOrderToCustomerSql(existingCust);
-      
+      const crmTotals = await applyOrderToCustomerSql(existingCust);
+
       // Actualizar historial y preferencias vía Payload API
       const currentHistory = (Array.isArray(existingCust.purchaseHistory) ? existingCust.purchaseHistory : [])
         .map((entry) => ({
@@ -526,13 +533,18 @@ async function upsertCustomerCrm({
           id: entry.id,
         }));
       const updatedHistory = [purchaseHistoryEntry, ...currentHistory].slice(0, 50); // Mantener últimos 50
-      
+
       const currentPrefs = existingCust.preferences || {};
       const mergedPrefs = { ...currentPrefs, ...updatePreferences };
-      
-      // Calcular nuevo valor promedio
-      const newTotalSpent = (Number(existingCust.totalSpent) || 0) + total;
-      const newTotalOrders = (Number(existingCust.totalOrders) || 0) + 1;
+
+      // PR 13 (thermo D4): averageOrderValue desde el RETURNING del SQL
+      // atómico (fuente de verdad post-delta) — antes se recalculaba en JS
+      // sumando `total` al doc VIEJO, que deriva bajo checkouts concurrentes
+      // del mismo cliente (dos pedidos leían el mismo totalSpent y el promedio
+      // quedaba atrás). Fallback al cálculo local solo si el RETURNING no
+      // llegó (fila no actualizada — no debería ocurrir).
+      const newTotalOrders = crmTotals?.totalOrders ?? (Number(existingCust.totalOrders) || 0) + 1;
+      const newTotalSpent = crmTotals?.totalSpent ?? (Number(existingCust.totalSpent) || 0) + total;
       const newAvgOrderValue = newTotalOrders > 0 ? newTotalSpent / newTotalOrders : 0;
 
       await payload.update({
@@ -575,6 +587,165 @@ async function upsertCustomerCrm({
         await applyOrderToCustomerSql(winner);
       }
     }
+}
+
+/**
+ * PR 13 (SPEC-20260907-13, thermo D4): sección 9 del checkout (secciones
+ * 7bis+8 de la spec original tras el reorden del PR #94) extraída a helper
+ * con params explícitos: CRM upsert best-effort + claim transaccional de
+ * crmCounted (con compensación de cancelación) + encolado del despacho vía
+ * Jobs Queue. La función processOrder queda como orquestador legible; el
+ * bloque preserva EXACTAMENTE la semántica revisada por Devin (#67, #92,
+ * #74) — ver comentarios internos.
+ *
+ * Nada de esto bloquea el pedido: el admin del checkout ya fue creado y la
+ * respuesta de replay persistida por el caller ANTES de esta llamada.
+ */
+async function finalizeOrderCrmAndDispatch({
+  payload,
+  tenantId,
+  orderDoc,
+  orderNumber,
+  customer,
+  safePhone,
+  safeEmail,
+  total,
+  verifiedItems,
+  now,
+}: {
+  payload: Payload;
+  tenantId: number;
+  orderDoc: { id: number };
+  orderNumber: string;
+  customer: CheckoutCustomerData;
+  safePhone: string;
+  safeEmail: string;
+  total: number;
+  verifiedItems: CheckoutItemData[];
+  now: Date;
+}): Promise<void> {
+  // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
+  // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
+  // exitoso — nunca durante la creación de la orden. Si el CRM falla, la
+  // flag queda false → la cancelación NO resta (no se resta un incremento
+  // que nunca pasó). Si el CRM succeed pero el update de la flag falla,
+  // se loguea para reconciliación (el incremento es real, la flag no lo
+  // refleja → inflación en cancel; caso raro, no bloquea el checkout).
+  let crmUpsertSucceeded = false;
+  try {
+    await upsertCustomerCrm({
+      payload,
+      tenantId,
+      customer,
+      safePhone,
+      safeEmail,
+      total,
+      now,
+      orderDoc,
+      verifiedItems,
+    });
+    crmUpsertSucceeded = true;
+  } catch (crmErr) {
+    // CRM upsert falló → la flag crmCounted queda false (default) →
+    // la cancelación NO restará un incremento que nunca existió.
+    console.error(
+      `[storelink][crm][checkout] CRM upsert falló para orden ${orderDoc.id} (orderNumber ${orderNumber}); pedido registrado y en despacho. Reconciliar CRM desde esta orden.`,
+      crmErr
+    );
+  }
+
+  if (crmUpsertSucceeded) {
+    // Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): el
+    // claim y la compensación comparten UNA transacción explícita (API
+    // oficial beginTransaction/commit/rollback). Si la compensación falla,
+    // el rollback deja crm_counted en false → el reintento del comprador
+    // puede reclamar de nuevo y completar el ajuste exactamente una vez.
+    // Sin la compensación (status != cancelled) el claim es autocommit y
+    // best-effort como siempre: nunca bloquea el pedido.
+    const mustCompensate = await (async () => {
+      // beginTransaction puede devolver null (transacciones deshabilitadas
+      // en el adapter): en ese caso se degrada al claim autocommit aislado
+      // (best-effort documentado) — sin compensación atómica, pero el
+      // pedido nunca se bloquea.
+      const txId = await payload.db.beginTransaction();
+      if (txId === null) {
+        const { claimed, status } = await claimOrderCrmCounted({
+          payload,
+          orderId: orderDoc.id,
+        });
+        if (claimed && status === 'cancelled') {
+          await applyCustomerCrmDelta({
+            payload,
+            tenantId,
+            phone: safePhone,
+            totalAmount: total,
+            sign: -1,
+          });
+          return true;
+        }
+        return false;
+      }
+      try {
+        const req = { transactionID: txId };
+        const { claimed, status } = await claimOrderCrmCounted({
+          payload,
+          orderId: orderDoc.id,
+          req,
+        });
+        if (claimed && status === 'cancelled') {
+          await applyCustomerCrmDelta({
+            payload,
+            tenantId,
+            phone: safePhone,
+            totalAmount: total,
+            sign: -1,
+            req,
+          });
+        }
+        await payload.db.commitTransaction(txId);
+        return claimed && status === 'cancelled';
+      } catch (txErr) {
+        try {
+          await payload.db.rollbackTransaction(txId);
+        } catch {
+          // El rollback falló (conexión muerta): la sesión se cae sola.
+        }
+        throw txErr;
+      }
+    })().catch((flagErr: unknown) => {
+      // Opposite partial failure: CRM increment committeó pero la pareja
+      // claim+compensación no pudo completarse (ambos revertidos). La flag
+      // quedó false → si la orden se cancela después, el hook no restará
+      // → inflación pendiente. Se loguea para reconciliación manual. No
+      // bloquea el checkout: el pedido ya existe.
+      console.error(
+        `[storelink][crm][checkout] CRM increment OK pero la transacción claim+compensación falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
+        flagErr
+      );
+      return false;
+    });
+    // `mustCompensate` solo informa al log: la compensación ya ocurrió
+    // dentro de la tx o el flujo se degradó a best-effort documentado.
+    void mustCompensate;
+  }
+
+  // Despacho asíncrono vía Jobs Queue oficial
+  try {
+    const job = await payload.jobs.queue({
+      workflow: 'order-created',
+      input: { orderId: orderDoc.id },
+    });
+
+    after(async () => {
+      try {
+        await payload.jobs.runByID({ id: job.id });
+      } catch (runErr) {
+        console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
+      }
+    });
+  } catch (queueErr) {
+    console.error('Jobs queue error:', queueErr);
+  }
 }
 
 export async function processOrder(request: CheckoutRequest): Promise<CheckoutResponse> {
@@ -954,130 +1125,24 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
       }
 
       // ------------------------------------------------------------------
-      // 9. Upsert Customer in CRM Collection (best-effort) + marcar crmCounted
+      // 9. CRM del cliente (best-effort) + claim crmCounted + despacho
       // ------------------------------------------------------------------
-      // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
-      // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
-      // exitoso — nunca durante la creación de la orden. Si el CRM falla, la
-      // flag queda false → la cancelación NO resta (no se resta un incremento
-      // que nunca pasó). Si el CRM succeed pero el update de la flag falla,
-      // se loguea para reconciliación (el incremento es real, la flag no lo
-      // refleja → inflación en cancel; caso raro, no bloquea el checkout).
-      let crmUpsertSucceeded = false;
-      try {
-        await upsertCustomerCrm({
-          payload,
-          tenantId,
-          customer,
-          safePhone,
-          safeEmail,
-          total,
-          now,
-          orderDoc: { id: orderDoc.id as number },
-          verifiedItems,
-        });
-        crmUpsertSucceeded = true;
-      } catch (crmErr) {
-        // CRM upsert falló → la flag crmCounted queda false (default) →
-        // la cancelación NO restará un incremento que nunca existió.
-        console.error(
-          `[storelink][crm][checkout] CRM upsert falló para orden ${orderDoc.id} (orderNumber ${orderNumber}); pedido registrado y en despacho. Reconciliar CRM desde esta orden.`,
-          crmErr
-        );
-      }
-
-      if (crmUpsertSucceeded) {
-        // Review Devin PR #92 ("Lost pre-claim cancellation adjustment"): el
-        // claim y la compensación comparten UNA transacción explícita (API
-        // oficial beginTransaction/commit/rollback). Si la compensación falla,
-        // el rollback deja crm_counted en false → el reintento del comprador
-        // puede reclamar de nuevo y completar el ajuste exactamente una vez.
-        // Sin la compensación (status != cancelled) el claim es autocommit y
-        // best-effort como siempre: nunca bloquea el pedido.
-        const mustCompensate = await (async () => {
-          // beginTransaction puede devolver null (transacciones deshabilitadas
-          // en el adapter): en ese caso se degrada al claim autocommit aislado
-          // (best-effort documentado) — sin compensación atómica, pero el
-          // pedido nunca se bloquea.
-          const txId = await payload.db.beginTransaction();
-          if (txId === null) {
-            const { claimed, status } = await claimOrderCrmCounted({
-              payload,
-              orderId: orderDoc.id as number,
-            });
-            if (claimed && status === 'cancelled') {
-              await applyCustomerCrmDelta({
-                payload,
-                tenantId,
-                phone: safePhone,
-                totalAmount: total,
-                sign: -1,
-              });
-              return true;
-            }
-            return false;
-          }
-          try {
-            const req = { transactionID: txId };
-            const { claimed, status } = await claimOrderCrmCounted({
-              payload,
-              orderId: orderDoc.id as number,
-              req,
-            });
-            if (claimed && status === 'cancelled') {
-              await applyCustomerCrmDelta({
-                payload,
-                tenantId,
-                phone: safePhone,
-                totalAmount: total,
-                sign: -1,
-                req,
-              });
-            }
-            await payload.db.commitTransaction(txId);
-            return claimed && status === 'cancelled';
-          } catch (txErr) {
-            try {
-              await payload.db.rollbackTransaction(txId);
-            } catch {
-              // El rollback falló (conexión muerta): la sesión se cae sola.
-            }
-            throw txErr;
-          }
-        })().catch((flagErr: unknown) => {
-          // Opposite partial failure: CRM increment committeó pero la pareja
-          // claim+compensación no pudo completarse (ambos revertidos). La flag
-          // quedó false → si la orden se cancela después, el hook no restará
-          // → inflación pendiente. Se loguea para reconciliación manual. No
-          // bloquea el checkout: el pedido ya existe.
-          console.error(
-            `[storelink][crm][checkout] CRM increment OK pero la transacción claim+compensación falló para orden ${orderDoc.id} (orderNumber ${orderNumber}). Reconciliar: setear crmCounted=true.`,
-            flagErr
-          );
-          return false;
-        });
-        // `mustCompensate` solo informa al log: la compensación ya ocurrió
-        // dentro de la tx o el flujo se degradó a best-effort documentado.
-        void mustCompensate;
-      }
-
-      // Despacho asíncrono vía Jobs Queue oficial
-      try {
-        const job = await payload.jobs.queue({
-          workflow: 'order-created',
-          input: { orderId: orderDoc.id as number },
-        });
-
-        after(async () => {
-          try {
-            await payload.jobs.runByID({ id: job.id });
-          } catch (runErr) {
-            console.error('Jobs run error (quedará en cola para el runner externo):', runErr);
-          }
-        });
-      } catch (queueErr) {
-        console.error('Jobs queue error:', queueErr);
-      }
+      // PR 13 (thermo D4): sección extraída a finalizeOrderCrmAndDispatch
+      // con params explícitos — upsertCustomerCrm + claim transaccional con
+      // compensación (review Devin #92) + Jobs Queue. Semántica idéntica a
+      // la revisada en #67/#92/#74; el pedido nunca se bloquea por CRM/queue.
+      await finalizeOrderCrmAndDispatch({
+        payload,
+        tenantId,
+        orderDoc: { id: orderDoc.id as number },
+        orderNumber,
+        customer,
+        safePhone,
+        safeEmail,
+        total,
+        verifiedItems,
+        now,
+      });
     } catch (orderErr) {
       // El pedido NO se creó (orderCreated=false): liberar la reserva para que
       // el usuario pueda reintentar con el mismo carrito sin esperar el TTL de
