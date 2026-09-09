@@ -17,6 +17,7 @@ import { Customers } from '../src/collections/Customers';
 import { Media } from '../src/collections/Media';
 import { orderJobs } from '../src/jobs/order-created';
 import { catalogImportJobs } from '../src/jobs/catalog-import';
+import { reconcileJobs } from '../src/jobs/reconcile-dispatch';
 import { migrations } from '../src/migrations';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -81,7 +82,14 @@ export function buildMigrationParityConfig(connectionString: string) {
     // Sin adapter de email: modo oficial de Payload para entornos sin email
     // (payload.sendEmail solo registra warning — cero red en tests).
     jobs: {
-      tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
+      // PR 3.1 (plan sprints 2026-09-09, V5/N2b): reconcileJobs INCLUIDO —
+      // su `schedule` activa jobs.stats en el core (meta jsonb +
+      // payload_jobs_stats), exactamente como producción. Sin esto el
+      // "espejo" no activaba stats y CI fue ciego al drift del P0 N1
+      // (2026-09-09): la cadena de migraciones podía no contener el DDL de
+      // stats y el suite de paridad no podía detectarlo. Ahora cualquier
+      // drift de schema runtime de jobs explota aquí antes de producción.
+      tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks, ...reconcileJobs.tasks],
       workflows: orderJobs.workflows,
       deleteJobOnComplete: false,
       access: { run: () => true },

@@ -238,4 +238,25 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
     `);
     expect(res.rows.length).toBe(2);
   });
+
+  // PR 3.1 (plan sprints 2026-09-09, V5): el espejo de producción incluye
+  // reconcileJobs → jobs.stats activo (core: schedule → sanitize → meta +
+  // payload_jobs_stats). Este assert es la regresión EXACTA del P0 N1 del
+  // 2026-09-09: la cadena de migraciones DEBE contener el DDL de stats o el
+  // arranque tipo producción sobre BD vacía queda incompleto (y el runner
+  // de jobs en 500 contra cualquier BD restaurada/nueva).
+  it('PR 3.1: la cadena reconstruye el schema de jobs.stats (meta + payload_jobs_stats)', async (ctx) => {
+    if (skippedNoBaseline) return ctx.skip();
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const metaRes = await payload.db.drizzle.execute(sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'payload_jobs' AND column_name = 'meta'
+    `);
+    const statsRes = await payload.db.drizzle.execute(sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'payload_jobs_stats'
+    `);
+    expect(metaRes.rows.length).toBe(1);
+    expect(statsRes.rows.length).toBe(1);
+  });
 });
