@@ -1,7 +1,9 @@
 import { revalidatePath } from 'next/cache';
+import { Redis } from '@upstash/redis';
 import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
+  CollectionBeforeChangeHook,
   CollectionBeforeValidateHook,
   CollectionConfig,
   PayloadRequest,
@@ -12,6 +14,7 @@ import { hasTenantAccess } from '@/lib/utils';
 import { createTenantWriteGuard } from '@/hooks/ensureTenantMembership';
 import { ALLOWED_IMAGE_HOST_SUFFIXES, isAllowedImageHostname, normalizeProductImageUrl } from '@/lib/image-hosts';
 import { invalidateProductsCache, schedulePostCommitInvalidation } from '@/lib/storefront-cache';
+import { describeCatalogLimit, getCatalogLimit } from '@/lib/tenant-plans';
 
 /**
  * Helper compartido (review Devin #64): resuelve el tenant del producto y
@@ -236,12 +239,138 @@ const rejectDuplicateSkuPerTenant: CollectionBeforeValidateHook = async ({
   return data;
 };
 
+/**
+ * PR 6b (SPEC-20260907-6, auditoría B3): puerta de cupo del plan en la
+ * CREACIÓN MANUAL de productos (admin/REST). El import (CSV/Sheets) ya
+ * tiene su propia puerta dentro del job (src/jobs/catalog-import.ts), que
+ * decide fila por fila con un snapshot exacto bajo lock por tenant; este
+ * hook cubre el hueco restante — el admin y la REST API podían crear
+ * productos por encima del límite del plan sin ninguna validación.
+ *
+ * beforeChange de colección: corre en TODOS los canales dentro de la tx del
+ * request (patrón oficial transactions.mdx). Solo aplica a `create` —
+ * un update de un producto existente nunca consume cupo (misma semántica
+ * que el import: los updates de SKUs existentes no gastan cupo).
+ *
+ * El context.skipCatalogLimitGate lo desactiva para el import y scripts de
+ * mantenimiento (que ya cuentan con su propia puerta acotada por tenant).
+ *
+ * Review Devin #96 hallazgo 5 (atomicidad): dos creates simultáneos en el
+ * último cupo podían ambos pasar el count y committear (límite excedido por
+ * 1). Serialización por tenant con el MISMO lock Redis del import (SET NX
+ * EX, patrón review Devin #84 — reutilizado a propósito, no inventamos
+ * infra): con el lock, el conteo del segundo create ve el commit del
+ * primero. FAIL-OPEN decidido con el dueño (lib/rate-limit): si Upstash no
+ * responde, el gate corre sin serializar (deriva de ±1 posible, cota
+ * comercial — documentado). El import usa la misma clave: manual y bulk
+ * quedan coordinados bajo UN solo lock por tenant.
+ */
+const CATALOG_LIMIT_LOCK_TTL_SECONDS = 30; // acota locks huérfanos si una función muere a mitad
+const CATALOG_LIMIT_LOCK_WAIT_MS = 4000; // espera máxima por el lock (admin manual, no bulk)
+
+let catalogLimitLockRedis: Redis | null | undefined;
+
+function getCatalogLimitLockRedis(): Redis | null {
+  if (catalogLimitLockRedis !== undefined) return catalogLimitLockRedis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  catalogLimitLockRedis = url && token ? new Redis({ url, token }) : null;
+  return catalogLimitLockRedis;
+}
+
+const catalogLimitLockKey = (tenantId: number | string): string =>
+  `storelink:import-lock:${tenantId}`; // MISMA clave del import (coordinación única)
+
+async function acquireCatalogLimitLock(tenantId: number | string): Promise<() => void> {
+  const redis = getCatalogLimitLockRedis();
+  // Fail-open: sin Redis, el gate corre sin serializar (deriva ±1 acotada).
+  if (!redis) return () => undefined;
+  const deadline = Date.now() + CATALOG_LIMIT_LOCK_WAIT_MS;
+  let acquired = false;
+  try {
+    while (Date.now() < deadline) {
+      const res = await redis.set(catalogLimitLockKey(tenantId), 'locked', {
+        nx: true,
+        ex: CATALOG_LIMIT_LOCK_TTL_SECONDS,
+      });
+      if (res === 'OK') {
+        acquired = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  } catch (err) {
+    console.warn('[storelink][products] lock de cupo no disponible (fail-open):', err);
+    return () => undefined;
+  }
+  if (!acquired) {
+    // Otra operación (import bulk o create manual) sostiene el lock del
+    // tenant: no esperar más — el gate corre igual (fail-open acotado).
+    return () => undefined;
+  }
+  return () => {
+    void redis.del(catalogLimitLockKey(tenantId)).catch(() => {
+      // El TTL acota la vida del lock si el DEL falla.
+    });
+  };
+}
+
+const enforceCatalogLimitOnCreate: CollectionBeforeChangeHook = async ({
+  data,
+  operation,
+  req,
+}) => {
+  if (operation !== 'create') return data;
+  if (req.context?.skipCatalogLimitGate) return data;
+
+  const tenantValue =
+    (data as Record<string, unknown> | undefined)?.tenant;
+  const tenantId =
+    typeof tenantValue === 'object' && tenantValue !== null
+      ? (tenantValue as { id?: number | string }).id
+      : (tenantValue as number | string | undefined);
+  if (tenantId == null) return data; // el guard A1 (beforeChange) cubre tenant ausente
+
+  // Review Devin #96: serializar creates concurrentes del mismo tenant bajo
+  // el lock compartido con el import antes de contar.
+  const releaseLock = await acquireCatalogLimitLock(tenantId);
+
+  try {
+    const tenantDoc = (await req.payload.findByID({
+      collection: 'tenants',
+      id: Number(tenantId),
+      depth: 0,
+      overrideAccess: true,
+    }).catch(() => null)) as { plan?: string | null } | null;
+
+    const limit = getCatalogLimit(tenantDoc?.plan);
+
+    const countRes = await req.payload.count({
+      collection: 'products',
+      where: { tenant: { equals: tenantId } },
+      overrideAccess: true,
+      req,
+    });
+
+    if (countRes.totalDocs >= limit) {
+      throw new APIError(
+        `Límite del plan alcanzado: este comercio ya tiene ${countRes.totalDocs} productos y su plan admite hasta ${limit}. ${describeCatalogLimit(tenantDoc?.plan)}. Elimina productos o actualiza el plan para seguir agregando.`,
+        403,
+      );
+    }
+
+    return data;
+  } finally {
+    releaseLock();
+  }
+};
+
 export const Products: CollectionConfig = {
   slug: 'products',
   hooks: {
     // Guard A1: rechaza create/update con tenant ajeno (403) antes de validar
     beforeValidate: [rejectDuplicateSkuPerTenant],
-    beforeChange: [createTenantWriteGuard()],
+    beforeChange: [createTenantWriteGuard(), enforceCatalogLimitOnCreate],
     afterChange: [revalidateProductStorefront],
     afterDelete: [revalidateProductOnDelete],
   },

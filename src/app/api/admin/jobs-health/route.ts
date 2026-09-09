@@ -38,7 +38,21 @@ export async function GET(request: Request) {
 
     const oldestPendingRes = await payload.find({
       collection: 'payload-jobs' as never,
-      where: { hasError: { not_equals: true } },
+      where: {
+        and: [
+          { hasError: { not_equals: true } },
+          // Review Devin #96 ronda 2 (hallazgo crítico): con
+          // deleteJobOnComplete:false los jobs EXITOSOS persisten ~24h
+          // (retención de /api/admin/cleanup-jobs para el reporte de
+          // import). Sin excluirlos, el "pendiente más viejo" era siempre
+          // un job completado de hace >24h y el healthcheck reportaba
+          // unhealthy a los 30 min — falso positivo permanente que además
+          // saltaba el cleanup en el runner (curl -fsS aborta los steps
+          // siguientes) y los completados acumulaban indefinidamente.
+          // Pendiente REAL = sin completedAt.
+          { completedAt: { exists: false } },
+        ],
+      },
       limit: 1,
       sort: 'createdAt',
       overrideAccess: true,

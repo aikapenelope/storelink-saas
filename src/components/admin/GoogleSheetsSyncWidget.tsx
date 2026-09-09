@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { RefreshCw, FileSpreadsheet, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { pollImportCompletion } from './import-status';
 
 interface GoogleSheetsSyncWidgetProps {
   tenantSlug: string;
@@ -41,10 +42,19 @@ export function GoogleSheetsSyncWidget({ tenantSlug, tenantName }: GoogleSheetsS
           message: data.error || 'Error al sincronizar con Google Sheets',
         });
       } else {
-        setResult({
-          success: true,
-          message: '¡Catálogo sincronizado con éxito! Actualizando vista...',
-        });
+        // Review Devin #72: en vez de un "en cola" genérico, hacer polling del
+        // resultado real del job (created/updated/rejectedImageUrls) y mostrar
+        // las advertencias de imágenes descartadas al comerciante.
+        const jobId = data?.jobId != null ? String(data.jobId) : null;
+        if (jobId) {
+          const outcome = await pollImportCompletion(tenantSlug, jobId);
+          setResult(outcome.summary);
+        } else {
+          setResult({
+            success: true,
+            message: '¡Catálogo sincronizado con éxito! Actualizando vista...',
+          });
+        }
         setTimeout(() => {
           window.location.reload();
         }, 2500);

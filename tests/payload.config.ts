@@ -16,6 +16,7 @@ import { Customers } from '../src/collections/Customers';
 import { Media } from '../src/collections/Media';
 import { orderJobs } from '../src/jobs/order-created';
 import { catalogImportJobs } from '../src/jobs/catalog-import';
+import { reconcileJobs } from '../src/jobs/reconcile-dispatch';
 import { getUserRole } from '../src/lib/utils';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,7 @@ export default buildConfig({
   // Sin adapter de email: modo oficial de Payload para entornos sin email
   // (payload.sendEmail solo registra warning — cero red en tests).
   jobs: {
-    tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks],
+    tasks: [...orderJobs.tasks, ...catalogImportJobs.tasks, ...reconcileJobs.tasks],
     workflows: orderJobs.workflows,
     // En tests mantenemos el registro para poder asertar sobre el completado
     // (en producción el default es borrar el job al terminar con éxito).

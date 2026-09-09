@@ -115,4 +115,69 @@ d('job catalogImportRows (Jobs Queue oficial)', () => {
     expect(Number(updated?.price)).toBe(12.99);
     expect(updated?.stockQuantity).toBe(15);
   }, 60000);
+
+  /**
+   * Review Devin #96 hallazgos 3+4 (regresión): el output del import vive en
+   * payload_jobs_log (fila del task con state='succeeded') — NO en un campo
+   * `output` del job — y debe incluir rejectedImageUrls (URLs descartadas por
+   * la whitelist de hosts, cuenta de URLs no de filas). Es exactamente lo
+   * que /api/[tenant]/import-status lee para el reporte del admin.
+   */
+  it('el output del job persiste en payload_jobs_log con rejectedImageUrls (Devin #96)', async () => {
+    const csvText = [
+      'title,price,sku,image',
+      // 1 URL válida (R2/martes.app) + 2 URLs con host no permitido → el
+      // output debe reportar rejectedImageUrls=2 y el producto sin imágenes.
+      'Con Fotos,9.99,IMP-IMG-OK,https://imagenes.martes.app/foto.jpg;https://host-raro.example/a.png;https://otro-raro.example/b.png',
+    ].join('\n');
+
+    const job = await payload.jobs.queue({
+      task: 'catalogImportRows',
+      input: { tenantId, tenantSlug, csvText },
+    });
+    await payload.jobs.runByID({ id: job.id });
+
+    // El job completó (deleteJobOnComplete:false → persiste con completedAt).
+    const doneRes = await payload.db.drizzle.execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`SELECT completed_at FROM payload_jobs WHERE id = ${job.id}`
+    );
+    expect(doneRes.rows[0]?.completed_at).toBeTruthy();
+
+    // El output vive en la tabla HIJA (payload_jobs_log) — mismo sitio que
+    // lee /api/[tenant]/import-status tras el hallazgo 3 de Devin.
+    const logRes = await payload.db.drizzle.execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`
+        select l.output as output, l.state as state
+        from payload_jobs_log l
+        where l._parent_id = ${job.id}
+          and l.task_slug = 'catalogImportRows'
+          and l.state = 'succeeded'
+        order by l._order desc
+        limit 1
+      `
+    );
+    const row = logRes.rows[0] as { output?: Record<string, unknown>; state?: string } | undefined;
+    expect(row?.state).toBe('succeeded');
+
+    const output = (row?.output ?? {}) as {
+      created?: number;
+      updated?: number;
+      errorCount?: number;
+      rejectedImageUrls?: number;
+    };
+    expect(Number(output.created)).toBe(1);
+    // Hallazgo 4: las 2 URLs de host no permitido quedaron CONTADAS (no
+    // silenciosas) — el admin las verá en el reporte del import.
+    expect(Number(output.rejectedImageUrls)).toBe(2);
+    expect(Number(output.errorCount)).toBe(0);
+
+    // Y el producto nació solo con la URL permitida.
+    const prod = (await payload.find({
+      collection: 'products',
+      where: { tenant: { equals: tenantId }, sku: { equals: 'IMP-IMG-OK' } },
+      overrideAccess: true,
+      depth: 0,
+    })) as unknown as { docs: Array<{ imageUrls?: string[] }> };
+    expect(prod.docs[0]?.imageUrls).toEqual(['https://imagenes.martes.app/foto.jpg']);
+  }, 60000);
 });

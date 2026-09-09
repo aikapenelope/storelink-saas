@@ -18,16 +18,27 @@ jobs:
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/payload-jobs/run?queue=default"
 
-      - name: Verificar salud de la cola (auditoria 2026-09-04, P1-13)
-        # 503 si hay jobs fallidos o un pendiente con >30min: falla el step ->
-        # email de GitHub (la unica alerta push disponible sin infra extra).
-        run: |
-          curl -fsS -m 60 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/admin/jobs-health"
-
-      - name: Purgar jobs fallidos antiguos (>30d, plan v2 R2)
+      - name: Purgar jobs antiguos (completados >24h y fallidos >30d)
+        # Review Devin #96 ronda 2: la purga corre ANTES del healthcheck y con
+        # `continue-on-error: false` PERO independiente del resultado del
+        # health — antes, si el health reportaba unhealthy (503), curl -fsS
+        # abortaba el job de GitHub y ESTE paso nunca corría: los jobs
+        # completados retenidos (deleteJobOnComplete:false, input con el CSV
+        # completo) acumulaban indefinidamente justo cuando la cola estaba
+        # enferma (el peor momento). Retenciones: completados >24h (sobra
+        # para el polling del import), fallidos >30d (análisis post-mortem).
         run: |
           curl -fsS -m 120 -X POST \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/admin/cleanup-jobs"
+
+      - name: Verificar salud de la cola (auditoria 2026-09-04, P1-13)
+        # 503 si hay jobs fallidos o un pendiente con >30min: falla el step ->
+        # email de GitHub (la unica alerta push disponible sin infra extra).
+        # Devin #96 r2: el healthcheck ahora EXCLUYE completados (el
+        # pendiente real = sin completedAt), así que no hay falso unhealthy
+        # por los exitosos retenidos.
+        run: |
+          curl -fsS -m 60 \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/admin/jobs-health"
