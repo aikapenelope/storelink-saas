@@ -5,6 +5,62 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { THEME_METAS } from '@/data/theme-presets';
 
+// PR 14 (SPEC-20260907-14, thermo D5): el número de plantillas vive en
+// THEME_METAS — el "9" hardcodeado quedaba obsoleto al añadir una plantilla
+// (la landing mentía sobre el catálogo real).
+const THEME_COUNT = THEME_METAS.length;
+
+/** WhatsApp de contacto comercial de Flow (antes triplicado inline en wa.me). */
+const FLOW_WHATSAPP_PHONE = '584149189169';
+
+/** Año del footer — placeholder ESTABLE e idéntico en server y cliente.
+ * Review Devin #102: NO evaluar new Date() en scope de módulo — corría
+ * independientemente en el prerender del build Y al cargar el bundle del
+ * cliente, así que un deploy que sigue vivo al año siguiente hidrataba con
+ * años distintos → hydration mismatch ANTES del useEffect. El placeholder
+ * no diverge (mismo string en ambos runtimes) y el useEffect lo reemplaza
+ * por el año real del visitante tras montar — sin flash perceptible. */
+const FOOTER_YEAR_PLACEHOLDER = '2026';
+
+/** FAQs del diagnóstico (data-driven — textos EXACTOS del original). */
+const LANDING_FAQS = [
+  {
+    q: '¿Tengo que cambiar mi número de WhatsApp actual?',
+    a: 'No. Conectamos Flow a tu número actual mediante la API Oficial de Meta. Tus clientes te siguen escribiendo al mismo contacto de siempre.',
+  },
+  {
+    q: '¿Flow se queda con alguna comisión de mis ventas?',
+    a: 'Cero comisiones. Pagas únicamente tu mensualidad fija ($50 o $70). Todos los cobros (Pago Móvil, Zelle, efectivo) van 100% a tus cuentas.',
+  },
+  {
+    q: '¿Cómo es el montaje del catálogo y la carga de productos?',
+    a: 'Nosotros realizamos la configuración técnica y te asistimos con la carga de fotos y precios para que tu catálogo quede listo en 48 horas.',
+  },
+  {
+    q: '¿Puedo responder personalmente cuando yo quiera?',
+    a: 'Sí, 100%. Tú y tu equipo pueden intervenir en cualquier conversación en un clic. En ese momento la IA se pausa y vuelve cuando tú decidas.',
+  },
+];
+
+/** Features de pricing (PR 14: data-driven — JSX con <strong>/<u> exactos). */
+const LANDING_PLAN_PRO_FEATURES = [
+  <><strong>5.000 respuestas con IA al mes</strong></>,
+  <><strong>1 Canal Oficial:</strong> WhatsApp <u>o</u> Instagram</>,
+  <>Catálogo E-commerce base listo para vender</>,
+  <>Agente entrenado con el Knowledge de tu negocio</>,
+  <>CRM básico de pedidos y clientes</>,
+  <>Acompañamiento y montaje técnico en 48h</>,
+];
+
+const LANDING_PLAN_ULTIMATE_FEATURES = [
+  <><strong>10.000 respuestas con IA al mes</strong></>,
+  <><strong>Multicanal Simultáneo:</strong> WhatsApp <u>e</u> Instagram</>,
+  <><strong>Catálogo E-commerce 100% a tu medida</strong></>,
+  <>Agentes con memoria infinita y segmentación</>,
+  <>CRM Avanzado + Control de inventario en tiempo real</>,
+  <>Seguimiento y recuperación de ventas en chat</>,
+];
+
 declare global {
   namespace React {
     namespace JSX {
@@ -27,9 +83,11 @@ export default function FlowLandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [workflowExpanded, setWorkflowExpanded] = useState(false);
   const [faqExpanded, setFaqExpanded] = useState(false);
-  const [currentYear, setCurrentYear] = useState('2026');
+  const [currentYear, setCurrentYear] = useState(FOOTER_YEAR_PLACEHOLDER);
 
   useEffect(() => {
+    // Devin #102: el año real del visitante SOLO tras montar — el estado
+    // inicial (placeholder) es idéntico en server y cliente, sin mismatch.
     setCurrentYear(new Date().getFullYear().toString());
   }, []);
 
@@ -63,7 +121,7 @@ export default function FlowLandingPage() {
             </a>
             <a href="#templates" className="transition hover:text-[#7C3AED]">Plantillas & Demos</a>
             <Link href="/templates" className="transition hover:text-[#7C3AED] text-violet-700 font-extrabold flex items-center gap-1">
-              <span>Catálogo (9)</span>
+              <span>Catálogo ({THEME_COUNT})</span>
               <span className="px-1.5 py-0.5 rounded-full bg-violet-100 text-[10px] text-violet-800 uppercase font-black">Nuevo</span>
             </Link>
             <a href="#control" className="transition hover:text-[#7C3AED]">Cómo funciona</a>
@@ -113,7 +171,7 @@ export default function FlowLandingPage() {
               <a href="#templates" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Plantillas & Demos</a>
               <Link href="/templates" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50 text-violet-700 font-bold flex items-center justify-between">
                 <span>Catálogo de Plantillas</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-violet-100 text-[10px] text-violet-800 uppercase font-black">9 Temas</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-violet-100 text-[10px] text-violet-800 uppercase font-black">{THEME_COUNT} Temas</span>
               </Link>
               <a href="#control" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Cómo funciona & Control</a>
               <a href="#precio" onClick={() => setMobileMenuOpen(false)} className="rounded-xl px-4 py-2.5 hover:bg-violet-50">Precios</a>
@@ -179,7 +237,7 @@ export default function FlowLandingPage() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900/15 bg-white/90 px-5 py-3.5 text-xs sm:text-sm font-bold text-slate-800 shadow-sm backdrop-blur transition hover:bg-white sm:w-auto"
             >
               <iconify-icon icon="solar:shop-2-bold" width="16" height="16" className="text-violet-600"></iconify-icon>
-              Probar Plantillas en vivo (9 Demos)
+              Probar Plantillas en vivo ({THEME_COUNT} Demos)
             </a>
           </div>
 
@@ -364,7 +422,7 @@ export default function FlowLandingPage() {
           {/* Theme Showcase Grid */}
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {THEME_METAS.map((theme) => {
-              const whatsappUrl = `https://wa.me/584149189169?text=${encodeURIComponent(
+              const whatsappUrl = `https://wa.me/${FLOW_WHATSAPP_PHONE}?text=${encodeURIComponent(
                 `Hola, me interesa iniciar mi tienda online con la plantilla ${theme.name} de Flow.`
               )}`;
 
@@ -468,7 +526,7 @@ export default function FlowLandingPage() {
                 <iconify-icon icon="solar:arrow-right-bold" width="16" height="16"></iconify-icon>
               </Link>
               <a
-                href="https://wa.me/584149189169?text=Hola,%20tengo%20una%20referencia%20de%20dise%C3%B1o%20y%20quiero%20hacer%20mi%20tienda%20a%20medida%20con%20Flow"
+                href={`https://wa.me/${FLOW_WHATSAPP_PHONE}?text=${encodeURIComponent('Hola, tengo una referencia de diseño y quiero hacer mi tienda a medida con Flow')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg shadow-emerald-600/30 transition active:scale-95"
@@ -788,30 +846,12 @@ export default function FlowLandingPage() {
                 </p>
 
                 <div className="mt-6 space-y-3 border-t border-slate-100 pt-5 text-xs sm:text-sm text-slate-700 font-medium">
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span><strong>5.000 respuestas con IA al mes</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span><strong>1 Canal Oficial:</strong> WhatsApp <u>o</u> Instagram</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Catálogo E-commerce base listo para vender</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Agente entrenado con el Knowledge de tu negocio</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>CRM básico de pedidos y clientes</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
-                    <span>Acompañamiento y montaje técnico en 48h</span>
-                  </div>
+                  {LANDING_PLAN_PRO_FEATURES.map((f, fi) => (
+                    <div key={fi} className="flex items-center gap-2.5">
+                      <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-500 shrink-0"></iconify-icon>
+                      <span>{f}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -843,30 +883,12 @@ export default function FlowLandingPage() {
                 </p>
 
                 <div className="mt-6 space-y-3 border-t border-white/15 pt-5 text-xs sm:text-sm text-violet-100 font-medium">
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span><strong>10.000 respuestas con IA al mes</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span><strong>Multicanal Simultáneo:</strong> WhatsApp <u>e</u> Instagram</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span><strong>Catálogo E-commerce 100% a tu medida</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span>Agentes con memoria infinita y segmentación</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span>CRM Avanzado + Control de inventario en tiempo real</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
-                    <span>Seguimiento y recuperación de ventas en chat</span>
-                  </div>
+                  {LANDING_PLAN_ULTIMATE_FEATURES.map((f, fi) => (
+                    <div key={fi} className="flex items-center gap-2.5">
+                      <iconify-icon icon="solar:check-circle-bold" width="18" height="18" className="text-emerald-300 shrink-0"></iconify-icon>
+                      <span>{f}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -926,7 +948,7 @@ export default function FlowLandingPage() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {/* Card 1: WhatsApp Directo */}
             <a 
-              href="https://wa.me/584149189169?text=Hola%2C%20quiero%20hacer%20el%20diagn%C3%B3stico%20gratis%20con%20Flow%20para%20mi%20empresa" 
+              href={`https://wa.me/${FLOW_WHATSAPP_PHONE}?text=${encodeURIComponent('Hola, quiero hacer el diagnóstico gratis con Flow para mi empresa')}`} 
               target="_blank" 
               rel="noopener noreferrer"
               className="card-glow group relative flex flex-col justify-between rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-950/40 to-slate-950 p-5 sm:p-6 transition duration-300 hover:border-emerald-400 hover:-translate-y-1 shadow-lg"
@@ -1016,45 +1038,17 @@ export default function FlowLandingPage() {
           {/* Collapsible FAQ Content */}
           {faqExpanded && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6 backdrop-blur-lg space-y-4 transition-all duration-500">
-              <div className="border-b border-white/10 pb-3.5">
-                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
-                  ¿Tengo que cambiar mi número de WhatsApp actual?
-                </p>
-                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
-                  No. Conectamos Flow a tu número actual mediante la API Oficial de Meta. Tus clientes te siguen escribiendo al mismo contacto de siempre.
-                </p>
-              </div>
-
-              <div className="border-b border-white/10 pb-3.5">
-                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
-                  ¿Flow se queda con alguna comisión de mis ventas?
-                </p>
-                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
-                  Cero comisiones. Pagas únicamente tu mensualidad fija ($50 o $70). Todos los cobros (Pago Móvil, Zelle, efectivo) van 100% a tus cuentas.
-                </p>
-              </div>
-
-              <div className="border-b border-white/10 pb-3.5">
-                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
-                  ¿Cómo es el montaje del catálogo y la carga de productos?
-                </p>
-                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
-                  Nosotros realizamos la configuración técnica y te asistimos con la carga de fotos y precios para que tu catálogo quede listo en 48 horas.
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
-                  ¿Puedo responder personalmente cuando yo quiera?
-                </p>
-                <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
-                  Sí, 100%. Tú y tu equipo pueden intervenir en cualquier conversación en un clic. En ese momento la IA se pausa y vuelve cuando tú decidas.
-                </p>
-              </div>
+              {LANDING_FAQS.map((faq, i) => (
+                <div key={faq.q} className={i < LANDING_FAQS.length - 1 ? 'border-b border-white/10 pb-3.5' : ''}>
+                  <p className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <iconify-icon icon="solar:check-circle-bold" className="text-emerald-400"></iconify-icon>
+                    {faq.q}
+                  </p>
+                  <p className="mt-1.5 text-xs text-slate-300 leading-relaxed font-medium pl-6">
+                    {faq.a}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
 
@@ -1084,7 +1078,7 @@ export default function FlowLandingPage() {
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs sm:text-sm text-slate-400 font-semibold">
               <a href="#video" className="transition hover:text-white">Video</a>
               <a href="#templates" className="transition hover:text-white">Plantillas & Demos</a>
-              <Link href="/templates" className="transition hover:text-violet-400">Catálogo de Temas (9)</Link>
+              <Link href="/templates" className="transition hover:text-violet-400">Catálogo de Temas ({THEME_COUNT})</Link>
               <a href="#control" className="transition hover:text-white">Tu control</a>
               <a href="#precio" className="transition hover:text-white">Precios</a>
               <a href="#diagnostico" className="transition hover:text-white">Diagnóstico & FAQs</a>
