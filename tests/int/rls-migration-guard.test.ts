@@ -6,6 +6,10 @@ import {
   up as jobsStatsUp,
   down as jobsStatsDown,
 } from '../../src/migrations/20260909_jobs_stats_schema';
+import {
+  up as rlsAllUp,
+  down as rlsAllDown,
+} from '../../src/migrations/20260909_rls_all_public_tables';
 
 /**
  * Review Devin #97 ronda 2: la migración RLS debe seguir el invariante de
@@ -314,5 +318,118 @@ d('migración jobs.stats 20260909_jobs_stats_schema (PR 1.1, P0 N1)', () => {
     await jobsStatsUp({ db: dbOf(payload) } as never);
     const restored = await jobsStatsState();
     expect(restored.hasMeta && restored.hasStatsTable && restored.statsRls).toBe(true);
+  }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// PR 3.3 (plan sprints 2026-09-09, H-1/V8): RLS durable en TODAS las tablas
+// públicas. Contra la BD de test (28 tablas, la mayoría SIN RLS — push:true
+// no blinda): verifica la aplicación masiva + idempotencia + guardia. Al
+// final RESTAURA nada: dejar la BD de test con RLS en todas las tablas es el
+// estado seguro (idéntico a producción) y no afecta a la suite (todo corre
+// con overrideAccess + rol owner angelpenalver, que es superuser).
+// ---------------------------------------------------------------------------
+const allTablesRlsState = async (): Promise<{ withoutRls: number; withoutPolicy: number }> => {
+  const res = (await dbOf(payload).execute(
+    (
+      await import('@payloadcms/db-postgres/drizzle')
+    ).sql`
+      SELECT
+        (SELECT count(*) FROM pg_tables WHERE schemaname='public' AND NOT rowsecurity) AS without_rls,
+        (SELECT count(*) FROM pg_tables t WHERE t.schemaname='public'
+          AND NOT EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname='public'
+            AND p.tablename=t.tablename AND p.policyname='payload_server_full_access')) AS without_policy
+    `
+  )) as { rows: Array<{ without_rls?: string; without_policy?: string }> };
+  const r = res.rows[0];
+  return { withoutRls: Number(r?.without_rls ?? 0), withoutPolicy: Number(r?.without_policy ?? 0) };
+};
+
+d('migración RLS all-tables 20260909_rls_all_public_tables (PR 3.3, H-1)', () => {
+  it('aplica RLS + policy a TODAS las tablas public de la BD (estado pendiente)', async () => {
+    const before = await allTablesRlsState();
+    // La BD de test (push:true) tiene tablas sin RLS — estado pendiente real.
+    expect(before.withoutRls).toBeGreaterThan(0);
+
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await rlsAllUp({ db: dbOf(payload) } as never);
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    const after = await allTablesRlsState();
+    expect(after.withoutRls).toBe(0);
+    expect(after.withoutPolicy).toBe(0);
+  }, 60000);
+
+  it('guardia anti-pooler: DDL pendiente + pooler 6543 → BLOCKED', async () => {
+    // Simular pendiente: desactivar RLS de una tabla cualquiera.
+    await dbOf(payload).execute(
+      (await import('@payloadcms/db-postgres/drizzle')).sql`
+        ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+      `
+    );
+    const pending = await allTablesRlsState();
+    expect(pending.withoutRls).toBe(1);
+
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI =
+      'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    try {
+      await expect(rlsAllUp({ db: dbOf(payload) } as never)).rejects.toThrow(
+        '[BLOCKED_TRANSACTION_POOLER_DDL]'
+      );
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    // Nada cambió.
+    const after = await allTablesRlsState();
+    expect(after.withoutRls).toBe(1);
+
+    // Restaurar el estado seguro (RLS en todas — el test anterior lo dejó así).
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    await rlsAllUp({ db: dbOf(payload) } as never);
+    const restored = await allTablesRlsState();
+    expect(restored.withoutRls).toBe(0);
+  }, 60000);
+
+  it('idempotente: estado producción (todo aplicado) → up() es no-op', async () => {
+    const before = await allTablesRlsState();
+    expect(before.withoutRls).toBe(0);
+    expect(before.withoutPolicy).toBe(0);
+
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await rlsAllUp({ db: dbOf(payload) } as never); // no-op, no throw
+    } finally {
+      if (savedUri === undefined) delete process.env.DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    const after = await allTablesRlsState();
+    expect(after).toEqual(before); // intacto
+  }, 60000);
+
+  it('down() simétrico: guardia anti-pooler', async () => {
+    const savedUri = process.env.DATABASE_URI;
+    (process.env as Record<string, string | undefined>).DATABASE_URI =
+      'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+    try {
+      await expect(rlsAllDown({ db: dbOf(payload) } as never)).rejects.toThrow(
+        '[BLOCKED_TRANSACTION_POOLER_DDL]'
+      );
+    } finally {
+      if (savedUri === undefined) delete (process.env as Record<string, string | undefined>).DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+    // NO se ejecuta el down() real aquí: dejaría la BD de test sin RLS (el
+    // estado SEGURO es el aplicado; el down() queda verificado por la
+    // guardia + simetría del patrón).
   }, 60000);
 });
