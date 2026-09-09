@@ -196,6 +196,30 @@ export function CartDrawer({
   // Payment Method Selection
   const [paymentMethodKey, setPaymentMethodKey] = useState<PaymentMethodKey>(defaultMethod);
 
+  // Review Devin #73 (2ª ronda): cuando el tenant define zonas, el estado
+  // inicial del municipio debe ser una zona VÁLIDA (la primera) — el default
+  // fijo "Municipio Chacao" no coincide con ninguna opción del selector y el
+  // envío sin tocar el select sería rechazado por el servidor con un total
+  // mostrado distinto. Sin zonas se mantiene el default de Caracas.
+  // PR 1.2 (plan sprints 2026-09-09): movido ANTES del bloque de totales —
+  // `selectedZone` lee `customer.municipality` y la declaración vivía 450
+  // líneas más abajo (TDZ): con deliveryConfig.zones.length >= 1 el find()
+  // evaluaba el callback y reventaba con ReferenceError en SSR (regresión
+  // #101 del refactor data-driven). Movimiento de declaración, cero lógica.
+  const initialMunicipality =
+    deliveryConfig?.zones && deliveryConfig.zones.length > 0
+      ? (deliveryConfig.zones.find((z) => z.name)?.name ?? 'Municipio Chacao')
+      : 'Municipio Chacao';
+
+  const [customer, setCustomer] = useState({
+    name: '',
+    email: '',
+    address: '',
+    buildingHouse: '',
+    municipality: initialMunicipality,
+    notes: '',
+  });
+
   const itemsSubtotal = items.reduce((acc, item) => acc + item.quantity * item.price, 0);
   const selectedZone = deliveryConfig?.zones?.find((z) => z.name === customer.municipality);
   const zoneDeliveryPrice =
@@ -633,25 +657,6 @@ export function CartDrawer({
   });
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Review Devin #73 (2ª ronda): cuando el tenant define zonas, el estado
-  // inicial del municipio debe ser una zona VÁLIDA (la primera) — el default
-  // fijo "Municipio Chacao" no coincide con ninguna opción del selector y el
-  // envío sin tocar el select sería rechazado por el servidor con un total
-  // mostrado distinto. Sin zonas se mantiene el default de Caracas.
-  const initialMunicipality =
-    deliveryConfig?.zones && deliveryConfig.zones.length > 0
-      ? (deliveryConfig.zones.find((z) => z.name)?.name ?? 'Municipio Chacao')
-      : 'Municipio Chacao';
-
-  const [customer, setCustomer] = useState({
-    name: '',
-    email: '',
-    address: '',
-    buildingHouse: '',
-    municipality: initialMunicipality,
-    notes: '',
-  });
 
   const [isLoading, setIsLoading] = useState(false);
   // Auditoría 2026-09-04 (P1 privacidad): el checkout recolecta nombre,
