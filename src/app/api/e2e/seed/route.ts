@@ -108,6 +108,9 @@ export async function POST(request: NextRequest) {
     tenantId?: number;
     theme?: string;
     productSku?: string;
+    // PR 3.4 (plan sprints 2026-09-09): zonas de delivery del fixture
+    // (regresión #101 — ningún test montaba el drawer con zonas).
+    zones?: Array<{ name?: string; priceDelivery?: number }>;
     // Escenario cross-tenant (pentest, sprint 2)
     tenantASlug?: string;
     tenantBSlug?: string;
@@ -140,6 +143,19 @@ export async function POST(request: NextRequest) {
       // El tenant va PRIMERO: el usuario sembrado es tenant-admin de SU fixture
       // (review Devin #85: un secreto filtrado no puede fabricar un
       // super-admin logueable contra la BD compartida del preview).
+      // PR 3.4 (plan sprints 2026-09-09): deliveryConfig.zones OPCIONAL —
+      // el fixture de zonas que dejó pasar el TDZ del cart-drawer (regresión
+      // #101, PR 1.2): ningún test montaba el drawer con zonas.
+      const zonesInput = Array.isArray(body.zones)
+        ? (body.zones as Array<{ name?: unknown; priceDelivery?: unknown }>)
+            .filter((z) => typeof z?.name === 'string' && z.name.length > 0)
+            .slice(0, 10)
+            .map((z) => ({
+              name: String(z.name),
+              priceDelivery: typeof z.priceDelivery === 'number' ? z.priceDelivery : 0,
+            }))
+        : undefined;
+
       const tenant = await payload.create({
         collection: 'tenants',
         overrideAccess: true,
@@ -148,6 +164,9 @@ export async function POST(request: NextRequest) {
           slug: tenantSlug,
           whatsappPhone: '584120000000',
           theme: 'basic-banner',
+          ...(zonesInput && zonesInput.length > 0
+            ? { deliveryConfig: { fixedPrice: 2, zones: zonesInput } }
+            : {}),
         } as never,
       });
 

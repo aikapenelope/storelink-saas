@@ -36,7 +36,18 @@ async function callSeedEndpoint(body: Record<string, unknown>): Promise<Record<s
   return (await res.json()) as Record<string, unknown>;
 }
 
-export async function seedE2EFixtures(): Promise<{ tenantId: number; tenantSlug: string }> {
+export interface SeedZonesOptions {
+  /**
+   * PR 3.4 (plan sprints 2026-09-09): zonas de delivery del fixture — el
+   * hueco que dejó pasar el TDZ del cart-drawer (regresión #101): ningún
+   * test montaba el drawer con zonas. Array de { name, priceDelivery }.
+   */
+  zones?: Array<{ name: string; priceDelivery: number }>;
+}
+
+export async function seedE2EFixtures(
+  options: SeedZonesOptions = {}
+): Promise<{ tenantId: number; tenantSlug: string }> {
   const tenantSlug = `e2e-${Date.now()}`;
   const result = await callSeedEndpoint({
     action: 'seed',
@@ -44,6 +55,7 @@ export async function seedE2EFixtures(): Promise<{ tenantId: number; tenantSlug:
     password: E2E_ADMIN.password,
     tenantSlug,
     productSku: E2E_PRODUCT_SKU,
+    ...(options.zones && options.zones.length > 0 ? { zones: options.zones } : {}),
   });
   return { tenantId: result.tenantId as number, tenantSlug: result.tenantSlug as string };
 }
