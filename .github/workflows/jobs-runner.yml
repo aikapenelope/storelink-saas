@@ -8,25 +8,58 @@ on:
 permissions:
   contents: read
 
+# PR 1.3 (plan sprints 2026-09-09, N3/N4): endurecimiento del runner externo.
+# El grupo de concurrencia serializa los RUNS de GitHub (el cron */5 sumado a la
+# latencia de cola de GHA podía solapar runs). cancel-in-progress: false para NO
+# descartar un golpe ya en vuelo: cada pasada puede estar procesando jobs reales
+# y matarla a mitad dejaría esos jobs varados.
+concurrency:
+  group: jobs-runner
+  cancel-in-progress: false
+
 jobs:
   run-jobs:
     runs-on: ubuntu-latest
     steps:
-      - name: Procesar cola de jobs (reintentos y fallos)
+      - name: Procesar cola de jobs (lote acotado de 10)
+        # PR 1.3 r4 (review Devin #106, "Timed-out batches bypass runner
+        # serialization"): el drain-loop de rondas previas usaba curl -m 120 por
+        # lote, pero el endpoint puede vivir hasta el techo de Vercel (300s en
+        # Hobby, GO_LIVE_SPRINT4.md:31). Con 120 < 300, curl se descolgaba a los
+        # 120s mientras la invocación del server seguía viva; el grupo de
+        # concurrencia serializa runs de GitHub, NO invocaciones de Vercel, así
+        # que el siguiente run encolado solapaba la invocación aún activa y podía
+        # dejar jobs varados como processing=true.
+        #
+        # Fix: UN solo lote acotado por run, con curl -m 300 == techo del server,
+        # de modo que el cliente NUNCA undercutea al server: curl espera a que el
+        # endpoint responda o Vercel lo termine; solo entonces el run libera el
+        # lock. El "loop" de drenado lo aporta el scheduler: cron */5 + concurrency
+        # group encolan runs sucesivos (drenado reanudable ~10 jobs/5min =
+        # ~120/h, sobrado: el checkout ya despacha inline con runByID y este
+        # runner es backstop de reintentos). Lote de 10 ≈ pool máx (10 conexiones):
+        # nunca 100 jobs concurrentes en Promise.all (r2).
+        #
+        # La recuperación de jobs varados POR TERMINACIÓN DE VERCEL (no del
+        # cliente) es el PR 2.1 (Sprint 2, reset de staleness processing): es el
+        # safety-net durable; ningún cliente puede evitarla, y con este diseño el
+        # cliente ya no agrega varados por su cuenta.
+        env:
+          RUN_ENDPOINT: ${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/payload-jobs/run
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -fsS -m 120 \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            "${{ vars.PROD_BASE_URL || 'https://flow.martes.app' }}/api/payload-jobs/run?queue=default"
+          curl -fsS -m 300 \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            "${RUN_ENDPOINT}?queue=default&limit=10"
 
       - name: Purgar jobs antiguos (completados >24h y fallidos >30d)
-        # Review Devin #96 ronda 2: la purga corre ANTES del healthcheck y con
-        # `continue-on-error: false` PERO independiente del resultado del
-        # health — antes, si el health reportaba unhealthy (503), curl -fsS
-        # abortaba el job de GitHub y ESTE paso nunca corría: los jobs
-        # completados retenidos (deleteJobOnComplete:false, input con el CSV
-        # completo) acumulaban indefinidamente justo cuando la cola estaba
-        # enferma (el peor momento). Retenciones: completados >24h (sobra
-        # para el polling del import), fallidos >30d (análisis post-mortem).
+        # PR 1.3 (N4): if: always() — la purga es necesaria JUSTO cuando la
+        # cola está enferma (step 1 en 500): antes, el encadenamiento al éxito
+        # del step 1 dejaba acumular los completados retenidos
+        # (deleteJobOnComplete:false, input con el CSV completo) en el peor
+        # momento. Review Devin #96 ronda 2 mantiene: retenciones completados
+        # >24h (sobra para el polling del import), fallidos >30d (post-mortem).
+        if: always()
         run: |
           curl -fsS -m 120 -X POST \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
@@ -35,9 +68,12 @@ jobs:
       - name: Verificar salud de la cola (auditoria 2026-09-04, P1-13)
         # 503 si hay jobs fallidos o un pendiente con >30min: falla el step ->
         # email de GitHub (la unica alerta push disponible sin infra extra).
-        # Devin #96 r2: el healthcheck ahora EXCLUYE completados (el
-        # pendiente real = sin completedAt), así que no hay falso unhealthy
-        # por los exitosos retenidos.
+        # PR 1.3 (N4): if: always() — la alerta debe dispararse incluso (y
+        # sobre todo) cuando el step 1 falló; antes solo corría si 1 y 2
+        # tuvieron éxito, silenciando la señal justo en el incidente.
+        # Devin #96 r2: el healthcheck EXCLUYE completados (el pendiente real
+        # = sin completedAt), sin falso unhealthy por los exitosos retenidos.
+        if: always()
         run: |
           curl -fsS -m 60 \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
