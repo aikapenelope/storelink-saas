@@ -13,7 +13,11 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
-import { normalizePaymentDetails, validateDeliveryTypeEnum, validateMethodKeyEnum, validateCurrencyCode } from '@/lib/checkout-sanitize';
+// paymentDetails se normaliza en 0bis con normalizePaymentDetails (whitelist
+// de claves + force de paymentStatus). Las validaciones de enums de
+// deliveryType/methodKey/currency viven ahora en el boundary extraído
+// (src/lib/checkout-validation.ts) junto al resto de whitelists fail-fast.
+import { normalizePaymentDetails } from '@/lib/checkout-sanitize';
 import {
   buildIdempotencyKey,
   releaseCheckoutReservation,
@@ -26,65 +30,19 @@ import { applyCustomerCrmDelta, claimOrderCrmCounted } from '@/collections/Order
 import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
-
-export interface CheckoutCustomerData {
-  name: string;
-  phone: string;
-  email?: string;
-  address?: string;
-  paymentMethod?: string;
-  notes?: string;
-  deliveryType?: 'delivery' | 'pickup';
-  deliveryDetails?: {
-    municipality?: string;
-    residenceZone?: string;
-    buildingHouse?: string;
-    referencePoint?: string;
-  };
-  paymentDetails?: {
-    methodKey?: 'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos';
-    referenceNumber?: string;
-    issuingBank?: string;
-    issuingPhone?: string;
-    senderName?: string;
-    senderEmail?: string;
-    binanceSenderId?: string;
-    paymentStatus?: 'pending_verification' | 'verified' | 'rejected';
-  };
-}
-
-export interface CheckoutItemData {
-  sku: string;
-  title: string;
-  quantity: number;
-  price: number;
-  /** Nombres de las opciones de modificadores seleccionadas (resueltas en el servidor) */
-  modifiers?: string[];
-}
-
-export interface CheckoutRequest {
-  tenantSlug: string;
-  storeName: string;
-  currency: string;
-  exchangeRateVES?: number;
-  showVES?: boolean;
-  customer: CheckoutCustomerData;
-  items: CheckoutItemData[];
-  // Anti-abuso Sprint 5: el nonce lo emite el storefront al renderizar y las
-  // trampas de honeypot/tiempo las rellena el carrito. Sin estos campos el
-  // pedido se rechaza con error genérico.
-  checkoutNonce: string;
-  honeypotWebsite?: string;
-  formRenderedAtMs?: number;
-  /**
-   * Review Devin #74: token de intención del checkout generado por el carrito
-   * (crypto.randomUUID). Estable durante un intento (sobrevive reintentos de
-   * transporte del mismo body) y distinto en cada compra nueva. Opcional y
-   * sanitizado en el servidor: si falta o es inválido, la idempotencia cae al
-   * fingerprint de contenido.
-   */
-  idempotencyToken?: string;
-}
+// PR 4.3 + flags Devin #116 r3: tipos y boundary de validación extraídos a
+// src/lib/checkout-validation.ts — normalizan el texto del comprador UNA vez
+// (cierra «Whitespace bypasses boundary text caps») y reconstruyen la
+// dirección de pickup server-side (cierra «Pickup configuration blocks
+// valid checkout»). La Server Action sigue siendo el orquestador.
+import {
+  buildPickupAddress,
+  normalizeCheckoutCustomer,
+  validateCheckoutInput,
+  type CheckoutCustomerData,
+  type CheckoutItemData,
+  type CheckoutRequest,
+} from '@/lib/checkout-validation';
 
 export interface CheckoutResponse {
   success: boolean;
@@ -117,118 +75,6 @@ export interface CheckoutResponse {
 // (un solo find), limita también el radio de la query y evita carritos
 // gigantes usados como DoS de latencia sin afectar la compra normal.
 // Única fuente canónica: src/lib/constants.ts (antes estaba duplicado aquí).
-
-/**
- * Validación runtime estricta en la frontera del Server Action
- */
-function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: false; error: string } {
-  const { tenantSlug, customer, items } = request;
-
-  if (!tenantSlug || typeof tenantSlug !== 'string' || tenantSlug.trim().length === 0) {
-    return { ok: false, error: 'Identificador de tienda inválido' };
-  }
-
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return { ok: false, error: 'El carrito está vacío' };
-  }
-
-  if (items.length > MAX_CHECKOUT_ITEMS) {
-    return { ok: false, error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).` };
-  }
-
-  if (!customer || typeof customer !== 'object') {
-    return { ok: false, error: 'Datos del cliente incompletos' };
-  }
-
-  const name = customer.name?.trim();
-  const phone = customer.phone?.trim();
-  const email = customer.email?.trim();
-
-  if (!name || !phone || !email) {
-    return { ok: false, error: 'Por favor completa el nombre, teléfono y correo de contacto' };
-  }
-
-  // Validación básica de formato de correo
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return { ok: false, error: 'Por favor introduce un correo electrónico válido' };
-  }
-
-  // PR 4 (auditoría 2026-09-07, A6): whitelists de entrada — fail-fast ANTES
-  // de pricing/PDF/R2. Payload también rechazaría el deliveryType inválido
-  // (validación automática de selects), pero para entonces el PDF ya habría
-  // sido subido a R2 (huérfano + cuota quemada por cada intento provocable).
-  const deliveryTypeError = validateDeliveryTypeEnum(customer.deliveryType);
-  if (deliveryTypeError) return { ok: false, error: deliveryTypeError };
-
-  const methodKeyError = validateMethodKeyEnum(customer.paymentDetails?.methodKey);
-  if (methodKeyError) return { ok: false, error: methodKeyError };
-
-  const currencyError = validateCurrencyCode(request.currency);
-  if (currencyError) return { ok: false, error: currencyError };
-
-  // PR 4.3 (plan sprints 2026-09-09, H-3): cotas de texto en el boundary —
-  // mismas longitudes que los maxLength de Orders.ts (la colección valida
-  // su schema, pero aquí el rechazo es fail-fast: un string de MB muere
-  // ANTES de guards/pricing/PDF, sin quemar efectos). El admin/REST queda
-  // cubierto por el schema; el checkout anónimo por esta doble capa.
-  if (typeof name === 'string' && name.length > 120) {
-    return { ok: false, error: 'El nombre es demasiado largo' };
-  }
-  if (typeof phone === 'string' && phone.length > 40) {
-    return { ok: false, error: 'El teléfono es demasiado largo' };
-  }
-  if (typeof email === 'string' && email.length > 200) {
-    return { ok: false, error: 'El correo es demasiado largo' };
-  }
-  // PR 4.3 (H-3): `address` es la dirección FORMATeada que el drawer arma
-  // concatenando residenceZone(200) + buildingHouse(200) + municipality(120)
-  // + etiquetas (~43) → peor caso ~563 chars. La cota de 600 cubre ese
-  // agregado legítimo sin truncar deliveries reales (review Devin #116:
-  // "Valid delivery fields exceed aggregate cap"). Los campos fuente
-  // (deliveryDetails.*) siguen acotados por separado.
-  const address = customer.address?.trim();
-  if (address !== undefined && address.length > 600) {
-    return { ok: false, error: 'La dirección es demasiado larga' };
-  }
-  const notes = customer.notes?.trim();
-  if (notes !== undefined && notes.length > 1000) {
-    return { ok: false, error: 'Las notas son demasiado largas' };
-  }
-  const municipality = customer.deliveryDetails?.municipality;
-  if (typeof municipality === 'string' && municipality.trim().length > 120) {
-    return { ok: false, error: 'Datos de entrega inválidos' };
-  }
-  // PR 4.3 (H-3): los subcampos estructurados de entrega también se acotan
-  // en el boundary (mismas cotas que el schema) para que el fail-fast cubra
-  // a TODO writer anónimo — antes solo municipality estaba acotado aquí y
-  // residenceZone/buildingHouse/referencePoint se rechazaban recién en el
-  // payload.create, tras guards/pricing/tasa (review Devin #116: "Delivery
-  // subfields remain unbounded").
-  const residenceZone = customer.deliveryDetails?.residenceZone;
-  if (typeof residenceZone === 'string' && residenceZone.trim().length > 200) {
-    return { ok: false, error: 'Datos de entrega inválidos' };
-  }
-  const buildingHouse = customer.deliveryDetails?.buildingHouse;
-  if (typeof buildingHouse === 'string' && buildingHouse.trim().length > 200) {
-    return { ok: false, error: 'Datos de entrega inválidos' };
-  }
-  const referencePoint = customer.deliveryDetails?.referencePoint;
-  if (typeof referencePoint === 'string' && referencePoint.trim().length > 300) {
-    return { ok: false, error: 'Datos de entrega inválidos' };
-  }
-  // PR 4.3 (H-3): `paymentMethod` es la ETIQUETA agregada que el drawer arma
-  // incrustando emisor + referencia (cada uno acotado a 200 en
-  // checkout-sanitize) → peor caso ~440 chars. La cota de 500 cubre el
-  // agregado legítimo (review Devin #116: «Valid payment labels exceed new
-  // cap»). Los campos fuente viven en paymentDetails (acotados por separado).
-  const paymentMethodLabel = customer.paymentMethod;
-  if (typeof paymentMethodLabel === 'string' && paymentMethodLabel.trim().length > 500) {
-    return { ok: false, error: 'Datos de pago inválidos' };
-  }
-
-  return { ok: true };
-}
 
 /**
  * Verificación de precios, variantes, modificadores y stock desde la base de datos (server-side).
@@ -828,17 +674,27 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     const { tenantSlug, storeName, showVES, items } = request;
 
     // ------------------------------------------------------------------
-    // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1)
+    // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1 +
+    // flag Devin #116 r3 «Whitespace bypasses boundary text caps»)
     // ------------------------------------------------------------------
     // El comprador anónimo es un writer NO confiable: `paymentStatus` se
     // fuerza a 'pending_verification' y el resto de paymentDetails pasa por
     // whitelist de claves. La fuerza vive aquí y NO en hooks de colección
     // porque el admin panel comparte la colección y ahí el comercio SÍ puede
     // marcar 'verified' legítimamente al conciliar el pago.
-    const customer: CheckoutCustomerData = {
+    //
+    // Además, TODO el texto del comprador se normaliza UNA vez aquí
+    // (normalizeCheckoutCustomer: trim — la cota NO trunca, el boundary
+    // rechaza el exceso con mensaje visible): esta copia es la que consumen
+    // idempotencia, payload.create, PDF, WhatsApp y CRM. Antes el boundary
+    // medía trim().length pero la orden persistía el string SIN trim →
+    // "Casa 4" + 10k espacios pasaba el boundary y Payload lo rechazaba
+    // tras pricing/tasa (flag Devin #116 r3). Ahora la cota mide
+    // EXACTAMENTE lo que se persiste.
+    const customer: CheckoutCustomerData = normalizeCheckoutCustomer({
       ...request.customer,
       paymentDetails: normalizePaymentDetails(request.customer?.paymentDetails),
-    };
+    });
 
     // ------------------------------------------------------------------
     // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP
@@ -858,7 +714,19 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     // 1. Boundary Input Validation (Zod-like schema enforcement)
     // ------------------------------------------------------------------
-    const validation = validateCheckoutInput(request);
+    // Recibe el customer NORMALIZADO (0bis): las cotas de
+    // validateCheckoutInput miden la MISMA string que se persistirá, sin
+    // bypass por whitespace. La implementación vive en
+    // src/lib/checkout-validation.ts (extraída para testearla sin levantar
+    // la Server Action). MAX_CHECKOUT_ITEMS se valida aquí porque es la
+    // única fuente canónica (src/lib/constants.ts) importada por la Action.
+    if (items.length > MAX_CHECKOUT_ITEMS) {
+      return {
+        success: false,
+        error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).`,
+      };
+    }
+    const validation = validateCheckoutInput({ ...request, customer, items });
     if (!validation.ok) {
       return { success: false, error: validation.error };
     }
@@ -885,6 +753,27 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
 
     if (!tenantDoc.whatsappPhone) {
       return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
+    }
+
+    // ------------------------------------------------------------------
+    // 2bis. Dirección de pickup RECONSTRUIDA server-side (flag Devin #116
+    // r3: «Pickup configuration blocks valid checkout»)
+    // ------------------------------------------------------------------
+    // Antes el drawer armaba la dirección pickup desde pickupConfig del
+    // tenant (locationAddress/schedule SIN cotas) y el boundary la validaba
+    // contra maxLength 600: una config larga del comercio bloqueaba TODOS
+    // sus checkouts pickup aunque el comprador no ingresara dirección — y
+    // además dejaba al comprador ESPECIFICAR la "dirección" de retiro
+    // (spoofeable). Ahora el servidor la construye desde tenantDoc (fuente
+    // confiable, con defaults si la config falta — mismo texto que el drawer
+    // mostraba) y el `address` del request se ignora por completo en pickup.
+    // En delivery el `address` del comprador (ya normalizado y acotado en
+    // 0bis/1) se conserva tal cual.
+    if (customer.deliveryType === 'pickup') {
+      customer.address = buildPickupAddress(
+        { name: tenantDoc.name },
+        tenantDoc.pickupConfig as { locationAddress?: string | null; schedule?: string | null } | undefined,
+      );
     }
 
     // PR 4.3 (plan sprints 2026-09-09, H-4/H-5): anclajes al tenant. Los
