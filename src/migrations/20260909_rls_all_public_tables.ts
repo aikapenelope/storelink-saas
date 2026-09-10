@@ -134,41 +134,17 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
     );
   }
 
-  // NOTA: el down() solo quita lo que ESTA migración añade de forma
-  // genérica (las policies payload_server_full_access) y desactiva el RLS
-  // en las tablas public. En producción JAMÁS debe correrse (el estado
-  // seguro ES el RLS activo); existe por simetría del sistema de
-  // migraciones para BDs de test.
-  await db.execute(sql`
-    DO $$
-    DECLARE
-      t text;
-    BEGIN
-      FOR t IN
-        SELECT tablename FROM pg_tables
-        WHERE schemaname = 'public'
-          AND EXISTS (
-            SELECT 1 FROM pg_policies p
-            WHERE p.schemaname = 'public' AND p.tablename = pg_tables.tablename
-              AND p.policyname = 'payload_server_full_access'
-          )
-      LOOP
-        EXECUTE format('DROP POLICY IF EXISTS payload_server_full_access ON public.%I', t);
-      END LOOP;
-    END $$;
-  `);
-
-  await db.execute(sql`
-    DO $$
-    DECLARE
-      t text;
-    BEGIN
-      FOR t IN
-        SELECT tablename FROM pg_tables
-        WHERE schemaname = 'public' AND rowsecurity
-      LOOP
-        EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY', t);
-      END LOOP;
-    END $$;
-  `);
+  // Seguridad (review Devin #113, flag SEC «Rollback disables database access
+  // controls globally»): esta migración NO tiene un down() seguro y por eso es
+  // un NO-OP deliberado. El up() es un "ensure-all" idempotente que habilita
+  // RLS + la policy `payload_server_full_access` en CADA tabla public que aún
+  // no los tuviera; esas tablas comparten la MISMA policy y el MISMO flag
+  // `rowsecurity` con las protegidas por migraciones anteriores
+  // (20260908_rls_customers_tables) y con las 27 de producción. Un down() que
+  // "revirtiera" globalmente (DROP POLICY / DISABLE RLS sobre todas) EXPONDRÍA
+  // tablas protegidas por otras migraciones y por el estado seguro de prod.
+  // El estado seguro ES el RLS activo: deshacer un hardening de seguridad de
+  // forma global es un bug, no una reversión. El SELECT 1 documenta el no-op
+  // (mismo patrón que 20260908_jobs_reconcile_task_slug).
+  await db.execute(sql`SELECT 1`);
 }

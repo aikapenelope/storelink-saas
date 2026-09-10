@@ -416,7 +416,7 @@ d('migración RLS all-tables 20260909_rls_all_public_tables (PR 3.3, H-1)', () =
     expect(after).toEqual(before); // intacto
   }, 60000);
 
-  it('down() simétrico: guardia anti-pooler', async () => {
+  it('down() seguro: guardia anti-pooler + no-op (NO desactiva RLS)', async () => {
     const savedUri = process.env.DATABASE_URI;
     (process.env as Record<string, string | undefined>).DATABASE_URI =
       'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
@@ -428,8 +428,26 @@ d('migración RLS all-tables 20260909_rls_all_public_tables (PR 3.3, H-1)', () =
       if (savedUri === undefined) delete (process.env as Record<string, string | undefined>).DATABASE_URI;
       else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
     }
-    // NO se ejecuta el down() real aquí: dejaría la BD de test sin RLS (el
-    // estado SEGURO es el aplicado; el down() queda verificado por la
-    // guardia + simetría del patrón).
+
+    // Review Devin #113 (flag SEC «Rollback disables database access controls
+    // globally»): el down() es un NO-OP deliberado — deshacer el RLS
+    // all-tables globalmente expondría tablas protegidas por migraciones
+    // anteriores. Por conexión directa NO debe tocar nada.
+    const before = await allTablesRlsState();
+    expect(before.withoutRls).toBe(0);
+    expect(before.withoutPolicy).toBe(0);
+
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await rlsAllDown({ db: dbOf(payload) } as never);
+    } finally {
+      if (savedUri === undefined) delete (process.env as Record<string, string | undefined>).DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    const after = await allTablesRlsState();
+    expect(after).toEqual(before); // intacto
+    expect(after.withoutRls).toBe(0);
+    expect(after.withoutPolicy).toBe(0);
   }, 60000);
 });
