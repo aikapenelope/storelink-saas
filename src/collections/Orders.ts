@@ -1091,8 +1091,13 @@ export const Orders: CollectionConfig = {
           name: 'address',
           type: 'textarea',
           label: 'Dirección de Entrega',
-          // PR 4.3 (H-3): dirección legítima cabe holgada; párrafos no.
-          maxLength: 500,
+          // PR 4.3 (H-3): `address` es la dirección formateada que el drawer
+          // arma desde residenceZone(200) + buildingHouse(200) +
+          // municipality(120) + etiquetas (~43) → peor caso ~563 chars. Cota
+          // de 600 cubre el agregado legítimo (review Devin #116: "Valid
+          // delivery fields exceed aggregate cap"). Los campos fuente
+          // (deliveryDetails.*) se acotan por separado.
+          maxLength: 600,
         },
         {
           name: 'paymentMethod',

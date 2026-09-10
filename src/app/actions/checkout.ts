@@ -181,8 +181,14 @@ function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: f
   if (typeof email === 'string' && email.length > 200) {
     return { ok: false, error: 'El correo es demasiado largo' };
   }
+  // PR 4.3 (H-3): `address` es la dirección FORMATeada que el drawer arma
+  // concatenando residenceZone(200) + buildingHouse(200) + municipality(120)
+  // + etiquetas (~43) → peor caso ~563 chars. La cota de 600 cubre ese
+  // agregado legítimo sin truncar deliveries reales (review Devin #116:
+  // "Valid delivery fields exceed aggregate cap"). Los campos fuente
+  // (deliveryDetails.*) siguen acotados por separado.
   const address = customer.address?.trim();
-  if (address !== undefined && address.length > 500) {
+  if (address !== undefined && address.length > 600) {
     return { ok: false, error: 'La dirección es demasiado larga' };
   }
   const notes = customer.notes?.trim();
@@ -191,6 +197,24 @@ function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: f
   }
   const municipality = customer.deliveryDetails?.municipality;
   if (typeof municipality === 'string' && municipality.trim().length > 120) {
+    return { ok: false, error: 'Datos de entrega inválidos' };
+  }
+  // PR 4.3 (H-3): los subcampos estructurados de entrega también se acotan
+  // en el boundary (mismas cotas que el schema) para que el fail-fast cubra
+  // a TODO writer anónimo — antes solo municipality estaba acotado aquí y
+  // residenceZone/buildingHouse/referencePoint se rechazaban recién en el
+  // payload.create, tras guards/pricing/tasa (review Devin #116: "Delivery
+  // subfields remain unbounded").
+  const residenceZone = customer.deliveryDetails?.residenceZone;
+  if (typeof residenceZone === 'string' && residenceZone.trim().length > 200) {
+    return { ok: false, error: 'Datos de entrega inválidos' };
+  }
+  const buildingHouse = customer.deliveryDetails?.buildingHouse;
+  if (typeof buildingHouse === 'string' && buildingHouse.trim().length > 200) {
+    return { ok: false, error: 'Datos de entrega inválidos' };
+  }
+  const referencePoint = customer.deliveryDetails?.referencePoint;
+  if (typeof referencePoint === 'string' && referencePoint.trim().length > 300) {
     return { ok: false, error: 'Datos de entrega inválidos' };
   }
   const paymentMethodLabel = customer.paymentMethod;
@@ -1059,7 +1083,15 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           })),
           totalAmount: total,
           currency: tenantCurrency,
-          exchangeRateVES: vesRate ?? undefined,
+          // PR 4.3 (H-5): el snapshot VES SOLO se persiste cuando la línea Bs.
+          // efectivamente aplica (showVESEffective = tenantShowVES + tasa). Si
+          // el tenant deshabilitó VES, exchangeRateVES queda undefined y los
+          // jobs asíncronos (order-created.ts) — que derivan showVES de
+          // `exchangeRateVES > 0` para el email y el total Bs para Trello —
+          // tampoco muestran bolívares. Sin este gate, un tenant con
+          // branding.showVES=false igual recibía Bs en el email/Trello
+          // (review Devin #116: "Disabled VES survives asynchronous dispatch").
+          exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
         },
       });
       // La orden EXISTE: a partir de aquí la reserva de idempotencia ya no se

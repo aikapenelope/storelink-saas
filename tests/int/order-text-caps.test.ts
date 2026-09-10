@@ -42,7 +42,10 @@ afterAll(async () => {
   await payload.destroy();
 });
 
-const baseOrder = (overrides: Record<string, unknown>) => ({
+const baseOrder = (
+  customerOverrides: Record<string, unknown> = {},
+  topLevelOverrides: Record<string, unknown> = {},
+) => ({
   tenant: tenantId,
   status: 'pending',
   orderNumber: `COTAS-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
@@ -50,11 +53,12 @@ const baseOrder = (overrides: Record<string, unknown>) => ({
     name: 'Cliente Cotas',
     phone: '+584121234567',
     email: 'cotas@test.local',
-    ...overrides,
+    ...customerOverrides,
   },
   items: [{ sku: 'X', title: 'Producto', price: 1, quantity: 1 }],
   totalAmount: 1,
   currency: 'USD',
+  ...topLevelOverrides,
 });
 
 d('cotas de texto del comprador (PR 4.3, H-3) — capa schema', () => {
@@ -68,7 +72,7 @@ d('cotas de texto del comprador (PR 4.3, H-3) — capa schema', () => {
     ).rejects.toThrow();
   });
 
-  it('rechaza address de 10k chars (maxLength 500)', async () => {
+  it('rechaza address de 10k chars (maxLength 600)', async () => {
     await expect(
       payload.create({
         collection: 'orders',
@@ -86,6 +90,60 @@ d('cotas de texto del comprador (PR 4.3, H-3) — capa schema', () => {
         data: baseOrder({ notes: 'C'.repeat(10_000) }) as never,
       })
     ).rejects.toThrow();
+  });
+
+  it('rechaza residenceZone de 10k chars (maxLength 200)', async () => {
+    await expect(
+      payload.create({
+        collection: 'orders',
+        overrideAccess: true,
+        data: baseOrder(
+          {},
+          { deliveryType: 'delivery', deliveryDetails: { residenceZone: 'Z'.repeat(10_000) } },
+        ) as never,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rechaza buildingHouse de 10k chars (maxLength 200)', async () => {
+    await expect(
+      payload.create({
+        collection: 'orders',
+        overrideAccess: true,
+        data: baseOrder(
+          {},
+          { deliveryType: 'delivery', deliveryDetails: { buildingHouse: 'E'.repeat(10_000) } },
+        ) as never,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rechaza referencePoint de 10k chars (maxLength 300)', async () => {
+    await expect(
+      payload.create({
+        collection: 'orders',
+        overrideAccess: true,
+        data: baseOrder(
+          {},
+          { deliveryType: 'delivery', deliveryDetails: { referencePoint: 'R'.repeat(10_000) } },
+        ) as never,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('acepta la dirección formateada del peor caso (~562 chars, cota 600) — no rompe delivery real', async () => {
+    // El drawer concatena residenceZone(200)+buildingHouse(200)+municipality(120)
+    // + etiquetas; la cota 500 previa habría rechazado este agregado legítimo.
+    const address = `[DELIVERY] Dirección/Zona: ${'A'.repeat(200)}, Edif/Casa: ${'B'.repeat(200)}, ${'C'.repeat(120)}`;
+    expect(address.length).toBeGreaterThan(500);
+    expect(address.length).toBeLessThanOrEqual(600);
+    const order = await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: baseOrder({ address }) as never,
+    });
+    expect(order.id).toBeDefined();
+    await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
   });
 
   it('acepta textos legítimos dentro de las cotas (no rompe pedidos reales)', async () => {
