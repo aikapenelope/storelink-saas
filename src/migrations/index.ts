@@ -25,6 +25,7 @@ import * as migration_20260908_backfill_trim_product_skus from './20260908_backf
 import * as migration_20260908_jobs_reconcile_task_slug from './20260908_jobs_reconcile_task_slug';
 import * as migration_20260908_rls_customers_tables from './20260908_rls_customers_tables';
 import * as migration_20260909_jobs_stats_schema from './20260909_jobs_stats_schema';
+import * as migration_20260909_rls_all_public_tables from './20260909_rls_all_public_tables';
 
 export const migrations = [
   {
@@ -158,5 +159,10 @@ export const migrations = [
     up: migration_20260909_jobs_stats_schema.up,
     down: migration_20260909_jobs_stats_schema.down,
     name: '20260909_jobs_stats_schema',
+  },
+  {
+    up: migration_20260909_rls_all_public_tables.up,
+    down: migration_20260909_rls_all_public_tables.down,
+    name: '20260909_rls_all_public_tables',
   },
 ];
