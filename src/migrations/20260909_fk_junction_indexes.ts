@@ -41,15 +41,23 @@ import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres';
  * mismo snapshot). Producción: tablas existen → aplica los 3.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  // 1. Guard de orden de cadena: tablas inexistentes (BD vacía sin
-  //    baseline) → no-op; el baseline crea tablas E índices juntos.
+  // 1. Idempotencia (review Devin #114, flag 1 «Production deploy cannot
+  //    start»): si los 3 índices ya existen → no-op ANTES de la guardia
+  //    anti-pooler. En producción el operador aplica el DDL por conexión
+  //    directa y registra la fila; al arrancar, prodMigrations ve los índices
+  //    presentes y NO lanza por el pooler (mismo orden que
+  //    20260909_jobs_stats_schema: idempotencia primero, pooler después).
   const check = await db.execute(sql`
-    SELECT count(*) AS existing FROM information_schema.tables
-    WHERE table_schema = 'public'
-      AND table_name IN ('customers_purchase_history', 'customers_preferences_preferred_categories')
+    SELECT count(*) AS present FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname IN (
+        'customers_purchase_history_parent_id_idx',
+        'customers_purchase_history_order_id_idx',
+        'customers_preferences_preferred_categories_parent_id_idx'
+      )
   `);
-  const row = (check as unknown as { rows?: Array<{ existing?: string | number }> })?.rows?.[0];
-  if (Number(row?.existing) < 2) {
+  const row = (check as unknown as { rows?: Array<{ present?: string | number }> })?.rows?.[0];
+  if (Number(row?.present) >= 3) {
     return;
   }
 
@@ -64,17 +72,23 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   }
 
   // 3. Conexión directa: los 3 índices del schema runtime (nombres exactos).
+  //    Guard per-tabla con to_regclass (review Devin #114, flag 2 «Partial
+  //    schemas permanently skip indexes»): si una junction table aún no existe
+  //    (BD parcial antes del baseline), las demás SÍ se indexan — ya no es
+  //    todo-o-nada como el guard anterior de conteo de tablas. CREATE INDEX es
+  //    comando de utilidad: dentro del DO se ejecuta vía EXECUTE (mismo patrón
+  //    que las migraciones RLS 20260908/20260909).
   await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS "customers_purchase_history_parent_id_idx"
-      ON "customers_purchase_history" ("_parent_id");
-  `);
-  await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS "customers_purchase_history_order_id_idx"
-      ON "customers_purchase_history" ("order_id_id");
-  `);
-  await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS "customers_preferences_preferred_categories_parent_id_idx"
-      ON "customers_preferences_preferred_categories" ("_parent_id");
+    DO $$
+    BEGIN
+      IF to_regclass('public.customers_purchase_history') IS NOT NULL THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS "customers_purchase_history_parent_id_idx" ON "customers_purchase_history" ("_parent_id")';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS "customers_purchase_history_order_id_idx" ON "customers_purchase_history" ("order_id_id")';
+      END IF;
+      IF to_regclass('public.customers_preferences_preferred_categories') IS NOT NULL THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS "customers_preferences_preferred_categories_parent_id_idx" ON "customers_preferences_preferred_categories" ("_parent_id")';
+      END IF;
+    END $$;
   `);
 }
 
@@ -89,7 +103,13 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
     );
   }
 
-  await db.execute(sql`DROP INDEX IF EXISTS "customers_purchase_history_parent_id_idx";`);
-  await db.execute(sql`DROP INDEX IF EXISTS "customers_purchase_history_order_id_idx";`);
-  await db.execute(sql`DROP INDEX IF EXISTS "customers_preferences_preferred_categories_parent_id_idx";`);
+  // Integridad de schema (review Devin #114, flag 3 «Rollback removes
+  // pre-existing indexes»): los 3 índices los define el schema runtime (el
+  // adaptador drizzle los genera en push:true y el baseline los incluye en su
+  // CREATE), NO esta migración — esta solo los backfillea en producción donde
+  // faltan. Dropearlos en un rollback eliminaría estado definido por el schema
+  // → drift (el próximo push/migrate los regeneraría y en una BD del baseline
+  // rompería su snapshot). Por eso el down() es un NO-OP deliberado (mismo
+  // criterio que 20260909_rls_all_public_tables).
+  await db.execute(sql`SELECT 1`);
 }

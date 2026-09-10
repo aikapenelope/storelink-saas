@@ -102,7 +102,7 @@ d('migración índices FK 20260909_fk_junction_indexes (PR 3.5, V7)', () => {
     expect(await fkIndexesState()).toBe(3);
   }, 60000);
 
-  it('down() simétrico: guardia anti-pooler + reversa limpia', async () => {
+  it('down() seguro: guardia anti-pooler + no-op (NO dropea índices del schema)', async () => {
     const savedUri = process.env.DATABASE_URI;
     (process.env as Record<string, string | undefined>).DATABASE_URI =
       'postgresql://postgres.xyz:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
@@ -115,11 +115,25 @@ d('migración índices FK 20260909_fk_junction_indexes (PR 3.5, V7)', () => {
       else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
     }
 
-    await fkIdxDown({ db: dbOf(payload) } as never);
-    expect(await fkIndexesState()).toBe(0);
+    // Review Devin #114 (flag 3 «Rollback removes pre-existing indexes»): los 3
+    // índices los define el schema runtime (push:true / baseline), NO esta
+    // migración — el down() es un NO-OP y por conexión directa NO debe
+    // dropearlos.
+    const before = await fkIndexesState();
+    expect(before).toBe(3);
 
-    // Restaurar (la suite completa puede depender de los índices del schema
-    // de test — push:true los recrearía, pero idempotencia ante todo).
+    (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
+    try {
+      await fkIdxDown({ db: dbOf(payload) } as never);
+    } finally {
+      if (savedUri === undefined) delete (process.env as Record<string, string | undefined>).DATABASE_URI;
+      else (process.env as Record<string, string | undefined>).DATABASE_URI = savedUri;
+    }
+
+    expect(await fkIndexesState()).toBe(3); // intacto (no-op)
+
+    // Restaurar el estado del schema de test (aunque el no-op no lo altera,
+    // la suite siguiente podría partir del estado base).
     (process.env as Record<string, string | undefined>).DATABASE_URI = DIRECT_URI;
     await fkIdxUp({ db: dbOf(payload) } as never);
     expect(await fkIndexesState()).toBe(3);
