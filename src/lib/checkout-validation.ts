@@ -107,6 +107,7 @@ export const CHECKOUT_TEXT_LIMITS = {
   referencePoint: 300,
 } as const;
 
+
 /**
  * Normalización UNICA del texto del comprador: trim del string que se
  * persiste. La cota se mide SOBRE el valor normalizado (el mismo que ve

@@ -720,7 +720,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // src/lib/checkout-validation.ts (extraída para testearla sin levantar
     // la Server Action). MAX_CHECKOUT_ITEMS se valida aquí porque es la
     // única fuente canónica (src/lib/constants.ts) importada por la Action.
-    if (items.length > MAX_CHECKOUT_ITEMS) {
+    if (Array.isArray(items) && items.length > MAX_CHECKOUT_ITEMS) {
       return {
         success: false,
         error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).`,
