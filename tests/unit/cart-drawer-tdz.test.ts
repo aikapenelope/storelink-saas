@@ -24,18 +24,23 @@ vi.mock('next/navigation', () => ({
 const { renderToString } = await import('react-dom/server');
 const { CartDrawer } = await import('../../src/components/cart-drawer');
 
-const baseProps = {
+import type { CartDrawerProps } from '../../src/components/cart-drawer';
+
+const baseProps: CartDrawerProps = {
   isOpen: true,
   onClose: () => {},
   items: [
     {
       id: 'p1',
-      name: 'Producto Test',
+      sku: 'TEST-SKU',
+      title: 'Producto Test',
       price: 10,
+      stockStatus: 'in_stock',
       quantity: 2,
     },
   ],
   storeName: 'Tienda Test',
+  whatsappPhone: '584140000000',
   tenantSlug: 'test-tenant',
   checkoutNonce: 'nonce-test',
   pickupConfig: { locationAddress: 'Sede', schedule: 'L-V', estimatedTime: '20 min' },

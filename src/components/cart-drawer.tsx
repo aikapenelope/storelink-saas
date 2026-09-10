@@ -44,7 +44,7 @@ export interface CartItem extends ProductItem {
   quantity: number;
 }
 
-interface CartDrawerProps {
+export interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
