@@ -38,11 +38,23 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
 
   // 4. Crear tablas hijas que Payload espera
   await db.execute(sql`CREATE TABLE IF NOT EXISTS "customers_purchase_history" ("_order" integer NOT NULL, "_parent_id" integer NOT NULL, "id" varchar NOT NULL, "order_id_id" integer, "amount" numeric, "date" timestamptz, "items_summary" varchar, "delivery_type" "enum_customers_purchase_history_delivery_type", CONSTRAINT "customers_purchase_history_pkey" PRIMARY KEY ("id"));`);
-  await db.execute(sql`ALTER TABLE "customers_purchase_history" ADD CONSTRAINT "customers_purchase_history_order_id_id_orders_id_fk" FOREIGN KEY ("order_id_id") REFERENCES "orders"("id") ON DELETE SET NULL;`);
-  await db.execute(sql`ALTER TABLE "customers_purchase_history" ADD CONSTRAINT "customers_purchase_history_parent_id_fk" FOREIGN KEY ("_parent_id") REFERENCES "customers"("id") ON DELETE CASCADE;`);
+  // PR 3.2 (plan sprints 2026-09-09, decisión del dueño): DO-block
+  // idempotente — misma definición; sobre BD reconstruida por el baseline
+  // (20260909) el constraint ya existe (el schema actual lo incluye) y el
+  // ADD desnudo explotaba con "already exists". Producción jamás re-correra
+  // este up() (fila registrada en payload_migrations) — cambio puramente
+  // defensivo para el arranque desde BD vacía.
+  await db.execute(sql`DO $$ BEGIN
+    ALTER TABLE "customers_purchase_history" ADD CONSTRAINT "customers_purchase_history_order_id_id_orders_id_fk" FOREIGN KEY ("order_id_id") REFERENCES "orders"("id") ON DELETE SET NULL;
+  EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+  await db.execute(sql`DO $$ BEGIN
+    ALTER TABLE "customers_purchase_history" ADD CONSTRAINT "customers_purchase_history_parent_id_fk" FOREIGN KEY ("_parent_id") REFERENCES "customers"("id") ON DELETE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN null; END $$;`);
 
   await db.execute(sql`CREATE TABLE IF NOT EXISTS "customers_preferences_preferred_categories" ("_order" integer NOT NULL, "_parent_id" integer NOT NULL, "id" varchar NOT NULL, "category" varchar, CONSTRAINT "customers_preferences_preferred_categories_pkey" PRIMARY KEY ("id"));`);
-  await db.execute(sql`ALTER TABLE "customers_preferences_preferred_categories" ADD CONSTRAINT "customers_preferences_preferred_categories_parent_id_fk" FOREIGN KEY ("_parent_id") REFERENCES "customers"("id") ON DELETE CASCADE;`);
+  await db.execute(sql`DO $$ BEGIN
+    ALTER TABLE "customers_preferences_preferred_categories" ADD CONSTRAINT "customers_preferences_preferred_categories_parent_id_fk" FOREIGN KEY ("_parent_id") REFERENCES "customers"("id") ON DELETE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN null; END $$;`);
 
   // 5. Backfill: preferences JSONB → columnas aplanadas
   await db.execute(sql`UPDATE "customers" SET "preferences_preferred_payment_method" = "preferences"->>'preferredPaymentMethod', "preferences_preferred_delivery_type" = CASE WHEN "preferences"->>'preferredDeliveryType' = 'delivery' THEN 'delivery'::"enum_customers_preferences_preferred_delivery_type" WHEN "preferences"->>'preferredDeliveryType' = 'pickup' THEN 'pickup'::"enum_customers_preferences_preferred_delivery_type" ELSE 'none'::"enum_customers_preferences_preferred_delivery_type" END, "preferences_average_order_value" = ("preferences"->>'averageOrderValue')::numeric WHERE "preferences" IS NOT NULL AND "preferences" != '{}'::jsonb AND "preferences" ? 'preferredPaymentMethod';`);

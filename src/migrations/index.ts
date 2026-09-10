@@ -1,3 +1,4 @@
+import * as migration_20260909_baseline_schema from './20260909_baseline_schema';
 import * as migration_20260819_add_theme_emailconfig_variants_modifiers from './20260819_add_theme_emailconfig_variants_modifiers';
 import * as migration_20260819_v2_pickup_payment_delivery from './20260819_v2_pickup_payment_delivery';
 import * as migration_20260820_add_media_tenant_isolation from './20260820_add_media_tenant_isolation';
@@ -26,6 +27,11 @@ import * as migration_20260908_rls_customers_tables from './20260908_rls_custome
 import * as migration_20260909_jobs_stats_schema from './20260909_jobs_stats_schema';
 
 export const migrations = [
+  {
+    up: migration_20260909_baseline_schema.up,
+    down: migration_20260909_baseline_schema.down,
+    name: '20260909_baseline_schema',
+  },
   {
     up: migration_20260819_add_theme_emailconfig_variants_modifiers.up,
     down: migration_20260819_add_theme_emailconfig_variants_modifiers.down,

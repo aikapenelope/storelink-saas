@@ -53,15 +53,35 @@ let chainBootstrapped = false;
 let skippedNoBaseline = false;
 
 /**
- * Baseline real = la primera migración SOLO crea tablas (sin ALTER sobre
- * tablas que asume preexistentes). 20260819_add_theme… mezcla ALTER tenants
- * con CREATE TABLE IF NOT EXISTS de tablas hijas, así que un chequeo solo de
- * CREATE TABLE daría falso positivo.
+ * Baseline real = la primera migración crea las tablas que luego altera.
+ * 20260819_add_theme… mezclaba ALTER tenants con CREATE TABLE IF NOT EXISTS
+ * de tablas hijas → un chequeo solo de CREATE TABLE daba falso positivo.
+ *
+ * PR 3.2 (plan sprints 2026-09-09): el baseline generado por el core
+ * (20260909_baseline_schema) contiene ALTER TABLE ADD CONSTRAINT legítimos
+ * (PKs/FKs que drizzle-kit añade tras crear las tablas) — el chequeo
+ * anterior (ningún ALTER) los rechazaba. Semántica correcta: es baseline
+ * si TODA tabla que la primera migración ALTERa fue creada por ella misma
+ * (ALTER sobre tabla autogenerada = parte del CREATE, no dependencia
+ * externa).
  */
 async function chainHasBaseline(): Promise<boolean> {
   const { migrations } = await import('../../src/migrations');
   const firstUp = String(migrations[0]?.up ?? '');
-  return /create\s+table/i.test(firstUp) && !/alter\s+table/i.test(firstUp);
+  if (!/create\s+table/i.test(firstUp)) return false;
+
+  // Tablas creadas por la primera migración (CREATE TABLE "nombre").
+  const created = new Set<string>();
+  for (const m of firstUp.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?"([a-z_]+)"/gi)) {
+    created.add(m[1]);
+  }
+
+  // Todo ALTER TABLE debe recaer sobre una tabla del propio set (o ser
+  // ALTER TABLE ... ADD CONSTRAINT sobre las mismas).
+  for (const m of firstUp.matchAll(/alter\s+table\s+(?:only\s+)?"?([a-z_]+)"?/gi)) {
+    if (!created.has(m[1])) return false;
+  }
+  return true;
 }
 
 /** Evita que un socket de pool muerto por el DROP WITH FORCE tumbe el proceso. */
@@ -259,4 +279,60 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
     expect(metaRes.rows.length).toBe(1);
     expect(statsRes.rows.length).toBe(1);
   });
+
+  // PR 3.2 (review Devin #112, 🔴 "Rollback wipes the production database"):
+  // el baseline es RETROACTIVO — en producción up() early-returnó y quedó
+  // registrado sin haber creado nada. down() debe ser ownership-aware:
+  // no-op sobre schema pre-existente (sin sentinel) y drop completo solo
+  // sobre BDs que el baseline realmente bootstrapped (con sentinel), sin
+  // tocar payload_migrations (el registry que el framework de migraciones
+  // usa para trackear este mismo rollback).
+  it('PR 3.2: down() es NO-OP sobre schema pre-existente (sin sentinel)', async (ctx) => {
+    if (skippedNoBaseline) return ctx.skip();
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const { down } = await import('../../src/migrations/20260909_baseline_schema');
+    const drizzle = payload.db.drizzle as unknown as { execute: (q: unknown) => Promise<unknown> };
+
+    // Simula producción: el schema existe (creado por las migraciones
+    // originales) pero SIN el sentinel — el baseline early-returnó y jamás
+    // lo creó. down() NO debe dropear datos que no le pertenecen.
+    await drizzle.execute(sql`DROP TABLE IF EXISTS "_baseline_schema_owned"`);
+
+    await down({ db: drizzle } as never);
+
+    // tenants sigue existiendo: down() fue no-op.
+    const tenantsRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+    `);
+    expect(Number((tenantsRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(1);
+
+    // Restaurar el sentinel: el siguiente test (rollback de BD bootstrapped)
+    // necesita el estado "owned" que le corresponde.
+    await drizzle.execute(sql`CREATE TABLE IF NOT EXISTS "_baseline_schema_owned" ("owned" boolean NOT NULL DEFAULT true)`);
+  }, 60000);
+
+  it('PR 3.2: down() sobre BD bootstrapped dropea el schema PERO preserva payload_migrations', async (ctx) => {
+    if (skippedNoBaseline) return ctx.skip();
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const { down } = await import('../../src/migrations/20260909_baseline_schema');
+    const drizzle = payload.db.drizzle as unknown as { execute: (q: unknown) => Promise<unknown> };
+
+    await down({ db: drizzle } as never);
+
+    // tenants (y el resto del schema de aplicación) se dropeó.
+    const tenantsRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+    `);
+    expect(Number((tenantsRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(0);
+
+    // El registry de migraciones SOBREVIVE (el framework lo usa para
+    // trackear este mismo rollback).
+    const migRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'payload_migrations'
+    `);
+    expect(Number((migRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(1);
+  }, 60000);
 });
