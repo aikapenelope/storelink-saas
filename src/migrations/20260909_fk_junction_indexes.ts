@@ -41,23 +41,51 @@ import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres';
  * mismo snapshot). Producción: tablas existen → aplica los 3.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  // 1. Idempotencia (review Devin #114, flag 1 «Production deploy cannot
-  //    start»): si los 3 índices ya existen → no-op ANTES de la guardia
-  //    anti-pooler. En producción el operador aplica el DDL por conexión
-  //    directa y registra la fila; al arrancar, prodMigrations ve los índices
-  //    presentes y NO lanza por el pooler (mismo orden que
-  //    20260909_jobs_stats_schema: idempotencia primero, pooler después).
+  // 1. Idempotencia + validez (review Devin #114, flags «Production deploy
+  //    cannot start» y «Invalid indexes pass completion check»): verifica que
+  //    los 3 índices existen Y son VÁLIDOS (pg_index.indisvalid) ANTES de la
+  //    guardia anti-pooler. `pg_indexes` por nombre es insuficiente: un
+  //    CREATE INDEX CONCURRENTLY fallido deja un índice inválido con el mismo
+  //    nombre que contaría como "presente", y `CREATE INDEX IF NOT EXISTS` no
+  //    puede repararlo. Los nombres son deterministas (Payload:
+  //    <tabla>_<columna>_idx), así que nombre ⇒ tabla+columna esperadas.
   const check = await db.execute(sql`
-    SELECT count(*) AS present FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname IN (
-        'customers_purchase_history_parent_id_idx',
-        'customers_purchase_history_order_id_idx',
-        'customers_preferences_preferred_categories_parent_id_idx'
-      )
+    SELECT
+      (SELECT count(*) FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND i.indisvalid
+           AND c.relname IN (
+             'customers_purchase_history_parent_id_idx',
+             'customers_purchase_history_order_id_idx',
+             'customers_preferences_preferred_categories_parent_id_idx'
+           )) AS valid_present,
+      (SELECT count(*) FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND NOT i.indisvalid
+           AND c.relname IN (
+             'customers_purchase_history_parent_id_idx',
+             'customers_purchase_history_order_id_idx',
+             'customers_preferences_preferred_categories_parent_id_idx'
+           )) AS invalid_present
   `);
-  const row = (check as unknown as { rows?: Array<{ present?: string | number }> })?.rows?.[0];
-  if (Number(row?.present) >= 3) {
+  const row = (
+    check as unknown as {
+      rows?: Array<{ valid_present?: string | number; invalid_present?: string | number }>;
+    }
+  )?.rows?.[0];
+
+  const validPresent = Number(row?.valid_present);
+  const invalidPresent = Number(row?.invalid_present);
+
+  if (invalidPresent > 0) {
+    throw new Error(
+      '[INVALID_INDEX] La migración "20260909_fk_junction_indexes" detectó un índice con el nombre esperado pero INVALIDO (pg_index.indisvalid = false, típico de un CREATE INDEX CONCURRENTLY fallido). CREATE INDEX IF NOT EXISTS no puede reparar un índice inválido con el mismo nombre. Dropear el índice inválido y recrearlo por conexión directa (puerto 5432 / Supabase SQL Editor) ANTES de registrar la fila en payload_migrations.'
+    );
+  }
+
+  if (validPresent >= 3) {
     return;
   }
 
