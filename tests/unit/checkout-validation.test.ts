@@ -94,6 +94,29 @@ describe('normalizeCheckoutCustomer — flag Devin #116 «Whitespace bypasses bo
 });
 
 describe('validateCheckoutInput — cotas espejo del schema de Orders', () => {
+  it('items null/undefined: shape-check ANTES que la cota — error controlado, no TypeError (flag Devin #116 r4)', () => {
+    const req = baseRequest();
+    // @ts-expect-error: caso hostil real — el request puede traer cualquier shape
+    req.items = null;
+    expect(validateCheckoutInput(req)).toEqual({ ok: false, error: 'El carrito está vacío' });
+    // @ts-expect-error: ídem sin el campo
+    delete req.items;
+    expect(validateCheckoutInput(req)).toEqual({ ok: false, error: 'El carrito está vacío' });
+  });
+
+  it('carrito sobre la cota (MAX_CHECKOUT_ITEMS de src/lib/constants.ts) → rechazo fail-fast', () => {
+    const req = baseRequest();
+    req.items = Array.from({ length: 31 }, () => ({
+      sku: 'X',
+      title: 'Producto',
+      quantity: 1,
+      price: 1,
+    }));
+    const res = validateCheckoutInput(req);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('Demasiados artículos');
+  });
+
   it('address delivery de 10k chars (ya normalizada excede 600) → rechazo fail-fast', () => {
     const res = pipeline({ address: 'A'.repeat(10_000) });
     expect(res).toEqual({ ok: false, error: 'La dirección es demasiado larga' });
