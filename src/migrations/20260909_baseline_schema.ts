@@ -589,9 +589,39 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "image_url" varchar;
   `)
+
+  // 4. SENTINEL de ownership (review Devin #112): marca que ESTE baseline
+  //    creó el schema de cero. En producción el early-return de arriba no
+  //    llega hasta aquí → el sentinel SOLO existe en BDs realmente
+  //    bootstrapped por el baseline. down() lo usa para distinguir "owned"
+  //    (drop seguro) de "pre-existente" (no-op). Es infraestructura de
+  //    migración, no dato de negocio (no está en las colecciones de Payload).
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "_baseline_schema_owned" (
+      "owned" boolean NOT NULL DEFAULT true
+    );
+  `)
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
+  // REVIEW DEVIN #112 (🔴 "Rollback wipes the production database"): baseline
+  // RETROACTIVO — en producción up() early-returnó (schema ya existía) y solo
+  // quedó REGISTRADO en payload_migrations sin haber creado nada. dropear
+  // aquí TODO destruiría tenants/orders/customers/media que este baseline
+  // NUNCA poseyó. Ownership-aware: solo dropear si el sentinel existe (up()
+  // lo crea únicamente cuando realmente creó el schema desde cero).
+  const ownedCheck = await db.execute(sql`
+    SELECT count(*) AS owned FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = '_baseline_schema_owned'
+  `);
+  const ownedRow = (ownedCheck as unknown as { rows?: Array<{ owned?: string | number }> })?.rows?.[0];
+  if (Number(ownedRow?.owned) === 0) {
+    // BD pre-existente: no-op — no dropear datos que no nos pertenecen.
+    return;
+  }
+
+  // Owned (BD bootstrapped por el baseline): drop del schema. SIN
+  // payload_migrations (el framework lo usa para trackear este rollback).
   await db.execute(sql`
    DROP TABLE "tenants_delivery_config_zones" CASCADE;
   DROP TABLE "tenants" CASCADE;
@@ -619,8 +649,8 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
   DROP TABLE "payload_locked_documents_rels" CASCADE;
   DROP TABLE "payload_preferences" CASCADE;
   DROP TABLE "payload_preferences_rels" CASCADE;
-  DROP TABLE "payload_migrations" CASCADE;
   DROP TABLE "payload_jobs_stats" CASCADE;
+  DROP TABLE "_baseline_schema_owned" CASCADE;
   DROP TYPE "public"."enum_tenants_theme";
   DROP TYPE "public"."enum_tenants_plan";
   DROP TYPE "public"."enum_tenants_branding_currency";

@@ -279,4 +279,60 @@ d('paridad de migraciones (regresión del incidente P0 28-ago-2026)', () => {
     expect(metaRes.rows.length).toBe(1);
     expect(statsRes.rows.length).toBe(1);
   });
+
+  // PR 3.2 (review Devin #112, 🔴 "Rollback wipes the production database"):
+  // el baseline es RETROACTIVO — en producción up() early-returnó y quedó
+  // registrado sin haber creado nada. down() debe ser ownership-aware:
+  // no-op sobre schema pre-existente (sin sentinel) y drop completo solo
+  // sobre BDs que el baseline realmente bootstrapped (con sentinel), sin
+  // tocar payload_migrations (el registry que el framework de migraciones
+  // usa para trackear este mismo rollback).
+  it('PR 3.2: down() es NO-OP sobre schema pre-existente (sin sentinel)', async (ctx) => {
+    if (skippedNoBaseline) return ctx.skip();
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const { down } = await import('../../src/migrations/20260909_baseline_schema');
+    const drizzle = payload.db.drizzle as unknown as { execute: (q: unknown) => Promise<unknown> };
+
+    // Simula producción: el schema existe (creado por las migraciones
+    // originales) pero SIN el sentinel — el baseline early-returnó y jamás
+    // lo creó. down() NO debe dropear datos que no le pertenecen.
+    await drizzle.execute(sql`DROP TABLE IF EXISTS "_baseline_schema_owned"`);
+
+    await down({ db: drizzle } as never);
+
+    // tenants sigue existiendo: down() fue no-op.
+    const tenantsRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+    `);
+    expect(Number((tenantsRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(1);
+
+    // Restaurar el sentinel: el siguiente test (rollback de BD bootstrapped)
+    // necesita el estado "owned" que le corresponde.
+    await drizzle.execute(sql`CREATE TABLE IF NOT EXISTS "_baseline_schema_owned" ("owned" boolean NOT NULL DEFAULT true)`);
+  }, 60000);
+
+  it('PR 3.2: down() sobre BD bootstrapped dropea el schema PERO preserva payload_migrations', async (ctx) => {
+    if (skippedNoBaseline) return ctx.skip();
+    const { sql } = await import('@payloadcms/db-postgres/drizzle');
+    const { down } = await import('../../src/migrations/20260909_baseline_schema');
+    const drizzle = payload.db.drizzle as unknown as { execute: (q: unknown) => Promise<unknown> };
+
+    await down({ db: drizzle } as never);
+
+    // tenants (y el resto del schema de aplicación) se dropeó.
+    const tenantsRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+    `);
+    expect(Number((tenantsRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(0);
+
+    // El registry de migraciones SOBREVIVE (el framework lo usa para
+    // trackear este mismo rollback).
+    const migRes = await drizzle.execute(sql`
+      SELECT count(*) AS existing FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'payload_migrations'
+    `);
+    expect(Number((migRes as { rows?: Array<{ existing?: string | number }> }).rows?.[0]?.existing)).toBe(1);
+  }, 60000);
 });
