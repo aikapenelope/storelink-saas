@@ -167,6 +167,37 @@ function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: f
   const currencyError = validateCurrencyCode(request.currency);
   if (currencyError) return { ok: false, error: currencyError };
 
+  // PR 4.3 (plan sprints 2026-09-09, H-3): cotas de texto en el boundary —
+  // mismas longitudes que los maxLength de Orders.ts (la colección valida
+  // su schema, pero aquí el rechazo es fail-fast: un string de MB muere
+  // ANTES de guards/pricing/PDF, sin quemar efectos). El admin/REST queda
+  // cubierto por el schema; el checkout anónimo por esta doble capa.
+  if (typeof name === 'string' && name.length > 120) {
+    return { ok: false, error: 'El nombre es demasiado largo' };
+  }
+  if (typeof phone === 'string' && phone.length > 40) {
+    return { ok: false, error: 'El teléfono es demasiado largo' };
+  }
+  if (typeof email === 'string' && email.length > 200) {
+    return { ok: false, error: 'El correo es demasiado largo' };
+  }
+  const address = customer.address?.trim();
+  if (address !== undefined && address.length > 500) {
+    return { ok: false, error: 'La dirección es demasiado larga' };
+  }
+  const notes = customer.notes?.trim();
+  if (notes !== undefined && notes.length > 1000) {
+    return { ok: false, error: 'Las notas son demasiado largas' };
+  }
+  const municipality = customer.deliveryDetails?.municipality;
+  if (typeof municipality === 'string' && municipality.trim().length > 120) {
+    return { ok: false, error: 'Datos de entrega inválidos' };
+  }
+  const paymentMethodLabel = customer.paymentMethod;
+  if (typeof paymentMethodLabel === 'string' && paymentMethodLabel.trim().length > 100) {
+    return { ok: false, error: 'Datos de pago inválidos' };
+  }
+
   return { ok: true };
 }
 
@@ -758,7 +789,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
   // creación de la orden (7bis); el final de processOrder solo la retorna.
   let successResponse: CheckoutResponse | null = null;
   try {
-    const { tenantSlug, storeName, currency, showVES, items } = request;
+    // PR 4.3 (H-4): `currency` del request se IGNORA deliberadamente — la
+    // etiqueta de moneda vive en tenant.branding.currency (anclada arriba).
+    const { tenantSlug, storeName, showVES, items } = request;
 
     // ------------------------------------------------------------------
     // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1)
@@ -819,6 +852,19 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     if (!tenantDoc.whatsappPhone) {
       return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
     }
+
+    // PR 4.3 (plan sprints 2026-09-09, H-4/H-5): anclajes al tenant. Los
+    // montos SIEMPRE se calcularon server-side en USD; pero las ETIQUETAS
+    // (currency) y el toggle Bs. venían del request del comprador — un
+    // writer no confiable podía etiquetar 'EUR' una orden cobrada en USD o
+    // forzar la línea Bs. en un comercio que la deshabilitó. Ahora:
+    //  - currency: SIEMPRE la de branding del tenant (default USD).
+    //  - showVES: el tenant decide (branding.showVES !== false); el cliente
+    //    solo puede APAGAR la línea Bs. de su propia respuesta si la tasa
+    //    no aplica, nunca encenderla contra la voluntad del comercio.
+    const tenantCurrency =
+      (tenantDoc.branding?.currency as string | undefined) || 'USD';
+    const tenantShowVES = tenantDoc.branding?.showVES !== false;
 
     // Auditoría final 2026-09-01 (P1): segunda capa anti-abuso POR TENANT
     // (50/min, ya definida en lib/rate-limit.ts pero nunca cableada). El
@@ -942,7 +988,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // 4. Resolve Exchange Rate & Generate Order Number
     // ------------------------------------------------------------------
     const { rate: vesRate } = await resolveExchangeRateVES(tenantDoc);
-    const showVESEffective = showVES === false ? false : vesRate !== null;
+    // PR 4.3 (H-5): showVES anclado al tenant — branding.showVES !== false
+    // es requisito; el request del comprador solo puede APAGAR la línea Bs.
+    // de su propia respuesta (showVES === false), nunca encenderla contra la
+    // config del comercio. La tasa resuelta sigue siendo condición.
+    const showVESEffective = tenantShowVES && showVES !== false && vesRate !== null;
     const totalVES = vesRate ? total * vesRate : 0;
 
     const orderNumber = await generateUniqueOrderNumber(payload);
@@ -1008,7 +1058,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             subtotal: item.price * item.quantity,
           })),
           totalAmount: total,
-          currency: currency || 'USD',
+          currency: tenantCurrency,
           exchangeRateVES: vesRate ?? undefined,
         },
       });
@@ -1092,7 +1142,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           customerAddress: customer.address,
           paymentMethod: customer.paymentMethod,
           notes: customer.notes,
-          currency: currency || 'USD',
+          currency: tenantCurrency,
           deliveryType: customer.deliveryType,
           deliveryFee,
           subtotal: itemsSubtotal,
