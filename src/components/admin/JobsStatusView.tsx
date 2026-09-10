@@ -6,7 +6,7 @@ import { Clock, AlertCircle, CheckCircle } from 'lucide-react';
 
 type JobStatus = {
   id: string;
-  workflow: string;
+  workflowSlug: string;
   hasError: boolean;
   createdAt: string;
   updatedAt: string;
@@ -39,7 +39,7 @@ export async function JobsStatusView() {
     const jobsRes = await payload.find({
       collection: 'payload-jobs' as never,
       where: {
-        workflow: { equals: 'order-created' },
+        workflowSlug: { equals: 'order-created' },
       },
       limit: 10,
       sort: '-createdAt',
@@ -78,7 +78,7 @@ export async function JobsStatusView() {
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs font-mono text-red-300">{job.workflow}</span>
+                    <span className="text-xs font-mono text-red-300">{job.workflowSlug}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">
                       {new Date(job.createdAt).toLocaleString('es-VE')}
                     </span>
@@ -110,7 +110,7 @@ export async function JobsStatusView() {
                     ) : (
                       <CheckCircle className="w-3 h-3 text-green-400" />
                     )}
-                    <span className="text-xs font-mono text-zinc-300">{job.workflow}</span>
+                    <span className="text-xs font-mono text-zinc-300">{job.workflowSlug}</span>
                   </div>
                   <span className="text-[10px] text-zinc-500 font-mono">
                     {new Date(job.createdAt).toLocaleString('es-VE')}
