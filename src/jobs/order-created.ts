@@ -145,14 +145,20 @@ const sendOrderConfirmationEmail: TaskConfig = {
   slug: 'sendOrderConfirmationEmail',
   label: 'Enviar correo de confirmación con Nota de Entrega PDF',
   retries: { attempts: 3, backoff: { type: 'fixed', delay: 30000 } },
-  inputSchema: [{ name: 'orderId', type: 'number', required: true }],
+  inputSchema: [
+    { name: 'orderId', type: 'number', required: true },
+    { name: 'customerShowVES', type: 'checkbox' },
+  ],
   outputSchema: [
     { name: 'skipped', type: 'checkbox' },
     { name: 'sent', type: 'checkbox' },
   ],
   handler: async ({ input, req }) => {
     const { payload } = req;
-    const { orderId } = (input ?? {}) as { orderId: number };
+    const { orderId, customerShowVES } = (input ?? {}) as {
+      orderId: number;
+      customerShowVES?: boolean;
+    };
 
     const order = (await payload.findByID({
       collection: 'orders',
@@ -199,9 +205,15 @@ const sendOrderConfirmationEmail: TaskConfig = {
     const fromDisplay = `${storeName} <${fromAddress}>`;
     const replyTo = tenantDoc?.emailConfig?.notificationEmail || tenantDoc?.emailConfig?.fromEmail || fromAddress;
     const total = Number(order.totalAmount) || 0;
-    // Tasa VES del snapshot del pedido (manual del tenant); sin ella no se muestra Bs
+    // Tasa VES del snapshot del pedido (manual del tenant); sin ella no se muestra Bs.
+    // Fix Devin #116: el snapshot en la orden refleja la tasa operativa del comercio
+    // (usada en Trello y reportes del tenant). Para el correo de confirmación al cliente,
+    // se respeta customerShowVES (el opt-out efectivo del comprador en el checkout). Si no
+    // viene (ej. re-encolado desde el sweep reconcileDispatchOrders), se muestra si hay tasa.
     const exchangeRateVES = Number(order.exchangeRateVES) || 0;
-    const showVES = exchangeRateVES > 0;
+    const showVES = customerShowVES !== undefined
+      ? (customerShowVES && exchangeRateVES > 0)
+      : exchangeRateVES > 0;
     const totalVES = total * exchangeRateVES;
     const items = Array.isArray(order.items)
       ? order.items.map((i) => ({
@@ -270,12 +282,30 @@ const sendOrderConfirmationEmail: TaskConfig = {
 
     // Notificación opcional al comercio para alertar sobre nueva orden recibida
     if (tenantDoc?.emailConfig?.notificationEmail) {
+      // Fix Devin #116: el comercio siempre recibe su vista operativa con VES
+      const merchantShowVES = exchangeRateVES > 0;
+      const merchantEmailHtml = showVES === merchantShowVES
+        ? emailHtml
+        : buildOrderConfirmationEmailHtml({
+            storeName,
+            customerName: order.customer?.name || 'Cliente',
+            orderNumber,
+            deliveryType: order.deliveryType || 'delivery',
+            paymentLabel: order.paymentDetails?.methodKey || order.customer?.paymentMethod || 'PAGO ELECTRÓNICO',
+            notes: order.customer?.notes ?? undefined,
+            items,
+            total,
+            totalVES,
+            exchangeRateVES,
+            showVES: merchantShowVES,
+          });
+
       await payload.sendEmail({
         from: `Flow · ${storeName} <${fromAddress}>`,
         replyTo: customerEmail,
         to: tenantDoc.emailConfig.notificationEmail,
         subject: `🔔 [Nuevo Pedido #${orderNumber}] ${order.customer?.name || 'Cliente'} - $${total.toFixed(2)} USD`,
-        html: emailHtml,
+        html: merchantEmailHtml,
         attachments: emailPdfUrl
           ? [
               {
@@ -296,9 +326,13 @@ const sendOrderConfirmationEmail: TaskConfig = {
 const orderCreatedWorkflow: WorkflowConfig<'order-created'> = {
   slug: 'order-created',
   label: 'Despacho de pedido (Trello + email)',
-  inputSchema: [{ name: 'orderId', type: 'number', required: true }],
+  inputSchema: [
+    { name: 'orderId', type: 'number', required: true },
+    { name: 'customerShowVES', type: 'checkbox' },
+  ],
   handler: async ({ job, tasks }) => {
     const orderId = job.input.orderId as number;
+    const customerShowVES = job.input.customerShowVES as boolean | undefined;
     // Auditoría final 2026-09-01 (P1) + review Graphify #64: Trello PRIMERO y
     // email NO bloquante. Antes corría email → Trello en secuencia: un fallo
     // persistente de Resend (cuota agotada, clave BYOK inválida, dominio sin
@@ -312,7 +346,9 @@ const orderCreatedWorkflow: WorkflowConfig<'order-created'> = {
     // la respuesta del checkout). Se registra y el workflow termina OK.
     await tasks.trelloDispatchOrder('dispatch-trello', { input: { orderId } });
     try {
-      await tasks.sendOrderConfirmationEmail('send-email', { input: { orderId } });
+      await tasks.sendOrderConfirmationEmail('send-email', {
+        input: { orderId, customerShowVES },
+      });
     } catch (emailTaskErr) {
       console.error(
         `[storelink][order-created] email del pedido ${orderId} no enviado tras 3 reintentos (best-effort); el despacho a Trello ya se completó:`,

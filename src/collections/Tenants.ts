@@ -380,11 +380,20 @@ export const Tenants: CollectionConfig = {
           name: 'locationAddress',
           type: 'textarea',
           label: 'Dirección Exacta de la Sede para Pickup',
+          // Flag Devin #116 r3 («Pickup configuration blocks valid checkout»):
+          // la dirección de pickup se RECONSTRUYE server-side desde este
+          // campo (checkout.ts 2bis) y Orders.customer.address tiene
+          // maxLength 600. 400 + schedule(150) + etiquetas (~42) = 592 < 600
+          // por diseño: la config del comercio ya no puede fabricar una
+          // dirección que exceda la cota de la orden.
+          maxLength: 400,
         },
         {
           name: 'schedule',
           type: 'text',
           label: 'Horario de Atención (ej: Lun-Dom 11:30 AM - 10:00 PM)',
+          // Complemento del anterior: worst case del agregado pickup 592≤600.
+          maxLength: 150,
         },
         {
           name: 'estimatedTime',

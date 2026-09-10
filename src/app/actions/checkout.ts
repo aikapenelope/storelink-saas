@@ -13,7 +13,11 @@ import { sanitizePlainText } from '@/lib/order-email';
 import { headers } from 'next/headers';
 import { evaluateCheckoutGuards, clientIpFromHeaders } from '@/lib/checkout-guard';
 import { checkTenantRateLimit } from '@/lib/rate-limit';
-import { normalizePaymentDetails, validateDeliveryTypeEnum, validateMethodKeyEnum, validateCurrencyCode } from '@/lib/checkout-sanitize';
+// paymentDetails se normaliza en 0bis con normalizePaymentDetails (whitelist
+// de claves + force de paymentStatus). Las validaciones de enums de
+// deliveryType/methodKey/currency viven ahora en el boundary extraído
+// (src/lib/checkout-validation.ts) junto al resto de whitelists fail-fast.
+import { normalizePaymentDetails } from '@/lib/checkout-sanitize';
 import {
   buildIdempotencyKey,
   releaseCheckoutReservation,
@@ -23,68 +27,21 @@ import {
 } from '@/lib/checkout-idempotency';
 import { buildCheckoutProcessingResponse } from '@/lib/checkout-response';
 import { applyCustomerCrmDelta, claimOrderCrmCounted } from '@/collections/Orders';
-import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
-
-export interface CheckoutCustomerData {
-  name: string;
-  phone: string;
-  email?: string;
-  address?: string;
-  paymentMethod?: string;
-  notes?: string;
-  deliveryType?: 'delivery' | 'pickup';
-  deliveryDetails?: {
-    municipality?: string;
-    residenceZone?: string;
-    buildingHouse?: string;
-    referencePoint?: string;
-  };
-  paymentDetails?: {
-    methodKey?: 'pago_movil' | 'zelle' | 'binance' | 'zinli' | 'banesco_panama' | 'cash' | 'pos';
-    referenceNumber?: string;
-    issuingBank?: string;
-    issuingPhone?: string;
-    senderName?: string;
-    senderEmail?: string;
-    binanceSenderId?: string;
-    paymentStatus?: 'pending_verification' | 'verified' | 'rejected';
-  };
-}
-
-export interface CheckoutItemData {
-  sku: string;
-  title: string;
-  quantity: number;
-  price: number;
-  /** Nombres de las opciones de modificadores seleccionadas (resueltas en el servidor) */
-  modifiers?: string[];
-}
-
-export interface CheckoutRequest {
-  tenantSlug: string;
-  storeName: string;
-  currency: string;
-  exchangeRateVES?: number;
-  showVES?: boolean;
-  customer: CheckoutCustomerData;
-  items: CheckoutItemData[];
-  // Anti-abuso Sprint 5: el nonce lo emite el storefront al renderizar y las
-  // trampas de honeypot/tiempo las rellena el carrito. Sin estos campos el
-  // pedido se rechaza con error genérico.
-  checkoutNonce: string;
-  honeypotWebsite?: string;
-  formRenderedAtMs?: number;
-  /**
-   * Review Devin #74: token de intención del checkout generado por el carrito
-   * (crypto.randomUUID). Estable durante un intento (sobrevive reintentos de
-   * transporte del mismo body) y distinto en cada compra nueva. Opcional y
-   * sanitizado en el servidor: si falta o es inválido, la idempotencia cae al
-   * fingerprint de contenido.
-   */
-  idempotencyToken?: string;
-}
+// PR 4.3 + flags Devin #116 r3: tipos y boundary de validación extraídos a
+// src/lib/checkout-validation.ts — normalizan el texto del comprador UNA vez
+// (cierra «Whitespace bypasses boundary text caps») y reconstruyen la
+// dirección de pickup server-side (cierra «Pickup configuration blocks
+// valid checkout»). La Server Action sigue siendo el orquestador.
+import {
+  buildPickupAddress,
+  normalizeCheckoutCustomer,
+  validateCheckoutInput,
+  type CheckoutCustomerData,
+  type CheckoutItemData,
+  type CheckoutRequest,
+} from '@/lib/checkout-validation';
 
 export interface CheckoutResponse {
   success: boolean;
@@ -117,58 +74,6 @@ export interface CheckoutResponse {
 // (un solo find), limita también el radio de la query y evita carritos
 // gigantes usados como DoS de latencia sin afectar la compra normal.
 // Única fuente canónica: src/lib/constants.ts (antes estaba duplicado aquí).
-
-/**
- * Validación runtime estricta en la frontera del Server Action
- */
-function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: false; error: string } {
-  const { tenantSlug, customer, items } = request;
-
-  if (!tenantSlug || typeof tenantSlug !== 'string' || tenantSlug.trim().length === 0) {
-    return { ok: false, error: 'Identificador de tienda inválido' };
-  }
-
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return { ok: false, error: 'El carrito está vacío' };
-  }
-
-  if (items.length > MAX_CHECKOUT_ITEMS) {
-    return { ok: false, error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).` };
-  }
-
-  if (!customer || typeof customer !== 'object') {
-    return { ok: false, error: 'Datos del cliente incompletos' };
-  }
-
-  const name = customer.name?.trim();
-  const phone = customer.phone?.trim();
-  const email = customer.email?.trim();
-
-  if (!name || !phone || !email) {
-    return { ok: false, error: 'Por favor completa el nombre, teléfono y correo de contacto' };
-  }
-
-  // Validación básica de formato de correo
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return { ok: false, error: 'Por favor introduce un correo electrónico válido' };
-  }
-
-  // PR 4 (auditoría 2026-09-07, A6): whitelists de entrada — fail-fast ANTES
-  // de pricing/PDF/R2. Payload también rechazaría el deliveryType inválido
-  // (validación automática de selects), pero para entonces el PDF ya habría
-  // sido subido a R2 (huérfano + cuota quemada por cada intento provocable).
-  const deliveryTypeError = validateDeliveryTypeEnum(customer.deliveryType);
-  if (deliveryTypeError) return { ok: false, error: deliveryTypeError };
-
-  const methodKeyError = validateMethodKeyEnum(customer.paymentDetails?.methodKey);
-  if (methodKeyError) return { ok: false, error: methodKeyError };
-
-  const currencyError = validateCurrencyCode(request.currency);
-  if (currencyError) return { ok: false, error: currencyError };
-
-  return { ok: true };
-}
 
 /**
  * Verificación de precios, variantes, modificadores y stock desde la base de datos (server-side).
@@ -612,6 +517,7 @@ async function finalizeOrderCrmAndDispatch({
   total,
   verifiedItems,
   now,
+  customerShowVES,
 }: {
   payload: Payload;
   tenantId: number;
@@ -623,6 +529,7 @@ async function finalizeOrderCrmAndDispatch({
   total: number;
   verifiedItems: CheckoutItemData[];
   now: Date;
+  customerShowVES?: boolean;
 }): Promise<void> {
   // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
   // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
@@ -733,7 +640,10 @@ async function finalizeOrderCrmAndDispatch({
   try {
     const job = await payload.jobs.queue({
       workflow: 'order-created',
-      input: { orderId: orderDoc.id },
+      input: {
+        orderId: orderDoc.id,
+        customerShowVES,
+      },
     });
 
     after(async () => {
@@ -758,20 +668,32 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
   // creación de la orden (7bis); el final de processOrder solo la retorna.
   let successResponse: CheckoutResponse | null = null;
   try {
-    const { tenantSlug, storeName, currency, showVES, items } = request;
+    // PR 4.3 (H-4): `currency` del request se IGNORA deliberadamente — la
+    // etiqueta de moneda vive en tenant.branding.currency (anclada arriba).
+    const { tenantSlug, storeName, showVES, items } = request;
 
     // ------------------------------------------------------------------
-    // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1)
+    // 0bis. Normalización del comprador (Auditoría 2026-09-07, A1 +
+    // flag Devin #116 r3 «Whitespace bypasses boundary text caps»)
     // ------------------------------------------------------------------
     // El comprador anónimo es un writer NO confiable: `paymentStatus` se
     // fuerza a 'pending_verification' y el resto de paymentDetails pasa por
     // whitelist de claves. La fuerza vive aquí y NO en hooks de colección
     // porque el admin panel comparte la colección y ahí el comercio SÍ puede
     // marcar 'verified' legítimamente al conciliar el pago.
-    const customer: CheckoutCustomerData = {
+    //
+    // Además, TODO el texto del comprador se normaliza UNA vez aquí
+    // (normalizeCheckoutCustomer: trim — la cota NO trunca, el boundary
+    // rechaza el exceso con mensaje visible): esta copia es la que consumen
+    // idempotencia, payload.create, PDF, WhatsApp y CRM. Antes el boundary
+    // medía trim().length pero la orden persistía el string SIN trim →
+    // "Casa 4" + 10k espacios pasaba el boundary y Payload lo rechazaba
+    // tras pricing/tasa (flag Devin #116 r3). Ahora la cota mide
+    // EXACTAMENTE lo que se persiste.
+    const customer: CheckoutCustomerData = normalizeCheckoutCustomer({
       ...request.customer,
       paymentDetails: normalizePaymentDetails(request.customer?.paymentDetails),
-    };
+    });
 
     // ------------------------------------------------------------------
     // 0. Anti-abuso (Sprint 5): nonce → honeypot → rate-limit por IP
@@ -791,7 +713,14 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // ------------------------------------------------------------------
     // 1. Boundary Input Validation (Zod-like schema enforcement)
     // ------------------------------------------------------------------
-    const validation = validateCheckoutInput(request);
+    // Recibe el customer NORMALIZADO (0bis): las cotas de
+    // validateCheckoutInput miden la MISMA string que se persistirá, sin
+    // bypass por whitespace. La implementación vive en
+    // src/lib/checkout-validation.ts (extraída para testearla sin levantar
+    // la Server Action): shape del carrito, cota MAX_CHECKOUT_ITEMS
+    // (única fuente: src/lib/constants.ts), whitelists de enums y cotas
+    // de texto — en ese orden (flag Devin #116 r4).
+    const validation = validateCheckoutInput({ ...request, customer, items });
     if (!validation.ok) {
       return { success: false, error: validation.error };
     }
@@ -819,6 +748,44 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     if (!tenantDoc.whatsappPhone) {
       return { success: false, error: 'Esta tienda no está configurada para recibir pedidos.' };
     }
+
+    // ------------------------------------------------------------------
+    // 2bis. Dirección de pickup RECONSTRUIDA server-side (flag Devin #116
+    // r3: «Pickup configuration blocks valid checkout»)
+    // ------------------------------------------------------------------
+    // Antes el drawer armaba la dirección pickup desde pickupConfig del
+    // tenant (locationAddress/schedule SIN cotas) y el boundary la validaba
+    // contra maxLength 600: una config larga del comercio bloqueaba TODOS
+    // sus checkouts pickup aunque el comprador no ingresara dirección — y
+    // además dejaba al comprador ESPECIFICAR la "dirección" de retiro
+    // (spoofeable). Ahora el servidor la construye desde tenantDoc (fuente
+    // confiable, con defaults si la config falta — mismo texto que el drawer
+    // mostraba) y el `address` del request se ignora por completo en pickup.
+    // En delivery el `address` del comprador (ya normalizado y acotado en
+    // 0bis/1) se conserva tal cual.
+    if (customer.deliveryType === 'pickup') {
+      customer.address = buildPickupAddress(
+        { name: tenantDoc.name },
+        tenantDoc.pickupConfig as { locationAddress?: string | null; schedule?: string | null } | undefined,
+      );
+    }
+
+    // PR 4.3 (plan sprints 2026-09-09, H-4/H-5): anclajes al tenant. Los
+    // montos SIEMPRE se calcularon server-side en USD; pero las ETIQUETAS
+    // (currency) y el toggle Bs. venían del request del comprador — un
+    // writer no confiable podía etiquetar 'EUR' una orden cobrada en USD o
+    // forzar la línea Bs. en un comercio que la deshabilitó. Ahora:
+    //  - currency: se ancla a 'USD', el valor con el que de VERDAD se
+    //    calculan y muestran los montos (storefront/PDF/Trello usan `$` y
+    //    'USD'). branding.currency (enum USD/EUR/MXN/COP) NO está cableado a
+    //    montos ni al storefront, así que etiquetar con él produciría
+    //    órdenes "EUR" con montos en USD (review Devin #116, «Non-USD
+    //    checkouts show conflicting currencies»). El request del comprador
+    //    se ignora; el enum queda para cuando exista conversión real.
+    //  - showVES: el tenant decide (branding.showVES !== false); el cliente
+    //    solo puede APAGAR la línea Bs. de su propia respuesta si la tasa
+    //    no aplica, nunca encenderla contra la voluntad del comercio.
+    const tenantShowVES = tenantDoc.branding?.showVES !== false;
 
     // Auditoría final 2026-09-01 (P1): segunda capa anti-abuso POR TENANT
     // (50/min, ya definida en lib/rate-limit.ts pero nunca cableada). El
@@ -942,7 +909,11 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // 4. Resolve Exchange Rate & Generate Order Number
     // ------------------------------------------------------------------
     const { rate: vesRate } = await resolveExchangeRateVES(tenantDoc);
-    const showVESEffective = showVES === false ? false : vesRate !== null;
+    // PR 4.3 (H-5): showVES anclado al tenant — branding.showVES !== false
+    // es requisito; el request del comprador solo puede APAGAR la línea Bs.
+    // de su propia respuesta (showVES === false), nunca encenderla contra la
+    // config del comercio. La tasa resuelta sigue siendo condición.
+    const showVESEffective = tenantShowVES && showVES !== false && vesRate !== null;
     const totalVES = vesRate ? total * vesRate : 0;
 
     const orderNumber = await generateUniqueOrderNumber(payload);
@@ -1008,8 +979,15 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             subtotal: item.price * item.quantity,
           })),
           totalAmount: total,
-          currency: currency || 'USD',
-          exchangeRateVES: vesRate ?? undefined,
+          currency: 'USD',
+          // PR 4.3 (H-5 + fix Devin #116): el snapshot VES se persiste SOLO
+          // cuando el TENANT lo habilita (branding.showVES !== false) y hay tasa.
+          // El snapshot en la orden es la vista OPERATIVA del comercio (Trello y
+          // reportes del tenant) y no se apaga por el opt-out transitorio del cliente
+          // (review Devin #116: «Client flag suppresses tenant VES records»).
+          // El opt-out del cliente para su correo de confirmación viaja por separado
+          // en job.input.customerShowVES (fix Devin #116: «Customer VES opt-out ignored in email»).
+          exchangeRateVES: tenantShowVES ? (vesRate ?? undefined) : undefined,
         },
       });
       // La orden EXISTE: a partir de aquí la reserva de idempotencia ya no se
@@ -1092,7 +1070,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           customerAddress: customer.address,
           paymentMethod: customer.paymentMethod,
           notes: customer.notes,
-          currency: currency || 'USD',
+          currency: 'USD',
           deliveryType: customer.deliveryType,
           deliveryFee,
           subtotal: itemsSubtotal,
@@ -1142,6 +1120,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         total,
         verifiedItems,
         now,
+        customerShowVES: showVESEffective,
       });
     } catch (orderErr) {
       // El pedido NO se creó (orderCreated=false): liberar la reserva para que

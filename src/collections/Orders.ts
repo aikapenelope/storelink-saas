@@ -1065,33 +1065,56 @@ export const Orders: CollectionConfig = {
           type: 'text',
           label: 'Nombre Completo',
           required: true,
+          // PR 4.3 (plan sprints 2026-09-09, H-3): cotas — el comprador es
+          // un writer no confiable; sin cota, MB de texto llegan al PDF, la
+          // card de Trello y el WhatsApp del comercio.
+          maxLength: 120,
         },
         {
           name: 'phone',
           type: 'text',
           label: 'Teléfono / WhatsApp',
           required: true,
+          // PR 4.3 (H-3): cota holgada para teléfonos con formato/indicativo.
+          maxLength: 40,
         },
         {
           name: 'email',
           type: 'email',
           label: 'Correo Electrónico (para el envío de la confirmación)',
           required: true,
+          // PR 4.3 (H-3): EmailField no soporta maxLength (tipeo del core) —
+          // la cota del comprador vive en el boundary del checkout
+          // (validateCheckoutInput, 200 chars) y EmailField valida formato.
         },
         {
           name: 'address',
           type: 'textarea',
           label: 'Dirección de Entrega',
+          // PR 4.3 (H-3): `address` es la dirección formateada que el drawer
+          // arma desde residenceZone(200) + buildingHouse(200) +
+          // municipality(120) + etiquetas (~43) → peor caso ~563 chars. Cota
+          // de 600 cubre el agregado legítimo (review Devin #116: "Valid
+          // delivery fields exceed aggregate cap"). Los campos fuente
+          // (deliveryDetails.*) se acotan por separado.
+          maxLength: 600,
         },
         {
           name: 'paymentMethod',
           type: 'text',
           label: 'Método de Pago Seleccionado',
+          // PR 4.3 (H-3): etiqueta agregada que el drawer arma con emisor +
+          // referencia (cada fuente acotada a 200 en checkout-sanitize) →
+          // peor caso ~440 chars; cota 500 cubre el agregado legítimo (review
+          // Devin #116: «Valid payment labels exceed new cap»).
+          maxLength: 500,
         },
         {
           name: 'notes',
           type: 'textarea',
           label: 'Notas Adicionales del Cliente',
+          // PR 4.3 (H-3): notas de pedido legítimas caben; ensayos no.
+          maxLength: 1000,
         },
       ],
     },
@@ -1176,10 +1199,12 @@ export const Orders: CollectionConfig = {
         condition: (data) => data?.deliveryType === 'delivery',
       },
       fields: [
-        { name: 'municipality', type: 'text', label: 'Municipio (ej: Chacao, Baruta)' },
-        { name: 'residenceZone', type: 'text', label: 'Urbanización / Sector' },
-        { name: 'buildingHouse', type: 'text', label: 'Edificio / Casa / Apto / Piso' },
-        { name: 'referencePoint', type: 'text', label: 'Punto de Referencia' },
+        // PR 4.3 (H-3): cotas en los campos de entrega — mismos textos que
+        // llena el select del drawer (municipio) y el formulario libre.
+        { name: 'municipality', type: 'text', label: 'Municipio (ej: Chacao, Baruta)', maxLength: 120 },
+        { name: 'residenceZone', type: 'text', label: 'Urbanización / Sector', maxLength: 200 },
+        { name: 'buildingHouse', type: 'text', label: 'Edificio / Casa / Apto / Piso', maxLength: 200 },
+        { name: 'referencePoint', type: 'text', label: 'Punto de Referencia', maxLength: 300 },
       ],
     },
     {

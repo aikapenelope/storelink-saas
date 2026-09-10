@@ -1292,6 +1292,7 @@ export interface TaskTrelloDispatchOrder {
 export interface TaskSendOrderConfirmationEmail {
   input: {
     orderId: number;
+    customerShowVES?: boolean | null;
   };
   output: {
     skipped?: boolean | null;
@@ -1334,6 +1335,7 @@ export interface TaskReconcileDispatchOrders {
 export interface WorkflowOrderCreated {
   input: {
     orderId: number;
+    customerShowVES?: boolean | null;
   };
 }
 /**
