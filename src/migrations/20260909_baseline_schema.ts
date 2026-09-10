@@ -622,6 +622,15 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
 
   // Owned (BD bootstrapped por el baseline): drop del schema. SIN
   // payload_migrations (el framework lo usa para trackear este rollback).
+  // Guardia anti-pooler (review Devin #112 🟡): el DROP masivo también es DDL
+  // — jamás por Transaction Pooler (6543). Mismo contrato operativo que up().
+  const connStr = process.env.DATABASE_URI || process.env.POSTGRES_URL || '';
+  if (connStr.includes(':6543') || connStr.includes('pooler.supabase.com')) {
+    throw new Error(
+      '[BLOCKED_TRANSACTION_POOLER_DDL] El rollback de "20260909_baseline_schema" contiene DDL masivo (DROP del schema completo) y no puede ejecutarse a través del Transaction Pooler de Supabase (puerto 6543). Ejecute el rollback por conexión directa (puerto 5432 o Supabase SQL Editor). Ver docs/AGENTS_CONSTITUTION.md §Migraciones.'
+    );
+  }
+
   await db.execute(sql`
    DROP TABLE "tenants_delivery_config_zones" CASCADE;
   DROP TABLE "tenants" CASCADE;
