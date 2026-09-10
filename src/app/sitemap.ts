@@ -12,8 +12,15 @@ import type { Tenant } from '@/payload-types';
  */
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://flow.martes.app';
 
-// Regenera como máximo cada hora; mutaciones de tenants quedan acotadas a ese TTL.
-export const revalidate = 3600;
+// force-dynamic: el sitemap se genera a demanda (runtime), NUNCA en el build.
+// `getPayload` en el build dispara el init de Payload y con él `prodMigrations`
+// (payload.config.ts) usando el Transaction Pooler (6543): una migración DDL
+// pendiente (RLS/índices) con guardia anti-pooler rompía el BUILD de Vercel
+// (no solo el runtime). Al no prerenderizarse, el init (y las migraciones) solo
+// corren en runtime, donde el flujo de emergencia (DDL por conexión directa +
+// registro en payload_migrations) ya dejó la BD al día. Regenera cada request,
+// lo cual es correcto para un sitemap multi-tenant que depende de datos vivos.
+export const dynamic = 'force-dynamic';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
