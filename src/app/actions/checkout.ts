@@ -27,7 +27,6 @@ import {
 } from '@/lib/checkout-idempotency';
 import { buildCheckoutProcessingResponse } from '@/lib/checkout-response';
 import { applyCustomerCrmDelta, claimOrderCrmCounted } from '@/collections/Orders';
-import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
 import { randomInt } from 'crypto';
 import { sql } from '@payloadcms/db-postgres/drizzle';
 // PR 4.3 + flags Devin #116 r3: tipos y boundary de validación extraídos a
@@ -718,14 +717,9 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // validateCheckoutInput miden la MISMA string que se persistirá, sin
     // bypass por whitespace. La implementación vive en
     // src/lib/checkout-validation.ts (extraída para testearla sin levantar
-    // la Server Action). MAX_CHECKOUT_ITEMS se valida aquí porque es la
-    // única fuente canónica (src/lib/constants.ts) importada por la Action.
-    if (Array.isArray(items) && items.length > MAX_CHECKOUT_ITEMS) {
-      return {
-        success: false,
-        error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).`,
-      };
-    }
+    // la Server Action): shape del carrito, cota MAX_CHECKOUT_ITEMS
+    // (única fuente: src/lib/constants.ts), whitelists de enums y cotas
+    // de texto — en ese orden (flag Devin #116 r4).
     const validation = validateCheckoutInput({ ...request, customer, items });
     if (!validation.ok) {
       return { success: false, error: validation.error };

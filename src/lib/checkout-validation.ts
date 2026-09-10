@@ -21,6 +21,8 @@
  *    cota de `address` solo aplica al texto del COMPRADOR (delivery).
  */
 
+import { MAX_CHECKOUT_ITEMS } from '@/lib/constants';
+
 export interface CheckoutCustomerData {
   name: string;
   phone: string;
@@ -223,6 +225,18 @@ export function validateCheckoutInput(request: CheckoutRequest): {
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return { ok: false, error: 'El carrito está vacío' };
+  }
+
+  // R9 (plan v2): cota del carrito — importada de src/lib/constants.ts
+  // (única fuente canónica; antes la validaba la Server Action ANTES del
+  // shape-check y un `items: null` lanzaba TypeError en items.length en
+  // vez del error controlado — flag Devin #116 r4 «Missing items skip
+  // cart validation»). Shape primero, cota después.
+  if (items.length > MAX_CHECKOUT_ITEMS) {
+    return {
+      ok: false,
+      error: `Demasiados artículos en el carrito (máximo ${MAX_CHECKOUT_ITEMS}).`,
+    };
   }
 
   // MAX_CHECKOUT_ITEMS vive en src/lib/constants.ts (única fuente) — la

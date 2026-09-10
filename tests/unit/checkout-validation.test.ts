@@ -165,18 +165,15 @@ describe('items validation — flag Devin #116 «Missing items skip cart validat
   it('rechaza con error de carrito si items es undefined o null sin arrojar excepción', () => {
     // @ts-expect-error probando input hostil/inválido en runtime
     const resUndefined = validateCheckoutInput({ ...baseRequest(), items: undefined });
-    expect(resUndefined.ok).toBe(false);
-    expect(resUndefined.error).toBe('El carrito está vacío');
+    expect(resUndefined).toEqual({ ok: false, error: 'El carrito está vacío' });
 
     // @ts-expect-error probando input hostil/inválido en runtime
     const resNull = validateCheckoutInput({ ...baseRequest(), items: null });
-    expect(resNull.ok).toBe(false);
-    expect(resNull.error).toBe('El carrito está vacío');
+    expect(resNull).toEqual({ ok: false, error: 'El carrito está vacío' });
   });
 
   it('rechaza si items es un array vacío', () => {
     const res = validateCheckoutInput({ ...baseRequest(), items: [] });
-    expect(res.ok).toBe(false);
-    expect(res.error).toBe('El carrito está vacío');
+    expect(res).toEqual({ ok: false, error: 'El carrito está vacío' });
   });
 });
