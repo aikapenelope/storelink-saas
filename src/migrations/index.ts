@@ -26,6 +26,7 @@ import * as migration_20260908_jobs_reconcile_task_slug from './20260908_jobs_re
 import * as migration_20260908_rls_customers_tables from './20260908_rls_customers_tables';
 import * as migration_20260909_jobs_stats_schema from './20260909_jobs_stats_schema';
 import * as migration_20260909_rls_all_public_tables from './20260909_rls_all_public_tables';
+import * as migration_20260909_fk_junction_indexes from './20260909_fk_junction_indexes';
 
 export const migrations = [
   {
@@ -164,5 +165,10 @@ export const migrations = [
     up: migration_20260909_rls_all_public_tables.up,
     down: migration_20260909_rls_all_public_tables.down,
     name: '20260909_rls_all_public_tables',
+  },
+  {
+    up: migration_20260909_fk_junction_indexes.up,
+    down: migration_20260909_fk_junction_indexes.down,
+    name: '20260909_fk_junction_indexes',
   },
 ];
