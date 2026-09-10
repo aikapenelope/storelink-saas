@@ -146,6 +146,21 @@ d('cotas de texto del comprador (PR 4.3, H-3) — capa schema', () => {
     await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
   });
 
+  it('acepta la etiqueta de pago agregada del peor caso (~440 chars, cota 500) — no rompe pagos reales', async () => {
+    // El drawer construye paymentMethod incrustando emisor (≤200) + referencia
+    // (≤200); la cota 100 previa habría rechazado este agregado legítimo.
+    const paymentMethod = `Pago Móvil VES (Banco Emisor: ${'B'.repeat(200)}, Ref: #${'R'.repeat(200)})`;
+    expect(paymentMethod.length).toBeGreaterThan(100);
+    expect(paymentMethod.length).toBeLessThanOrEqual(500);
+    const order = await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: baseOrder({ paymentMethod }) as never,
+    });
+    expect(order.id).toBeDefined();
+    await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true });
+  });
+
   it('acepta textos legítimos dentro de las cotas (no rompe pedidos reales)', async () => {
     const order = await payload.create({
       collection: 'orders',

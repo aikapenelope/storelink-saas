@@ -1103,8 +1103,11 @@ export const Orders: CollectionConfig = {
           name: 'paymentMethod',
           type: 'text',
           label: 'Método de Pago Seleccionado',
-          // PR 4.3 (H-3): etiqueta corta (p.ej. 'Pago Móvil VES').
-          maxLength: 100,
+          // PR 4.3 (H-3): etiqueta agregada que el drawer arma con emisor +
+          // referencia (cada fuente acotada a 200 en checkout-sanitize) →
+          // peor caso ~440 chars; cota 500 cubre el agregado legítimo (review
+          // Devin #116: «Valid payment labels exceed new cap»).
+          maxLength: 500,
         },
         {
           name: 'notes',

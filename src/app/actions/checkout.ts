@@ -217,8 +217,13 @@ function validateCheckoutInput(request: CheckoutRequest): { ok: true } | { ok: f
   if (typeof referencePoint === 'string' && referencePoint.trim().length > 300) {
     return { ok: false, error: 'Datos de entrega inválidos' };
   }
+  // PR 4.3 (H-3): `paymentMethod` es la ETIQUETA agregada que el drawer arma
+  // incrustando emisor + referencia (cada uno acotado a 200 en
+  // checkout-sanitize) → peor caso ~440 chars. La cota de 500 cubre el
+  // agregado legítimo (review Devin #116: «Valid payment labels exceed new
+  // cap»). Los campos fuente viven en paymentDetails (acotados por separado).
   const paymentMethodLabel = customer.paymentMethod;
-  if (typeof paymentMethodLabel === 'string' && paymentMethodLabel.trim().length > 100) {
+  if (typeof paymentMethodLabel === 'string' && paymentMethodLabel.trim().length > 500) {
     return { ok: false, error: 'Datos de pago inválidos' };
   }
 
@@ -882,12 +887,16 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
     // (currency) y el toggle Bs. venían del request del comprador — un
     // writer no confiable podía etiquetar 'EUR' una orden cobrada en USD o
     // forzar la línea Bs. en un comercio que la deshabilitó. Ahora:
-    //  - currency: SIEMPRE la de branding del tenant (default USD).
+    //  - currency: se ancla a 'USD', el valor con el que de VERDAD se
+    //    calculan y muestran los montos (storefront/PDF/Trello usan `$` y
+    //    'USD'). branding.currency (enum USD/EUR/MXN/COP) NO está cableado a
+    //    montos ni al storefront, así que etiquetar con él produciría
+    //    órdenes "EUR" con montos en USD (review Devin #116, «Non-USD
+    //    checkouts show conflicting currencies»). El request del comprador
+    //    se ignora; el enum queda para cuando exista conversión real.
     //  - showVES: el tenant decide (branding.showVES !== false); el cliente
     //    solo puede APAGAR la línea Bs. de su propia respuesta si la tasa
     //    no aplica, nunca encenderla contra la voluntad del comercio.
-    const tenantCurrency =
-      (tenantDoc.branding?.currency as string | undefined) || 'USD';
     const tenantShowVES = tenantDoc.branding?.showVES !== false;
 
     // Auditoría final 2026-09-01 (P1): segunda capa anti-abuso POR TENANT
@@ -1082,16 +1091,19 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
             subtotal: item.price * item.quantity,
           })),
           totalAmount: total,
-          currency: tenantCurrency,
-          // PR 4.3 (H-5): el snapshot VES SOLO se persiste cuando la línea Bs.
-          // efectivamente aplica (showVESEffective = tenantShowVES + tasa). Si
-          // el tenant deshabilitó VES, exchangeRateVES queda undefined y los
-          // jobs asíncronos (order-created.ts) — que derivan showVES de
-          // `exchangeRateVES > 0` para el email y el total Bs para Trello —
-          // tampoco muestran bolívares. Sin este gate, un tenant con
-          // branding.showVES=false igual recibía Bs en el email/Trello
-          // (review Devin #116: "Disabled VES survives asynchronous dispatch").
-          exchangeRateVES: showVESEffective ? (vesRate ?? undefined) : undefined,
+          currency: 'USD',
+          // PR 4.3 (H-5): el snapshot VES se persiste SOLO cuando el TENANT lo
+          // habilita (branding.showVES !== false) y hay tasa. NO se usa
+          // `showVESEffective` a propósito: ese valor incluye `showVES !==
+          // false` (el opt-out del CLIENTE para su propia respuesta), pero el
+          // despacho asíncrono (Trello/email) es la vista OPERATIVA del
+          // comercio y debe reflejar la config del tenant, no el flag
+          // transitorio del comprador. Con `showVESEffective`, un cliente con
+          // showVES:false apagaría Bs también en Trello/email de un comercio
+          // con VES activo (review Devin #116: «Client flag suppresses tenant
+          // VES records»). El fix del flag «Disabled VES survives async
+          // dispatch» se conserva: tenant con VES off → snapshot undefined.
+          exchangeRateVES: tenantShowVES ? (vesRate ?? undefined) : undefined,
         },
       });
       // La orden EXISTE: a partir de aquí la reserva de idempotencia ya no se
@@ -1174,7 +1186,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           customerAddress: customer.address,
           paymentMethod: customer.paymentMethod,
           notes: customer.notes,
-          currency: tenantCurrency,
+          currency: 'USD',
           deliveryType: customer.deliveryType,
           deliveryFee,
           subtotal: itemsSubtotal,
