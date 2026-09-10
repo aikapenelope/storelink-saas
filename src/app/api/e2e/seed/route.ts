@@ -152,7 +152,14 @@ export async function POST(request: NextRequest) {
             .slice(0, 10)
             .map((z) => ({
               name: String(z.name),
-              priceDelivery: typeof z.priceDelivery === 'number' ? z.priceDelivery : 0,
+              // Fix Devin #115: un valor negativo pasaría el typeof pero Payload
+              // lo rechaza con min: 0 → el seed aborta con 500 sin crear fixtures.
+              priceDelivery:
+                typeof z.priceDelivery === 'number' &&
+                Number.isFinite(z.priceDelivery) &&
+                z.priceDelivery >= 0
+                  ? z.priceDelivery
+                  : 0,
             }))
         : undefined;
 

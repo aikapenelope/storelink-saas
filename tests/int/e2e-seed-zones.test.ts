@@ -141,6 +141,47 @@ d('seed e2e con deliveryConfig.zones (PR 3.4, hueco del TDZ #101)', () => {
     );
     void tenantSlug;
   }, 60000);
+
+  it('zone con priceDelivery negativo se sanitiza a 0 (fix Devin #115)', async () => {
+    // Regresión: antes del fix, -5 pasaba el typeof check y Payload lo
+    // rechazaba con min: 0 → 500 → seed abortaba sin crear ningún fixture.
+    const { POST } = await import('../../src/app/api/e2e/seed/route');
+    const response = await POST(
+      new Request('http://localhost/api/e2e/seed', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-e2e-secret': 'test-e2e-seed',
+        },
+        body: JSON.stringify({
+          action: 'seed',
+          email: 'e2e-negprice@storelink.test',
+          password: 'e2e-test-password',
+          tenantSlug: `e2e-negprice-${Date.now()}`,
+          productSku: 'E2E-NEGPRICE',
+          zones: [{ name: 'Zona Negativa', priceDelivery: -5 }],
+        }),
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    // El seed completa exitosamente — no aborta con 500.
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { tenantId: number };
+    const tenant = (await payload.findByID({
+      collection: 'tenants',
+      id: body.tenantId,
+      overrideAccess: true,
+    })) as unknown as {
+      deliveryConfig?: { zones?: Array<{ name?: string; priceDelivery?: number }> };
+    };
+    // El priceDelivery negativo se sanitizó a 0.
+    expect(tenant.deliveryConfig?.zones).toHaveLength(1);
+    expect(tenant.deliveryConfig?.zones?.[0]?.name).toBe('Zona Negativa');
+    expect(tenant.deliveryConfig?.zones?.[0]?.priceDelivery).toBe(0);
+    await payload.delete({ collection: 'tenants', id: body.tenantId, overrideAccess: true }).catch(
+      () => null
+    );
+  }, 60000);
 });
 
 void vi;
