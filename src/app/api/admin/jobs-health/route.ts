@@ -35,11 +35,13 @@ export async function GET(request: Request) {
   try {
     const payload = await getPayload({ config });
 
-    const failedRes = await payload.find({
+    // PR 2.2 (review Devin #108 r2): payload.count hace COUNT(*) sin
+    // materializar docs. OJO: limit:0 en payload.find NO es "solo conteo",
+    // es "sin límite" — trae y materializa TODOS los docs (pesados: el input
+    // guarda el CSV completo). count() devuelve { totalDocs } directamente.
+    const failedRes = await payload.count({
       collection: 'payload-jobs' as never,
       where: { hasError: { equals: true } },
-      limit: 100,
-      sort: '-updatedAt',
       overrideAccess: true,
     });
 
@@ -65,17 +67,17 @@ export async function GET(request: Request) {
       overrideAccess: true,
     });
 
-    const failedJobs = failedRes.docs.length;
+    const failedJobs = failedRes.totalDocs;
     const oldestPending = (oldestPendingRes.docs as unknown as Array<{ id: string | number; createdAt?: string }>)[0];
     const oldestPendingMinutes = oldestPending?.createdAt
       ? Math.round((Date.now() - new Date(oldestPending.createdAt).getTime()) / 60000)
       : 0;
 
     // PR 2.2 (N5): profundidad de cola — misma condición de "pendiente real"
-    // del query de arriba (sin completedAt), pero contando TODOS (limit:0 =
-    // sin docs, solo totalDocs). Un zombie aparece aquí como pendiente
-    // indistinguible hasta que el cleanup del PR 2.1 lo resetee.
-    const queueDepthRes = await payload.find({
+    // del query de arriba (sin completedAt). Un zombie aparece aquí como
+    // pendiente indistinguible hasta que el cleanup del PR 2.1 lo resetee.
+    // payload.count (COUNT(*), sin materializar docs).
+    const queueDepthRes = await payload.count({
       collection: 'payload-jobs' as never,
       where: {
         and: [
@@ -83,17 +85,16 @@ export async function GET(request: Request) {
           { completedAt: { exists: false } },
         ],
       },
-      limit: 0,
       overrideAccess: true,
     });
-    const queueDepth = queueDepthRes.totalDocs ?? 0;
+    const queueDepth = queueDepthRes.totalDocs;
 
     // processingStuck: processing:true sin completar ni error y updated_at
     // >1h — el estado zombie PREVIO al reset del PR 2.1 (si el cleanup
     // corre sano, debe ser casi siempre 0; >0 sostenido = el cleanup no
     // está llegando o los jobs mueren más rápido de lo que se purgan).
     const stuckCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const stuckRes = await payload.find({
+    const stuckRes = await payload.count({
       collection: 'payload-jobs' as never,
       where: {
         and: [
@@ -103,10 +104,9 @@ export async function GET(request: Request) {
           { updatedAt: { less_than: stuckCutoff } },
         ],
       },
-      limit: 100,
       overrideAccess: true,
     });
-    const processingStuck = stuckRes.docs.length;
+    const processingStuck = stuckRes.totalDocs;
 
     // Criterios de 503 SIN cambio (PR 2.2): queueDepth/processingStuck son
     // telemetría — no disparan unhealthy por sí solos.
