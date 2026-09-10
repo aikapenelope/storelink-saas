@@ -672,6 +672,7 @@ async function finalizeOrderCrmAndDispatch({
   total,
   verifiedItems,
   now,
+  customerShowVES,
 }: {
   payload: Payload;
   tenantId: number;
@@ -683,6 +684,7 @@ async function finalizeOrderCrmAndDispatch({
   total: number;
   verifiedItems: CheckoutItemData[];
   now: Date;
+  customerShowVES?: boolean;
 }): Promise<void> {
   // Review Graphify/Devin #67: crmCounted refleja un incremento CRM
   // REALMENTE committeado. Se setea DESPUÉS de que upsertCustomerCrm fue
@@ -793,7 +795,10 @@ async function finalizeOrderCrmAndDispatch({
   try {
     const job = await payload.jobs.queue({
       workflow: 'order-created',
-      input: { orderId: orderDoc.id },
+      input: {
+        orderId: orderDoc.id,
+        customerShowVES,
+      },
     });
 
     after(async () => {
@@ -1092,17 +1097,13 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
           })),
           totalAmount: total,
           currency: 'USD',
-          // PR 4.3 (H-5): el snapshot VES se persiste SOLO cuando el TENANT lo
-          // habilita (branding.showVES !== false) y hay tasa. NO se usa
-          // `showVESEffective` a propósito: ese valor incluye `showVES !==
-          // false` (el opt-out del CLIENTE para su propia respuesta), pero el
-          // despacho asíncrono (Trello/email) es la vista OPERATIVA del
-          // comercio y debe reflejar la config del tenant, no el flag
-          // transitorio del comprador. Con `showVESEffective`, un cliente con
-          // showVES:false apagaría Bs también en Trello/email de un comercio
-          // con VES activo (review Devin #116: «Client flag suppresses tenant
-          // VES records»). El fix del flag «Disabled VES survives async
-          // dispatch» se conserva: tenant con VES off → snapshot undefined.
+          // PR 4.3 (H-5 + fix Devin #116): el snapshot VES se persiste SOLO
+          // cuando el TENANT lo habilita (branding.showVES !== false) y hay tasa.
+          // El snapshot en la orden es la vista OPERATIVA del comercio (Trello y
+          // reportes del tenant) y no se apaga por el opt-out transitorio del cliente
+          // (review Devin #116: «Client flag suppresses tenant VES records»).
+          // El opt-out del cliente para su correo de confirmación viaja por separado
+          // en job.input.customerShowVES (fix Devin #116: «Customer VES opt-out ignored in email»).
           exchangeRateVES: tenantShowVES ? (vesRate ?? undefined) : undefined,
         },
       });
@@ -1236,6 +1237,7 @@ export async function processOrder(request: CheckoutRequest): Promise<CheckoutRe
         total,
         verifiedItems,
         now,
+        customerShowVES: showVESEffective,
       });
     } catch (orderErr) {
       // El pedido NO se creó (orderCreated=false): liberar la reserva para que
