@@ -153,7 +153,13 @@ const reconcileDispatchOrders: TaskConfig = {
             { status: { not_equals: 'cancelled' } },
             {
               or: [
-                { trelloCardUrl: { like: '__pending__' } },
+                // PR 2.4 (plan sprints 2026-09-09, N6a): equals, no like —
+                // los `_` son wildcards de UN carácter en SQL LIKE, así que
+                // like '__pending__' matchea 'xpendingx', 'apendingb', etc.
+                // Inofensivo hoy (los sentinels acotan), pero cualquier
+                // trelloCardUrl real con esa forma se re-encolaría. El
+                // sentinel es un literal exacto: comparación exacta.
+                { trelloCardUrl: { equals: '__pending__' } },
                 { trelloCardUrl: { exists: false } },
                 { emailConfirmationSent: { not_equals: true } },
               ],
