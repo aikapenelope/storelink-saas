@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useTransition, useCallback } from 'react';
+import React, { useState, useEffect, useTransition, useCallback, useRef } from 'react';
 import {
   Users,
   Crown,
@@ -41,7 +41,7 @@ import {
   buildCustomerWhatsAppUrl,
   computeCustomerSegment,
 } from '@/lib/customers';
-import { parseCSVLine, detectCsvDelimiter, sanitizeCsvCell } from '@/lib/csv';
+import { parseCSVRecords, detectCsvDelimiter, sanitizeCsvCell } from '@/lib/csv';
 
 function isCsvHeaderRow(cols: string[]): boolean {
   if (cols.length === 0) return false;
@@ -70,6 +70,9 @@ export function CustomersRegistryManager({
   tenantName,
   tenantId,
 }: CustomersRegistryManagerProps) {
+  // Token de petición para evitar que respuestas desordenadas de KPIs sobreescriban el estado más reciente
+  const kpiRequestIdRef = useRef(0);
+
   // Estado de lista y filtros
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [kpis, setKpis] = useState<CustomerKpis>(initialKpis);
@@ -203,21 +206,25 @@ export function CustomersRegistryManager({
   const handleUpdateTag = async (newTag: 'nuevo' | 'frecuente' | 'vip' | 'inactivo') => {
     if (!selectedCustomer) return;
     setUpdatingTag(true);
+    const reqId = ++kpiRequestIdRef.current;
     try {
       const res = await updateCustomerTag(selectedCustomer.id, newTag);
       if (res.success) {
         setSelectedCustomer((prev) => (prev ? { ...prev, tag: newTag } : null));
 
-        // Refrescar KPIs de forma autoritativa desde la base de datos
-        fetchCustomerKpis(tenantId).then((newKpis) => {
-          if (newKpis) setKpis(newKpis);
-        });
+        // Refrescar KPIs de forma autoritativa y secuencial (esperando respuesta antes de liberar selector)
+        const newKpis = await fetchCustomerKpis(tenantId);
+        if (newKpis && reqId === kpiRequestIdRef.current) {
+          setKpis(newKpis);
+        }
 
         // Recargar una página válida si el cliente puede salir del segmento activo
         loadCustomers(activeSegment === 'all' ? page : 1);
       }
     } finally {
-      setUpdatingTag(false);
+      if (reqId === kpiRequestIdRef.current) {
+        setUpdatingTag(false);
+      }
     }
   };
 
@@ -322,8 +329,12 @@ export function CustomersRegistryManager({
     setImportResult(null);
 
     try {
-      const lines = importInputText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      if (lines.length === 0) {
+      // Detectar delimitador analizando el texto completo
+      const delimiter = detectCsvDelimiter(importInputText);
+      // Parsear registros completos respetando saltos de línea dentro de notas entrecomilladas (RFC 4180)
+      const records = parseCSVRecords(importInputText, delimiter);
+
+      if (records.length === 0) {
         setImportResult({
           success: false,
           createdCount: 0,
@@ -333,17 +344,35 @@ export function CustomersRegistryManager({
         return;
       }
 
-      // Detectar delimitador analizando la primera línea
-      const delimiter = detectCsvDelimiter(lines[0]);
+      // Si la primera fila es encabezado (ej. CSV exportado previamente), omitirla
+      const isHeader = isCsvHeaderRow(records[0]);
+      const dataRecords = isHeader ? records.slice(1) : records;
+
+      if (dataRecords.length === 0) {
+        setImportResult({
+          success: false,
+          createdCount: 0,
+          updatedCount: 0,
+          errors: ['El archivo solo contiene encabezados sin registros de clientes.'],
+        });
+        return;
+      }
+
+      if (dataRecords.length > MAX_IMPORT_ITEMS_LIMIT) {
+        setImportResult({
+          success: false,
+          createdCount: 0,
+          updatedCount: 0,
+          errors: [
+            `El lote contiene ${dataRecords.length} contactos. El máximo permitido por importación es de ${MAX_IMPORT_ITEMS_LIMIT} contactos.`,
+          ],
+        });
+        return;
+      }
+
       const parsedItems: ImportCustomerItem[] = [];
 
-      // Si la primera fila es encabezado (ej. CSV exportado previamente), omitirla
-      const firstRowCols = parseCSVLine(lines[0], delimiter);
-      const isHeader = isCsvHeaderRow(firstRowCols);
-      const startIndex = isHeader ? 1 : 0;
-
-      for (let i = startIndex; i < lines.length; i++) {
-        const parts = parseCSVLine(lines[i], delimiter);
+      for (const parts of dataRecords) {
         if (parts.length >= 2) {
           const name = parts[0]?.trim();
           const phone = parts[1]?.trim();
@@ -384,28 +413,18 @@ export function CustomersRegistryManager({
         return;
       }
 
-      if (parsedItems.length > MAX_IMPORT_ITEMS_LIMIT) {
-        setImportResult({
-          success: false,
-          createdCount: 0,
-          updatedCount: 0,
-          errors: [
-            `El lote contiene ${parsedItems.length} contactos. El máximo permitido por importación es de ${MAX_IMPORT_ITEMS_LIMIT} contactos.`,
-          ],
-        });
-        return;
-      }
-
       const res = await importCustomersBatch(parsedItems, tenantId);
       setImportResult(res);
 
       if (res.success) {
         // Recargar clientes y primera página
         loadCustomers(1);
-        // Refrescar tarjetas de resumen KPI del servidor
-        fetchCustomerKpis(tenantId).then((newKpis) => {
-          if (newKpis) setKpis(newKpis);
-        });
+        // Refrescar tarjetas de resumen KPI del servidor de forma autoritativa
+        const reqId = ++kpiRequestIdRef.current;
+        const newKpis = await fetchCustomerKpis(tenantId);
+        if (newKpis && reqId === kpiRequestIdRef.current) {
+          setKpis(newKpis);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al procesar la importación';

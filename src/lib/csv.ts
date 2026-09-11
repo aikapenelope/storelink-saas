@@ -16,32 +16,61 @@
  */
 
 /**
- * Parsea una línea CSV con soporte de comillas RFC 4180.
- * Soporta delimitador configurable (por defecto coma `,`) y comillas dobles escapadas `""`.
+ * Parsea un documento CSV completo en una matriz de registros (filas y columnas),
+ * respetando saltos de línea (\r, \n, \r\n) dentro de celdas entrecomilladas según RFC 4180.
  */
-export function parseCSVLine(line: string, delimiter: string = ','): string[] {
-  const result: string[] = [];
-  let current = '';
+export function parseCSVRecords(raw: string, delimiter: string = ','): string[][] {
+  if (!raw || typeof raw !== 'string') return [];
+
+  const records: string[][] = [];
+  let currentRecord: string[] = [];
+  let currentField = '';
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+
     if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++; // saltar comilla escapada
+      if (inQuotes && raw[i + 1] === '"') {
+        currentField += '"';
+        i++; // saltar comilla doble escapada ("")
       } else {
         inQuotes = !inQuotes;
       }
     } else if (char === delimiter && !inQuotes) {
-      result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-      current = '';
+      currentRecord.push(currentField.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && raw[i + 1] === '\n') {
+        i++; // saltar \n de la secuencia \r\n
+      }
+      currentRecord.push(currentField.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+      currentField = '';
+      if (currentRecord.some((f) => f.length > 0)) {
+        records.push(currentRecord);
+      }
+      currentRecord = [];
     } else {
-      current += char;
+      currentField += char;
     }
   }
-  result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-  return result;
+
+  // Procesar último campo y registro remanente
+  currentRecord.push(currentField.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+  if (currentRecord.some((f) => f.length > 0)) {
+    records.push(currentRecord);
+  }
+
+  return records;
+}
+
+/**
+ * Parsea una línea CSV con soporte de comillas RFC 4180.
+ * Soporta delimitador configurable (por defecto coma `,`) y comillas dobles escapadas `""`.
+ */
+export function parseCSVLine(line: string, delimiter: string = ','): string[] {
+  const records = parseCSVRecords(line, delimiter);
+  return records.length > 0 ? records[0] : [];
 }
 
 /**

@@ -419,6 +419,38 @@ describe('admin-customers server actions & analytics', () => {
       expect(res).toBeNull();
     });
 
+    it('returns null if user is super-admin but targetTenantId is not provided (prevents global cross-tenant data leak)', async () => {
+      const mockSuperAdmin = { id: 1, role: 'super-admin', tenants: [] };
+      mockAuth.mockResolvedValueOnce({ user: mockSuperAdmin });
+      // Calling without explicitTenantId
+      const res = await fetchCustomerKpis();
+      expect(res).toBeNull();
+      expect(mockDrizzleExecute).not.toHaveBeenCalled();
+    });
+
+    it('clamps maxLimit safely and prevents NaN or non-finite numbers from bypassing query bounds', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({ docs: [] });
+
+      await fetchSegmentPhones({ maxLimit: NaN });
+      expect(mockFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 1000,
+        })
+      );
+
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({ docs: [] });
+
+      await exportSegmentCustomersCsvData({ maxLimit: 99999 });
+      expect(mockFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 2500,
+        })
+      );
+    });
+
     it('queries KPIs for authorized tenant', async () => {
       const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
       mockAuth.mockResolvedValueOnce({ user: mockUser });

@@ -5,6 +5,7 @@ import {
   MAX_CSV_ROWS,
   detectCsvDelimiter,
   parseCSVLine,
+  parseCSVRecords,
   sanitizeCsvCell,
   validateCsvLimits,
 } from '../../src/lib/csv';
@@ -126,4 +127,41 @@ describe('detectCsvDelimiter — detección automática de separador', () => {
     expect(detectCsvDelimiter(line)).toBe(';');
   });
 });
+
+describe('parseCSVRecords — RFC 4180 parsing multilínea con saltos dentro de comillas', () => {
+  it('preserva saltos de línea dentro de notas entrecomilladas sin partir registros', () => {
+    const csv = [
+      'Nombre,Telefono,Email,Notas',
+      '"Carlos Pérez",04141234567,carlos@email.com,"Entrega posterior\nMaría, 04141234567"',
+      '"Juan Gómez",04249876543,juan@email.com,"Sin notas"',
+    ].join('\n');
+
+    const records = parseCSVRecords(csv);
+    expect(records.length).toBe(3);
+    expect(records[0]).toEqual(['Nombre', 'Telefono', 'Email', 'Notas']);
+    expect(records[1]).toEqual([
+      'Carlos Pérez',
+      '04141234567',
+      'carlos@email.com',
+      'Entrega posterior\nMaría, 04141234567',
+    ]);
+    expect(records[2]).toEqual(['Juan Gómez', '04249876543', 'juan@email.com', 'Sin notas']);
+  });
+
+  it('soporta retornos de carro CRLF y comillas dobles escapadas multilínea', () => {
+    const csv = '"Ana Silva"\t04121112233\t"Nota con ""comillas""\r\ny segunda línea"\r\n"Pedro"\t04169998877\t"OK"';
+    const records = parseCSVRecords(csv, '\t');
+    expect(records.length).toBe(2);
+    expect(records[0][0]).toBe('Ana Silva');
+    expect(records[0][2]).toBe('Nota con "comillas"\r\ny segunda línea');
+    expect(records[1][0]).toBe('Pedro');
+    expect(records[1][2]).toBe('OK');
+  });
+
+  it('devuelve array vacío para entradas vacías', () => {
+    expect(parseCSVRecords('')).toEqual([]);
+    expect(parseCSVRecords('   \n\n  ')).toEqual([]);
+  });
+});
+
 

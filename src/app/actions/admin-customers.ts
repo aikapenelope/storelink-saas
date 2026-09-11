@@ -531,6 +531,11 @@ export async function fetchCustomerKpis(explicitTenantId?: number | string): Pro
     return null;
   }
 
+  // Aislamiento multi-tenant estricto: rechazar consultas sin tenant para evitar agregaciones globales cross-tenant
+  if (!targetTenantId) {
+    return null;
+  }
+
   return getCustomerKpis(payload, targetTenantId);
 }
 
@@ -552,7 +557,10 @@ export async function fetchSegmentPhones({
   const { user } = await payload.auth({ headers: await headers() });
   if (!user) return [];
 
-  const safeLimit = Math.min(Math.max(1, maxLimit), 2500);
+  const parsedLimit = typeof maxLimit === 'number' ? maxLimit : Number(maxLimit);
+  const safeLimit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(1, Math.floor(parsedLimit)), 2500)
+    : 1000;
   const where = buildCustomerWhereConditions({ segment, search });
 
   const res = await payload.find({
@@ -597,7 +605,10 @@ export async function exportSegmentCustomersCsvData({
   const { user } = await payload.auth({ headers: await headers() });
   if (!user) return [];
 
-  const safeLimit = Math.min(Math.max(1, maxLimit), 2500);
+  const parsedLimit = typeof maxLimit === 'number' ? maxLimit : Number(maxLimit);
+  const safeLimit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(1, Math.floor(parsedLimit)), 2500)
+    : 1000;
   const where = buildCustomerWhereConditions({ segment, search });
 
   const res = await payload.find({
