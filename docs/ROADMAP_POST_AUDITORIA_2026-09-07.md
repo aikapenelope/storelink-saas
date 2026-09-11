@@ -1,5 +1,10 @@
 # ROADMAP POST-AUDITORÍA 2026-09-07 — Plan detallado de 14 PRs
 
+> ⚠️ **DOCUMENTO HISTÓRICO CONSOLIDADO (13/14 PRs MERGEADOS)**  
+> 13 de los 14 PRs detallados en este plan ya fueron ejecutados, probados y mergeados en `main` (PRs #90 a #102).  
+> El estado técnico consolidado y los pendientes vigentes se encuentran en la fuente única de verdad:  
+> 🔗 [`docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md`](ESTADO_Y_ROADMAP_CONSOLIDADO.md).
+
 **Origen:** `docs/AUDITORIA_2026-09-07.md` (score 8,8 GO; cero P0/P1 producción). Cada PR sigue el formato spec-from-findings: problema con evidencia, patrón oficial aplicado, alcance, criterios de aceptación testeables, verificación y rollback.
 **Reglas transversales (constitución):** un PR = un cambio lógico; si toca `src/collections/*` → migración `migrate:create` + `src/migrations/index.ts` + `pnpm generate:types` **en el mismo commit**; rebase contra `main` antes de abrir; build verde; NUNCA merge (lo hace el dueño); identidad `AngelDelN`.
 

@@ -3,6 +3,7 @@
 SaaS e-commerce multi-tenant: Payload CMS 3.88 (Next.js 15.5 / React 19, App Router) + PostgreSQL en Supabase (Transaction Pooler 6543) + Vercel. Tiendas web responsive (mobile + desktop, NO PWA/instalable) en `flow.martes.app/[tenantSlug]`, admin en `/admin`, checkout a WhatsApp y despacho a Trello.
 
 La **constitución del repo** está en `docs/AGENTS_CONSTITUTION.md` y se carga automáticamente. Leela siempre.
+El **estado técnico consolidado y roadmap vigente** está en `docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md` (fuente única de verdad).
 
 ## Comandos
 - Instalar: `pnpm install` (pnpm@10.27.0 — nunca npm/yarn)

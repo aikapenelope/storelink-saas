@@ -1,9 +1,9 @@
 # 🗺️ Roadmap V2 — Escala 100–200 Tiendas
 
-> Documento de ingeniería derivado de la auditoría de seguridad y rendimiento (Ago 2026).
-> Los ítems críticos de **seguridad** ya están resueltos en la rama `fix/security-audit-payload-official`.
-> Este roadmap agrupa lo necesario para que la plataforma aguante 100–200 comercios concurrentes
-> sin degradar latencia, agotar cuotas de serverless ni saturar Supabase.
+> ⚠️ **DOCUMENTO HISTÓRICO (Agosto 2026)**  
+> Este documento ha sido consolidado y superado por la implementación de producción.  
+> Para consultar el estado técnico real y la planificación activa, referirse a la fuente única de verdad:  
+> 🔗 [`docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md`](docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md).
 
 ---
 
