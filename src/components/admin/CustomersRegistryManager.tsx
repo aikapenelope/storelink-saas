@@ -59,6 +59,7 @@ interface CustomersRegistryManagerProps {
   tenantSlug: string;
   tenantName: string;
   tenantId: number | string;
+  onKpisChange?: (newKpis: CustomerKpis) => void;
 }
 
 type SegmentFilter = 'all' | 'vip' | 'frecuente' | 'nuevo' | 'inactivo';
@@ -69,6 +70,7 @@ export function CustomersRegistryManager({
   tenantSlug,
   tenantName,
   tenantId,
+  onKpisChange,
 }: CustomersRegistryManagerProps) {
   // Token de petición para evitar que respuestas desordenadas de KPIs sobreescriban el estado más reciente
   const kpiRequestIdRef = useRef(0);
@@ -78,6 +80,11 @@ export function CustomersRegistryManager({
   // Estado de lista y filtros
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [kpis, setKpis] = useState<CustomerKpis>(initialKpis);
+
+  // Mantener kpis sincronizados si el prop del padre cambia
+  useEffect(() => {
+    setKpis(initialKpis);
+  }, [initialKpis]);
   const [activeSegment, setActiveSegment] = useState<SegmentFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -224,6 +231,7 @@ export function CustomersRegistryManager({
         const newKpis = await fetchCustomerKpis(tenantId);
         if (newKpis && reqId === kpiRequestIdRef.current) {
           setKpis(newKpis);
+          onKpisChange?.(newKpis);
         }
 
         // Recargar una página válida si el cliente puede salir del segmento activo
@@ -430,6 +438,7 @@ export function CustomersRegistryManager({
         const newKpis = await fetchCustomerKpis(tenantId);
         if (newKpis && reqId === kpiRequestIdRef.current) {
           setKpis(newKpis);
+          onKpisChange?.(newKpis);
         }
       }
     } catch (err: unknown) {
