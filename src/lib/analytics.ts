@@ -19,6 +19,16 @@ export type OrderKpis = {
   customerCount: number;
 };
 
+export type CustomerKpis = {
+  totalCustomers: number;
+  vipCount: number;
+  recurrentCount: number;
+  newCount: number;
+  inactiveCount: number;
+  totalSpentUSD: number;
+  averageLtv: number;
+};
+
 export type SalesDay = {
   dateStr: string;
   label: string;
@@ -81,6 +91,54 @@ export async function getOrderKpis(
     todayUSD: num(ordersRes.rows[0]?.today_usd),
     pendingCount: num(ordersRes.rows[0]?.pending_count),
     customerCount: num(customersRes.rows[0]?.count),
+  };
+}
+
+export async function getCustomerKpis(
+  payload: Payload,
+  tenantId?: number | string | null
+): Promise<CustomerKpis> {
+  const t = tenantClause(tenantId);
+  const { customersTable } = getTableNames(payload);
+
+  const res = await payload.db.drizzle.execute(sql`
+    SELECT 
+      COUNT(*)::int AS total_customers,
+      COUNT(*) FILTER (
+        WHERE tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50
+      )::int AS vip_count,
+      COUNT(*) FILTER (
+        WHERE (tag = 'frecuente' OR COALESCE(total_orders, 0) = 2)
+          AND NOT (tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50)
+      )::int AS recurrent_count,
+      COUNT(*) FILTER (
+        WHERE (tag = 'nuevo' OR COALESCE(total_orders, 0) <= 1)
+          AND NOT (tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50)
+          AND NOT (tag = 'frecuente' OR COALESCE(total_orders, 0) = 2)
+          AND (last_order_at IS NULL OR last_order_at >= (now() AT TIME ZONE ${TZ})::date - 60)
+      )::int AS new_count,
+      COUNT(*) FILTER (
+        WHERE tag = 'inactivo'
+          OR (last_order_at IS NOT NULL AND last_order_at < (now() AT TIME ZONE ${TZ})::date - 60)
+      )::int AS inactive_count,
+      COALESCE(SUM(total_spent), 0)::float8 AS total_spent_usd
+    FROM ${customersTable}
+    WHERE 1=1 ${t}
+  `);
+
+  const row = res.rows[0];
+  const totalCustomers = num(row?.total_customers);
+  const totalSpentUSD = num(row?.total_spent_usd);
+  const averageLtv = totalCustomers > 0 ? totalSpentUSD / totalCustomers : 0;
+
+  return {
+    totalCustomers,
+    vipCount: num(row?.vip_count),
+    recurrentCount: num(row?.recurrent_count),
+    newCount: num(row?.new_count),
+    inactiveCount: num(row?.inactive_count),
+    totalSpentUSD,
+    averageLtv,
   };
 }
 
