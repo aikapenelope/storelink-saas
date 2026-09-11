@@ -3,6 +3,8 @@ import {
   MAX_CELL_LENGTH,
   MAX_CSV_BYTES,
   MAX_CSV_ROWS,
+  detectCsvDelimiter,
+  parseCSVLine,
   sanitizeCsvCell,
   validateCsvLimits,
 } from '../../src/lib/csv';
@@ -79,3 +81,49 @@ describe('validateCsvLimits — DoS por payload gigante', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe('parseCSVLine — RFC 4180 parsing con comillas y delimitadores', () => {
+  it('respeta comas dentro de campos entrecomillados', () => {
+    const line = '"Pérez, Ana",04141234567,ana@example.com,"Prefiere rojo, azul"';
+    const parsed = parseCSVLine(line);
+    expect(parsed).toEqual(['Pérez, Ana', '04141234567', 'ana@example.com', 'Prefiere rojo, azul']);
+  });
+
+  it('soporta comillas dobles escapadas ("")', () => {
+    const line = '"Carlos ""El Tigre"" Pérez",04149998877';
+    const parsed = parseCSVLine(line);
+    expect(parsed).toEqual(['Carlos "El Tigre" Pérez', '04149998877']);
+  });
+
+  it('soporta punto y coma como delimitador alternativo', () => {
+    const line = '"Pérez, Ana";04141234567;ana@example.com;"Nota con ; punto y coma"';
+    const parsed = parseCSVLine(line, ';');
+    expect(parsed).toEqual(['Pérez, Ana', '04141234567', 'ana@example.com', 'Nota con ; punto y coma']);
+  });
+
+  it('soporta tabulador como delimitador', () => {
+    const line = 'Carlos Pérez\t04141234567\tcarlos@email.com';
+    const parsed = parseCSVLine(line, '\t');
+    expect(parsed).toEqual(['Carlos Pérez', '04141234567', 'carlos@email.com']);
+  });
+});
+
+describe('detectCsvDelimiter — detección automática de separador', () => {
+  it('detecta comas por defecto cuando no hay otros separadores', () => {
+    expect(detectCsvDelimiter('Nombre,Telefono,Email')).toBe(',');
+  });
+
+  it('detecta punto y coma cuando es el separador predominante', () => {
+    expect(detectCsvDelimiter('"Pérez, Ana";04141234567;ana@example.com;Nota')).toBe(';');
+  });
+
+  it('detecta tabulador cuando es el separador predominante', () => {
+    expect(detectCsvDelimiter('Carlos Pérez\t04141234567\tcarlos@email.com')).toBe('\t');
+  });
+
+  it('no confunde comas dentro de comillas con el delimitador principal', () => {
+    const line = '"Pérez, Ana";04141234567;"Caracas, Venezuela"';
+    expect(detectCsvDelimiter(line)).toBe(';');
+  });
+});
+

@@ -17,10 +17,9 @@
 
 /**
  * Parsea una línea CSV con soporte de comillas RFC 4180.
- * Movido aquí desde import-csv/route.ts y sync-sheets/route.ts (estaban
- * duplicadas 1:1; se centraliza para mantenerlas sincronizadas).
+ * Soporta delimitador configurable (por defecto coma `,`) y comillas dobles escapadas `""`.
  */
-export function parseCSVLine(line: string): string[] {
+export function parseCSVLine(line: string, delimiter: string = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -28,8 +27,13 @@ export function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // saltar comilla escapada
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
       result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
       current = '';
     } else {
@@ -38,6 +42,36 @@ export function parseCSVLine(line: string): string[] {
   }
   result.push(current.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
   return result;
+}
+
+/**
+ * Detecta el delimitador más probable (coma, punto y coma, tabulador)
+ * contando apariciones fuera de comillas en la línea de muestra.
+ */
+export function detectCsvDelimiter(line: string): ',' | ';' | '\t' {
+  let inQuotes = false;
+  let commas = 0;
+  let semicolons = 0;
+  let tabs = 0;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        i++; // saltar comilla escapada dentro de comillas
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (!inQuotes) {
+      if (char === ',') commas++;
+      else if (char === ';') semicolons++;
+      else if (char === '\t') tabs++;
+    }
+  }
+
+  if (semicolons > commas && semicolons >= tabs) return ';';
+  if (tabs > commas && tabs > semicolons) return '\t';
+  return ',';
 }
 
 /** Máximo tamaño del CSV crudo en bytes (2 MB ≈ decenas de miles de filas cortas). */

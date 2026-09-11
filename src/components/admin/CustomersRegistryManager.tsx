@@ -41,6 +41,17 @@ import {
   buildCustomerWhatsAppUrl,
   computeCustomerSegment,
 } from '@/lib/customers';
+import { parseCSVLine, detectCsvDelimiter, sanitizeCsvCell } from '@/lib/csv';
+
+function isCsvHeaderRow(cols: string[]): boolean {
+  if (cols.length === 0) return false;
+  const col0 = (cols[0] || '').toLowerCase().trim();
+  const col1 = (cols[1] || '').toLowerCase().trim();
+  return (
+    (col0.includes('nombre') || col0.includes('name') || col0 === 'cliente') &&
+    (col1.includes('tel') || col1.includes('phone') || col1.includes('whatsapp') || isNaN(Number(col1.replace(/\D/g, ''))) || col1.length < 5)
+  );
+}
 
 interface CustomersRegistryManagerProps {
   initialCustomers: Customer[];
@@ -140,11 +151,20 @@ export function CustomersRegistryManager({
     const phone = selectedCustomer.phone;
     if (!phone) return;
 
+    let cancelled = false;
     setLoadingOrders(true);
     fetchCustomerOrders(phone)
-      .then((orders) => setCustomerOrders(orders))
+      .then((orders) => {
+        if (!cancelled) setCustomerOrders(orders);
+      })
       .catch((err) => console.error('Error al consultar pedidos del cliente:', err))
-      .finally(() => setLoadingOrders(false));
+      .finally(() => {
+        if (!cancelled) setLoadingOrders(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCustomer]);
 
   // Actualización de plantilla de mensaje para WhatsApp
@@ -193,8 +213,8 @@ export function CustomersRegistryManager({
           if (newKpis) setKpis(newKpis);
         });
 
-        // Recargar la página actual para reflejar si el cliente entra/sale del filtro activo
-        loadCustomers(page);
+        // Recargar una página válida si el cliente puede salir del segmento activo
+        loadCustomers(activeSegment === 'all' ? page : 1);
       }
     } finally {
       setUpdatingTag(false);
@@ -246,19 +266,25 @@ export function CustomersRegistryManager({
         return;
       }
 
+      const formatCsvCell = (val: string | number | null | undefined): string => {
+        if (typeof val === 'number') return String(val);
+        const sanitized = sanitizeCsvCell(val != null ? String(val) : '');
+        return `"${sanitized.replace(/"/g, '""')}"`;
+      };
+
       const headers = ['Nombre', 'Telefono', 'Email', 'Segmento', 'Total Pedidos', 'Total Gastado USD', 'Ultimo Pedido', 'Notas'];
       const rows = records.map((c) => [
-        `"${(c.name || '').replace(/"/g, '""')}"`,
-        `"${c.phone || ''}"`,
-        `"${c.email || ''}"`,
-        `"${c.tag || 'nuevo'}"`,
+        formatCsvCell(c.name),
+        formatCsvCell(c.phone),
+        formatCsvCell(c.email),
+        formatCsvCell(c.tag || 'nuevo'),
         c.totalOrders ?? 0,
         (c.totalSpent ?? 0).toFixed(2),
-        c.lastOrderAt ? `"${new Date(c.lastOrderAt).toLocaleDateString('es-VE')}"` : '""',
-        `"${(c.notes || '').replace(/"/g, '""')}"`,
+        c.lastOrderAt ? formatCsvCell(new Date(c.lastOrderAt).toLocaleDateString('es-VE')) : '""',
+        formatCsvCell(c.notes),
       ]);
 
-      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const csvContent = [headers.map(formatCsvCell).join(','), ...rows.map((r) => r.join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -274,24 +300,73 @@ export function CustomersRegistryManager({
     }
   };
 
+  const MAX_IMPORT_FILE_BYTES = 1024 * 1024; // 1 MB máximo para archivo cargado
+  const MAX_IMPORT_TEXT_CHARS = 200000;      // 200,000 caracteres para texto pegado
+  const MAX_IMPORT_ITEMS_LIMIT = 250;        // Máximo 250 contactos por lote
+
   // Procesar e importar texto o CSV
   const handleImportSubmit = async () => {
     if (!importInputText.trim()) return;
+
+    if (importInputText.length > MAX_IMPORT_TEXT_CHARS) {
+      setImportResult({
+        success: false,
+        createdCount: 0,
+        updatedCount: 0,
+        errors: ['El texto a importar excede el límite máximo permitido de 200,000 caracteres.'],
+      });
+      return;
+    }
+
     setImporting(true);
     setImportResult(null);
 
     try {
       const lines = importInputText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length === 0) {
+        setImportResult({
+          success: false,
+          createdCount: 0,
+          updatedCount: 0,
+          errors: ['No se detectó contenido para importar.'],
+        });
+        return;
+      }
+
+      // Detectar delimitador analizando la primera línea
+      const delimiter = detectCsvDelimiter(lines[0]);
       const parsedItems: ImportCustomerItem[] = [];
 
-      for (const line of lines) {
-        // Separación por coma o punto y coma
-        const parts = line.split(/[,;\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ''));
+      // Si la primera fila es encabezado (ej. CSV exportado previamente), omitirla
+      const firstRowCols = parseCSVLine(lines[0], delimiter);
+      const isHeader = isCsvHeaderRow(firstRowCols);
+      const startIndex = isHeader ? 1 : 0;
+
+      for (let i = startIndex; i < lines.length; i++) {
+        const parts = parseCSVLine(lines[i], delimiter);
         if (parts.length >= 2) {
-          const name = parts[0];
-          const phone = parts[1];
-          const email = parts[2] || undefined;
-          const notes = parts[3] || undefined;
+          const name = parts[0]?.trim();
+          const phone = parts[1]?.trim();
+
+          let email: string | undefined = undefined;
+          let notes: string | undefined = undefined;
+
+          if (parts.length >= 8) {
+            // Formato exportado completo del directorio (8 columnas)
+            email = parts[2]?.trim() || undefined;
+            notes = parts[7]?.trim() || parts[3]?.trim() || undefined;
+          } else if (parts.length >= 4) {
+            // Formato estándar de ingesta (Nombre, Teléfono, Email, Notas)
+            email = parts[2]?.trim() || undefined;
+            notes = parts[3]?.trim() || undefined;
+          } else if (parts.length === 3) {
+            const third = parts[2]?.trim();
+            if (third && third.includes('@')) {
+              email = third;
+            } else if (third) {
+              notes = third;
+            }
+          }
 
           if (name && phone) {
             parsedItems.push({ name, phone, email, notes });
@@ -305,6 +380,18 @@ export function CustomersRegistryManager({
           createdCount: 0,
           updatedCount: 0,
           errors: ['No se detectaron filas válidas con formato "Nombre, Teléfono".'],
+        });
+        return;
+      }
+
+      if (parsedItems.length > MAX_IMPORT_ITEMS_LIMIT) {
+        setImportResult({
+          success: false,
+          createdCount: 0,
+          updatedCount: 0,
+          errors: [
+            `El lote contiene ${parsedItems.length} contactos. El máximo permitido por importación es de ${MAX_IMPORT_ITEMS_LIMIT} contactos.`,
+          ],
         });
         return;
       }
@@ -338,10 +425,29 @@ export function CustomersRegistryManager({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      setImportResult({
+        success: false,
+        createdCount: 0,
+        updatedCount: 0,
+        errors: ['El archivo seleccionado excede el límite máximo de 1 MB.'],
+      });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
       if (text) {
+        if (text.length > MAX_IMPORT_TEXT_CHARS) {
+          setImportResult({
+            success: false,
+            createdCount: 0,
+            updatedCount: 0,
+            errors: ['El contenido del archivo supera los 200,000 caracteres permitidos.'],
+          });
+          return;
+        }
         setImportInputText(text);
       }
     };
@@ -828,10 +934,10 @@ export function CustomersRegistryManager({
                 </button>
               </div>
 
-              {/* Selector interactivo de segmento manual */}
+              {/* Selector interactivo de etiqueta manual */}
               <div className="bg-black p-3.5 border border-zinc-800 space-y-2">
                 <label className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block">
-                  Segmento del Comprador
+                  Etiqueta Manual de Clasificación
                 </label>
                 <div className="flex items-center gap-2">
                   <select
@@ -847,6 +953,9 @@ export function CustomersRegistryManager({
                   </select>
                   {updatingTag && <RefreshCw className="w-4 h-4 animate-spin text-zinc-400" />}
                 </div>
+                <p className="text-[10px] text-zinc-500 font-mono">
+                  Asigna una etiqueta manual. Clientes con actividad alta (≥3 pedidos o ≥$50) califican automáticamente como VIP en las métricas y filtros del sistema.
+                </p>
               </div>
 
               {/* Indicadores Financieros */}
