@@ -125,7 +125,7 @@ export function AnalyticsDashboardClient({
       const tabParam = params.get('tab');
       if (tabParam === 'customers') {
         setActiveTab('customers');
-      } else if (tabParam === 'performance' || !tabParam) {
+      } else {
         setActiveTab('performance');
       }
     };
