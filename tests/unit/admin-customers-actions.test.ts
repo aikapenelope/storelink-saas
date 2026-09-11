@@ -108,9 +108,46 @@ describe('admin-customers server actions & analytics', () => {
         ])
       );
     });
+
+    it('matches stored international phone when searching with local 0414 format', async () => {
+      const mockUser = { id: 1, email: 'admin@store.com', role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({
+        docs: [],
+        hasNextPage: false,
+        totalDocs: 0,
+        totalPages: 0,
+        page: 1,
+      });
+
+      await fetchCustomersPage({ page: 1, search: '0414-1234567' });
+
+      const callArg = mockFind.mock.calls[0][0];
+      expect(callArg.where.and[0].or).toEqual(
+        expect.arrayContaining([
+          { phone: { contains: '584141234567' } },
+          { phone: { contains: '04141234567' } },
+          { phone: { contains: '4141234567' } },
+        ])
+      );
+    });
   });
 
   describe('importCustomersBatch', () => {
+    it('rejects batches exceeding MAX_IMPORT_BATCH (250)', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+
+      const bigBatch = Array.from({ length: 251 }, (_, i) => ({
+        name: `Cliente ${i}`,
+        phone: `0414${String(i).padStart(7, '0')}`,
+      }));
+
+      const result = await importCustomersBatch(bigBatch);
+      expect(result.success).toBe(false);
+      expect(result.errors[0]).toContain('250');
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
     it('returns error if user is not authenticated', async () => {
       mockAuth.mockResolvedValueOnce({ user: null });
 
@@ -185,6 +222,12 @@ describe('admin-customers server actions & analytics', () => {
       );
     });
 
+    it('rejects invalid customer ID in updateCustomerNotes', async () => {
+      const res = await updateCustomerNotes(-1, 'Nota');
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('ID de cliente inválido');
+    });
+
     it('updates tag with user and overrideAccess: false', async () => {
       const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
       mockAuth.mockResolvedValueOnce({ user: mockUser });
@@ -201,9 +244,20 @@ describe('admin-customers server actions & analytics', () => {
         })
       );
     });
+
+    it('rejects invalid tag in updateCustomerTag', async () => {
+      const res = await updateCustomerTag(5, 'super_vip' as any);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('Etiqueta de cliente inválida');
+    });
   });
 
   describe('fetchCustomerOrders', () => {
+    it('returns empty array when phone is invalid or too short', async () => {
+      expect(await fetchCustomerOrders('')).toEqual([]);
+      expect(await fetchCustomerOrders('123')).toEqual([]);
+    });
+
     it('queries orders by phone normalized', async () => {
       const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
       mockAuth.mockResolvedValueOnce({ user: mockUser });

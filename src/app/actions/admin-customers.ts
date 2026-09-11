@@ -9,6 +9,22 @@ import { normalizeCustomerPhone } from '@/lib/customers';
 import { getUserTenantIds, isSuperAdmin } from '@/lib/utils';
 
 const PAGE_SIZE = 25;
+const MAX_IMPORT_BATCH = 250;
+
+const ALLOWED_SORT_FIELDS = new Set([
+  '-totalSpent',
+  'totalSpent',
+  '-totalOrders',
+  'totalOrders',
+  '-createdAt',
+  'createdAt',
+  '-lastOrderAt',
+  'lastOrderAt',
+  'name',
+  '-name',
+]);
+
+const VALID_SEGMENTS = new Set(['all', 'vip', 'frecuente', 'nuevo', 'inactivo']);
 
 export interface FetchCustomersParams {
   page?: number;
@@ -29,6 +45,7 @@ export interface CustomersPageResult {
  * Paginación y búsqueda del Directorio de Compradores (CRM).
  * Utiliza estrictamente Local API con user y overrideAccess: false para garantizar
  * el aislamiento multi-tenant a nivel de base de datos.
+ * Incluye sanitización y cotas en parámetros para prevenir abusos de consulta.
  */
 export async function fetchCustomersPage({
   page = 1,
@@ -43,27 +60,45 @@ export async function fetchCustomersPage({
     return { docs: [], hasNextPage: false, totalDocs: 0, totalPages: 0, page: 1 };
   }
 
+  // Cotas y validación de parámetros
+  const validPage = Math.max(1, Math.min(Math.floor(Number(page) || 1), 1000));
+  const validSegment = (VALID_SEGMENTS.has(segment) ? segment : 'all') as NonNullable<FetchCustomersParams['segment']>;
+  const validSort = ALLOWED_SORT_FIELDS.has(sort) ? sort : '-totalSpent';
+  const trimmedSearch = (typeof search === 'string' ? search.trim() : '').slice(0, 100);
+
   const andConditions: Where[] = [];
 
   // Búsqueda por texto (nombre, teléfono o email)
-  const trimmedSearch = search.trim();
   if (trimmedSearch) {
     const digitsOnly = trimmedSearch.replace(/\D/g, '');
+    const normalizedPhone = normalizeCustomerPhone(trimmedSearch);
+    const noLeadingZero = digitsOnly.replace(/^0+/, '');
+
     const searchConditions: Where[] = [
       { name: { contains: trimmedSearch } },
       { email: { contains: trimmedSearch } },
     ];
+
     if (digitsOnly) {
       searchConditions.push({ phone: { contains: digitsOnly } });
-    } else {
+    }
+    // Soporte para búsqueda local ej: '04141234567' encuentra el almacenado '584141234567'
+    if (normalizedPhone && normalizedPhone !== digitsOnly) {
+      searchConditions.push({ phone: { contains: normalizedPhone } });
+    }
+    if (noLeadingZero && noLeadingZero !== digitsOnly && noLeadingZero !== normalizedPhone) {
+      searchConditions.push({ phone: { contains: noLeadingZero } });
+    }
+    if (!digitsOnly) {
       searchConditions.push({ phone: { contains: trimmedSearch } });
     }
+
     andConditions.push({ or: searchConditions });
   }
 
   // Filtro por segmento RFM
-  if (segment && segment !== 'all') {
-    if (segment === 'vip') {
+  if (validSegment !== 'all') {
+    if (validSegment === 'vip') {
       andConditions.push({
         or: [
           { tag: { equals: 'vip' } },
@@ -71,7 +106,7 @@ export async function fetchCustomersPage({
           { totalSpent: { greater_than_equal: 50 } },
         ],
       });
-    } else if (segment === 'frecuente') {
+    } else if (validSegment === 'frecuente') {
       andConditions.push({
         and: [
           {
@@ -85,7 +120,7 @@ export async function fetchCustomersPage({
           { totalSpent: { less_than: 50 } },
         ],
       });
-    } else if (segment === 'inactivo') {
+    } else if (validSegment === 'inactivo') {
       const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
       andConditions.push({
         or: [
@@ -93,7 +128,7 @@ export async function fetchCustomersPage({
           { lastOrderAt: { less_than: sixtyDaysAgo } },
         ],
       });
-    } else if (segment === 'nuevo') {
+    } else if (validSegment === 'nuevo') {
       andConditions.push({
         and: [
           { totalOrders: { less_than_equal: 1 } },
@@ -108,10 +143,10 @@ export async function fetchCustomersPage({
 
   const res = await payload.find({
     collection: 'customers',
-    page,
+    page: validPage,
     limit: PAGE_SIZE,
     where,
-    sort,
+    sort: validSort,
     depth: 0,
     user,
     overrideAccess: false,
@@ -122,7 +157,7 @@ export async function fetchCustomersPage({
     hasNextPage: res.hasNextPage,
     totalDocs: res.totalDocs,
     totalPages: res.totalPages,
-    page: res.page ?? page,
+    page: res.page ?? validPage,
   };
 }
 
@@ -142,7 +177,7 @@ export interface ImportBatchResult {
 
 /**
  * Importación y migración de contactos/compradores por lotes.
- * Valida los datos, sanitiza teléfonos con prefijo 58 y realiza operaciones idempotentes.
+ * Valida y acota los datos, sanitiza teléfonos con prefijo 58 y realiza operaciones idempotentes.
  */
 export async function importCustomersBatch(
   customers: ImportCustomerItem[]
@@ -152,6 +187,24 @@ export async function importCustomersBatch(
 
   if (!user) {
     return { success: false, createdCount: 0, updatedCount: 0, errors: ['No autenticado'] };
+  }
+
+  if (!Array.isArray(customers) || customers.length === 0) {
+    return {
+      success: false,
+      createdCount: 0,
+      updatedCount: 0,
+      errors: ['El lote de clientes enviado está vacío o tiene un formato no válido.'],
+    };
+  }
+
+  if (customers.length > MAX_IMPORT_BATCH) {
+    return {
+      success: false,
+      createdCount: 0,
+      updatedCount: 0,
+      errors: [`El lote excede el límite máximo permitido de ${MAX_IMPORT_BATCH} contactos por operación.`],
+    };
   }
 
   const tenantIds = getUserTenantIds(user);
@@ -179,16 +232,19 @@ export async function importCustomersBatch(
   const errors: string[] = [];
 
   for (const item of customers) {
-    const rawName = item.name ? item.name.trim() : '';
-    const normPhone = normalizeCustomerPhone(item.phone || '');
+    const rawName = typeof item?.name === 'string' ? item.name.trim().slice(0, 100) : '';
+    const rawPhone = typeof item?.phone === 'string' ? item.phone.trim().slice(0, 30) : '';
+    const normPhone = normalizeCustomerPhone(rawPhone);
+    const rawEmail = typeof item?.email === 'string' && item.email.trim() ? item.email.trim().slice(0, 150) : undefined;
+    const rawNotes = typeof item?.notes === 'string' && item.notes.trim() ? item.notes.trim().slice(0, 1000) : undefined;
 
     if (!rawName) {
-      errors.push(`Fila omitida: falta el nombre (teléfono: ${item.phone || 'vacío'})`);
+      errors.push(`Fila omitida: falta el nombre (teléfono: ${rawPhone || 'vacío'})`);
       continue;
     }
 
     if (!normPhone || normPhone.length < 8) {
-      errors.push(`Fila omitida para "${rawName}": teléfono inválido ("${item.phone}")`);
+      errors.push(`Fila omitida para "${rawName}": teléfono inválido ("${rawPhone}")`);
       continue;
     }
 
@@ -204,15 +260,19 @@ export async function importCustomersBatch(
 
       if (existing.docs.length > 0) {
         const existingDoc = existing.docs[0];
+        const combinedNotes = rawNotes
+          ? existingDoc.notes
+            ? `${existingDoc.notes}\n${rawNotes}`.slice(0, 2000)
+            : rawNotes
+          : undefined;
+
         await payload.update({
           collection: 'customers',
           id: existingDoc.id,
           data: {
             name: rawName,
-            ...(item.email?.trim() ? { email: item.email.trim() } : {}),
-            ...(item.notes?.trim()
-              ? { notes: existingDoc.notes ? `${existingDoc.notes}\n${item.notes.trim()}` : item.notes.trim() }
-              : {}),
+            ...(rawEmail ? { email: rawEmail } : {}),
+            ...(combinedNotes ? { notes: combinedNotes } : {}),
           },
           user,
           overrideAccess: false,
@@ -225,8 +285,8 @@ export async function importCustomersBatch(
           data: {
             name: rawName,
             phone: normPhone,
-            email: item.email?.trim() || undefined,
-            notes: item.notes?.trim() || undefined,
+            email: rawEmail,
+            notes: rawNotes,
             tag: 'nuevo',
             totalOrders: 0,
             totalSpent: 0,
@@ -252,13 +312,18 @@ export async function importCustomersBatch(
 }
 
 /**
- * Actualiza las notas internas de un cliente.
+ * Actualiza las notas internas de un cliente con validación de identificador y cota de longitud.
  */
 export async function updateCustomerNotes(
   customerId: number | string,
   notes: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const id = typeof customerId === 'number' ? customerId : Number(customerId);
+    if (isNaN(id) || id <= 0) {
+      return { success: false, error: 'ID de cliente inválido' };
+    }
+
     const payload = await getPayload({ config });
     const { user } = await payload.auth({ headers: await headers() });
 
@@ -266,10 +331,12 @@ export async function updateCustomerNotes(
       return { success: false, error: 'No autenticado' };
     }
 
+    const cappedNotes = typeof notes === 'string' ? notes.slice(0, 2000) : '';
+
     await payload.update({
       collection: 'customers',
-      id: customerId,
-      data: { notes },
+      id,
+      data: { notes: cappedNotes },
       user,
       overrideAccess: false,
     });
@@ -282,13 +349,22 @@ export async function updateCustomerNotes(
 }
 
 /**
- * Actualiza la etiqueta / segmento de un cliente (ej. marcar como VIP manualmente).
+ * Actualiza la etiqueta / segmento de un cliente con validación de lista permitida.
  */
 export async function updateCustomerTag(
   customerId: number | string,
   tag: 'nuevo' | 'frecuente' | 'vip' | 'inactivo'
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const id = typeof customerId === 'number' ? customerId : Number(customerId);
+    if (isNaN(id) || id <= 0) {
+      return { success: false, error: 'ID de cliente inválido' };
+    }
+
+    if (!['nuevo', 'frecuente', 'vip', 'inactivo'].includes(tag)) {
+      return { success: false, error: 'Etiqueta de cliente inválida' };
+    }
+
     const payload = await getPayload({ config });
     const { user } = await payload.auth({ headers: await headers() });
 
@@ -298,7 +374,7 @@ export async function updateCustomerTag(
 
     await payload.update({
       collection: 'customers',
-      id: customerId,
+      id,
       data: { tag },
       user,
       overrideAccess: false,
@@ -312,26 +388,40 @@ export async function updateCustomerTag(
 }
 
 /**
- * Consulta el historial de pedidos de un cliente para la ficha de detalle.
+ * Consulta el historial de pedidos de un cliente para la ficha de detalle,
+ * validando la longitud y formato del teléfono para prevenir consultas costosas.
  */
 export async function fetchCustomerOrders(
   phone: string
 ): Promise<Order[]> {
   try {
+    if (!phone || typeof phone !== 'string' || phone.length > 30) {
+      return [];
+    }
+
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7) {
+      return [];
+    }
+
     const payload = await getPayload({ config });
     const { user } = await payload.auth({ headers: await headers() });
 
-    if (!user || !phone) return [];
+    if (!user) return [];
 
     const normPhone = normalizeCustomerPhone(phone);
+
+    const orConditions: Where[] = [
+      { 'customer.phone': { equals: phone } },
+    ];
+    if (normPhone && normPhone !== phone) {
+      orConditions.push({ 'customer.phone': { equals: normPhone } });
+    }
 
     const res = await payload.find({
       collection: 'orders',
       where: {
-        or: [
-          { 'customer.phone': { equals: phone } },
-          { 'customer.phone': { equals: normPhone } },
-        ],
+        or: orConditions,
       },
       limit: 10,
       sort: '-createdAt',
