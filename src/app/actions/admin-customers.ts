@@ -7,6 +7,7 @@ import type { Customer, Order } from '@/payload-types';
 import type { Where } from 'payload';
 import { normalizeCustomerPhone } from '@/lib/customers';
 import { getUserTenantIds, isSuperAdmin, assertTenantAccess } from '@/lib/utils';
+import { getCustomerKpis, type CustomerKpis } from '@/lib/analytics';
 
 const PAGE_SIZE = 25;
 const MAX_IMPORT_BATCH = 250;
@@ -42,28 +43,17 @@ export interface CustomersPageResult {
 }
 
 /**
- * Paginación y búsqueda del Directorio de Compradores (CRM).
- * Utiliza estrictamente Local API con user y overrideAccess: false para garantizar
- * el aislamiento multi-tenant a nivel de base de datos.
- * Incluye sanitización y cotas en parámetros para prevenir abusos de consulta.
+ * Construye los filtros de consulta para el Directorio de Compradores.
+ * Reutilizado por fetchCustomersPage, fetchSegmentPhones y exportSegmentCustomersCsvData.
  */
-export async function fetchCustomersPage({
-  page = 1,
+export function buildCustomerWhereConditions({
   search = '',
   segment = 'all',
-  sort = '-totalSpent',
-}: FetchCustomersParams): Promise<CustomersPageResult> {
-  const payload = await getPayload({ config });
-  const { user } = await payload.auth({ headers: await headers() });
-
-  if (!user) {
-    return { docs: [], hasNextPage: false, totalDocs: 0, totalPages: 0, page: 1 };
-  }
-
-  // Cotas y validación de parámetros
-  const validPage = Math.max(1, Math.min(Math.floor(Number(page) || 1), 1000));
+}: {
+  search?: string;
+  segment?: NonNullable<FetchCustomersParams['segment']>;
+}): Where {
   const validSegment = (VALID_SEGMENTS.has(segment) ? segment : 'all') as NonNullable<FetchCustomersParams['segment']>;
-  const validSort = ALLOWED_SORT_FIELDS.has(sort) ? sort : '-totalSpent';
   const trimmedSearch = (typeof search === 'string' ? search.trim() : '').slice(0, 100);
 
   const andConditions: Where[] = [];
@@ -165,7 +155,32 @@ export async function fetchCustomersPage({
     }
   }
 
-  const where: Where = andConditions.length > 0 ? { and: andConditions } : {};
+  return andConditions.length > 0 ? { and: andConditions } : {};
+}
+
+/**
+ * Paginación y búsqueda del Directorio de Compradores (CRM).
+ * Utiliza estrictamente Local API con user y overrideAccess: false para garantizar
+ * el aislamiento multi-tenant a nivel de base de datos.
+ * Incluye sanitización y cotas en parámetros para prevenir abusos de consulta.
+ */
+export async function fetchCustomersPage({
+  page = 1,
+  search = '',
+  segment = 'all',
+  sort = '-totalSpent',
+}: FetchCustomersParams): Promise<CustomersPageResult> {
+  const payload = await getPayload({ config });
+  const { user } = await payload.auth({ headers: await headers() });
+
+  if (!user) {
+    return { docs: [], hasNextPage: false, totalDocs: 0, totalPages: 0, page: 1 };
+  }
+
+  // Cotas y validación de parámetros
+  const validPage = Math.max(1, Math.min(Math.floor(Number(page) || 1), 1000));
+  const validSort = ALLOWED_SORT_FIELDS.has(sort) ? sort : '-totalSpent';
+  const where = buildCustomerWhereConditions({ search, segment });
 
   const res = await payload.find({
     collection: 'customers',
@@ -500,3 +515,121 @@ export async function fetchCustomerOrders(
     return [];
   }
 }
+
+/**
+ * Consulta autorizada de KPIs del directorio para refrescar tarjetas tras importaciones o cambios de segmento.
+ */
+export async function fetchCustomerKpis(explicitTenantId?: number | string): Promise<CustomerKpis | null> {
+  const payload = await getPayload({ config });
+  const { user } = await payload.auth({ headers: await headers() });
+  if (!user) return null;
+
+  const tenantIds = getUserTenantIds(user);
+  const targetTenantId = explicitTenantId ?? (tenantIds.length > 0 ? tenantIds[0] : null);
+
+  if (explicitTenantId && !assertTenantAccess(user, explicitTenantId)) {
+    return null;
+  }
+
+  // Aislamiento multi-tenant estricto: rechazar consultas sin tenant para evitar agregaciones globales cross-tenant
+  if (!targetTenantId) {
+    return null;
+  }
+
+  return getCustomerKpis(payload, targetTenantId);
+}
+
+/**
+ * Obtiene todos los números telefónicos normalizados y deduplicados que coincidan
+ * con el segmento y búsqueda activa (no solo la página actual).
+ * Límite seguro por defecto de 1,000 contactos.
+ */
+export async function fetchSegmentPhones({
+  segment = 'all',
+  search = '',
+  maxLimit = 1000,
+}: {
+  segment?: NonNullable<FetchCustomersParams['segment']>;
+  search?: string;
+  maxLimit?: number;
+}): Promise<string[]> {
+  const payload = await getPayload({ config });
+  const { user } = await payload.auth({ headers: await headers() });
+  if (!user) return [];
+
+  const parsedLimit = typeof maxLimit === 'number' ? maxLimit : Number(maxLimit);
+  const safeLimit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(1, Math.floor(parsedLimit)), 2500)
+    : 1000;
+  const where = buildCustomerWhereConditions({ segment, search });
+
+  const res = await payload.find({
+    collection: 'customers',
+    where,
+    limit: safeLimit,
+    depth: 0,
+    user,
+    overrideAccess: false,
+  });
+
+  const phones = res.docs
+    .map((d) => normalizeCustomerPhone(d.phone))
+    .filter((p): p is string => Boolean(p && p.length >= 10));
+
+  return Array.from(new Set(phones));
+}
+
+/**
+ * Exporta todos los registros de clientes que coincidan con los filtros activos a CSV,
+ * no limitándose a los 25 clientes de la página actual.
+ */
+export async function exportSegmentCustomersCsvData({
+  segment = 'all',
+  search = '',
+  maxLimit = 1000,
+}: {
+  segment?: NonNullable<FetchCustomersParams['segment']>;
+  search?: string;
+  maxLimit?: number;
+}): Promise<Array<{
+  name: string;
+  phone: string;
+  email?: string | null;
+  tag?: string | null;
+  totalOrders?: number | null;
+  totalSpent?: number | null;
+  lastOrderAt?: string | null;
+  notes?: string | null;
+}>> {
+  const payload = await getPayload({ config });
+  const { user } = await payload.auth({ headers: await headers() });
+  if (!user) return [];
+
+  const parsedLimit = typeof maxLimit === 'number' ? maxLimit : Number(maxLimit);
+  const safeLimit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(1, Math.floor(parsedLimit)), 2500)
+    : 1000;
+  const where = buildCustomerWhereConditions({ segment, search });
+
+  const res = await payload.find({
+    collection: 'customers',
+    where,
+    limit: safeLimit,
+    sort: '-totalSpent',
+    depth: 0,
+    user,
+    overrideAccess: false,
+  });
+
+  return res.docs.map((c) => ({
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    tag: c.tag,
+    totalOrders: c.totalOrders,
+    totalSpent: c.totalSpent,
+    lastOrderAt: c.lastOrderAt,
+    notes: c.notes,
+  }));
+}
+
