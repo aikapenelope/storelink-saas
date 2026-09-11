@@ -111,20 +111,27 @@ export function AnalyticsDashboardClient({
   jobsStatusView,
 }: AnalyticsDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<'performance' | 'customers'>(initialTab);
+  const [kpis, setKpis] = useState<CustomerKpis>(customerKpis);
 
-  // Sincronizar si la URL cambia vía navegación de historial (back / forward)
+  // Sincronizar si el prop del servidor cambia
   useEffect(() => {
-    const handlePopState = () => {
+    setKpis(customerKpis);
+  }, [customerKpis]);
+
+  // Sincronizar estado de pestaña en montaje y navegación de historial (back / forward)
+  useEffect(() => {
+    const syncTabFromUrl = () => {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
       if (tabParam === 'customers') {
         setActiveTab('customers');
-      } else {
+      } else if (tabParam === 'performance' || !tabParam) {
         setActiveTab('performance');
       }
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    syncTabFromUrl();
+    window.addEventListener('popstate', syncTabFromUrl);
+    return () => window.removeEventListener('popstate', syncTabFromUrl);
   }, []);
 
   // Transición reactiva de pestaña sin recarga de página completa
@@ -132,12 +139,15 @@ export function AnalyticsDashboardClient({
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      if (tab === 'customers') {
-        url.searchParams.set('tab', 'customers');
-      } else {
-        url.searchParams.delete('tab');
+      const currentTab = url.searchParams.get('tab') === 'customers' ? 'customers' : 'performance';
+      if (currentTab !== tab) {
+        if (tab === 'customers') {
+          url.searchParams.set('tab', 'customers');
+        } else {
+          url.searchParams.delete('tab');
+        }
+        window.history.pushState({ tab }, '', url.pathname + url.search);
       }
-      window.history.replaceState(null, '', url.pathname + url.search);
     }
   }, []);
 
@@ -197,13 +207,13 @@ export function AnalyticsDashboardClient({
             >
               <span>Clientes CRM</span>
               <span
-                className={`px-1.5 py-0.2 text-[10px] font-mono rounded-none font-bold ${
+                className={`px-1.5 py-0.5 text-[10px] font-mono rounded-none font-bold ${
                   activeTab === 'customers'
                     ? 'bg-black text-white'
                     : 'bg-zinc-800 text-zinc-300'
                 }`}
               >
-                {customerKpis.totalCustomers}
+                {kpis.totalCustomers}
               </span>
             </button>
             <Link
@@ -342,7 +352,7 @@ export function AnalyticsDashboardClient({
                     : 'bg-zinc-800 text-zinc-300'
                 }`}
               >
-                {customerKpis.totalCustomers}
+                {kpis.totalCustomers}
               </span>
             </button>
           </div>
@@ -427,7 +437,7 @@ export function AnalyticsDashboardClient({
                     </p>
                     <span className="text-[10px] text-zinc-500 group-hover:text-white transition font-mono">→</span>
                   </div>
-                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{customerKpis.totalCustomers}</p>
+                  <p className="mt-1.5 text-2xl font-bold tracking-tight text-white font-mono">{kpis.totalCustomers}</p>
                 </div>
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white shrink-0 rounded-none group-hover:border-zinc-500 group-hover:bg-zinc-800 transition">
                   <Users className="w-4 h-4" />
@@ -435,7 +445,7 @@ export function AnalyticsDashboardClient({
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
                 <span className="font-mono text-xs text-zinc-400">
-                  {customerKpis.vipCount} VIP · {customerKpis.recurrentCount} frecuentes
+                  {kpis.vipCount} VIP · {kpis.recurrentCount} frecuentes
                 </span>
                 <span className="text-xs font-mono text-white bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-none group-hover:border-zinc-500 transition">
                   Directorio →
@@ -638,41 +648,47 @@ export function AnalyticsDashboardClient({
               </div>
 
               <div className="space-y-1">
-                {categorizedCustomers.slice(0, 4).map((c) => {
-                  const phone = c.phone || '';
-                  const cleanPhone = phone.replace(/\D/g, '');
-                  const customerName = c.name || 'Cliente';
-                  const initials = customerName.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2);
-                  const prefilledMsg = encodeURIComponent(`¡Hola ${customerName}! Te escribimos de ${tenantName}. ¿Cómo estás?`);
+                {categorizedCustomers.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-zinc-500 font-mono">
+                    <p>Aún no hay clientes registrados.</p>
+                  </div>
+                ) : (
+                  categorizedCustomers.slice(0, 4).map((c) => {
+                    const phone = c.phone || '';
+                    const cleanPhone = phone.replace(/\D/g, '');
+                    const customerName = c.name || 'Cliente';
+                    const initials = customerName.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2);
+                    const prefilledMsg = encodeURIComponent(`¡Hola ${customerName}! Te escribimos de ${tenantName}. ¿Cómo estás?`);
 
-                  return (
-                    <div key={c.id} className="flex items-center gap-3 border-b border-zinc-800/60 py-2.5 last:border-0">
-                      <span className="w-7 h-7 bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 rounded-none font-mono">
-                        {initials}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-white truncate">{customerName}</p>
-                        <p className="text-[10px] text-zinc-400 font-mono">
-                          {c.computedOrders} pedidos ·{' '}
-                          <span className="text-white font-bold">
-                            {c.computedTier === 'vip' ? 'VIP' : c.computedTier === 'recurrente' ? 'Recurrente' : 'Nuevo'}
-                          </span>
-                        </p>
+                    return (
+                      <div key={c.id} className="flex items-center gap-3 border-b border-zinc-800/60 py-2.5 last:border-0">
+                        <span className="w-7 h-7 bg-white text-black font-extrabold text-xs flex items-center justify-center shrink-0 rounded-none font-mono">
+                          {initials}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">{customerName}</p>
+                          <p className="text-[10px] text-zinc-400 font-mono">
+                            {c.computedOrders} pedidos ·{' '}
+                            <span className="text-white font-bold">
+                              {c.computedTier === 'vip' ? 'VIP' : c.computedTier === 'recurrente' ? 'Recurrente' : 'Nuevo'}
+                            </span>
+                          </p>
+                        </div>
+                        {cleanPhone ? (
+                          <a
+                            href={`https://wa.me/${encodeURIComponent(cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`)}?text=${prefilledMsg}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 shrink-0 rounded-none"
+                          >
+                            <Send className="w-3 h-3 shrink-0" />
+                            <span>WhatsApp</span>
+                          </a>
+                        ) : null}
                       </div>
-                      {cleanPhone ? (
-                        <a
-                          href={`https://wa.me/${encodeURIComponent(cleanPhone.startsWith('58') ? cleanPhone : `58${cleanPhone}`)}?text=${prefilledMsg}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white text-xs font-mono transition inline-flex items-center gap-1 shrink-0 rounded-none"
-                        >
-                          <Send className="w-3 h-3 shrink-0" />
-                          <span>WhatsApp</span>
-                        </a>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -702,10 +718,11 @@ export function AnalyticsDashboardClient({
         <div className={activeTab === 'customers' ? 'space-y-5' : 'hidden'}>
           <CustomersRegistryManager
             initialCustomers={initialCustomers}
-            initialKpis={customerKpis}
+            initialKpis={kpis}
             tenantSlug={tenantSlug}
             tenantName={tenantName}
             tenantId={tenantId}
+            onKpisChange={setKpis}
           />
         </div>
       </main>

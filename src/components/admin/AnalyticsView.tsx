@@ -28,7 +28,8 @@ export async function AnalyticsView(props?: AnalyticsViewProps) {
   if (props?.searchParams) {
     try {
       const sp = await props.searchParams;
-      if (sp && sp.tab === 'customers') {
+      const tabVal = Array.isArray(sp?.tab) ? sp.tab[0] : sp?.tab;
+      if (tabVal === 'customers') {
         initialTab = 'customers';
       }
     } catch {
