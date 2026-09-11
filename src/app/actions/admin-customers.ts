@@ -46,7 +46,7 @@ export interface CustomersPageResult {
  * Construye los filtros de consulta para el Directorio de Compradores.
  * Reutilizado por fetchCustomersPage, fetchSegmentPhones y exportSegmentCustomersCsvData.
  */
-export function buildCustomerWhereConditions({
+function buildCustomerWhereConditions({
   search = '',
   segment = 'all',
 }: {
