@@ -180,10 +180,20 @@ describe('admin-customers server actions & analytics', () => {
       expect(result.updatedCount).toBe(1);
       expect(result.createdCount).toBe(1);
 
-      // Verify normalization: Carlos 0414-9998877 -> 584149998877
+      // Verify normalization: Carlos 0414-9998877 -> 584149998877 y tenant filter
       expect(mockFind).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { phone: { equals: '584149998877' } },
+          where: {
+            and: [
+              { tenant: { equals: 10 } },
+              {
+                or: [
+                  { phone: { equals: '584149998877' } },
+                  { phone: { equals: '0414-9998877' } },
+                ],
+              },
+            ],
+          },
         })
       );
 
@@ -198,6 +208,33 @@ describe('admin-customers server actions & analytics', () => {
             totalOrders: 0,
             totalSpent: 0,
             tenant: 10,
+          }),
+        })
+      );
+    });
+
+    it('rejects import if user does not have access to explicit tenant', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+
+      const result = await importCustomersBatch([{ name: 'Test', phone: '04141234567' }], 999);
+      expect(result.success).toBe(false);
+      expect(result.errors[0]).toContain('No estás autorizado');
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('uses explicit tenant when user is authorized for multiple stores', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }, { tenant: 20 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({ docs: [] });
+
+      const result = await importCustomersBatch([{ name: 'Pedro', phone: '04145556677' }], 20);
+      expect(result.success).toBe(true);
+      expect(result.createdCount).toBe(1);
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tenant: 20,
           }),
         })
       );
@@ -272,6 +309,7 @@ describe('admin-customers server actions & analytics', () => {
             or: [
               { 'customer.phone': { equals: '04141234567' } },
               { 'customer.phone': { equals: '584141234567' } },
+              { 'customer.phone': { equals: '4141234567' } },
             ],
           },
         })

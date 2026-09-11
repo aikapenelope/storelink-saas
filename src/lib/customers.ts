@@ -7,14 +7,15 @@
 export type CustomerSegment = 'vip' | 'frecuente' | 'nuevo' | 'inactivo';
 
 /**
- * Normaliza un número telefónico para WhatsApp.
+ * Normaliza y valida un número telefónico para WhatsApp (formato E.164 sin +).
  * - Elimina cualquier carácter que no sea dígito (+, -, espacios, paréntesis).
  * - Si comienza por '0' (formato local ej. 04141234567), remueve el 0 inicial.
  * - Si tiene 10 dígitos (número venezolano sin prefijo internacional ej. 4141234567), antepone '58'.
  * - Si ya tiene el prefijo de país (ej. 584141234567), lo conserva.
+ * - Valida longitud: requiere entre 10 y 15 dígitos (estándar ITU-T E.164). Rechaza cadenas de menor longitud.
  */
 export function normalizeCustomerPhone(rawPhone: string): string {
-  if (!rawPhone) return '';
+  if (!rawPhone || typeof rawPhone !== 'string') return '';
   let digits = rawPhone.replace(/\D/g, '');
   if (!digits) return '';
 
@@ -25,10 +26,15 @@ export function normalizeCustomerPhone(rawPhone: string): string {
 
   // Número celular o fijo venezolano típico de 10 dígitos (414, 424, 412, 416, 426, 212, etc.)
   if (digits.length === 10) {
-    return `58${digits}`;
+    digits = `58${digits}`;
   }
 
-  return digits;
+  // Validación de estándar internacional E.164: entre 10 y 15 dígitos
+  if (digits.length >= 10 && digits.length <= 15) {
+    return digits;
+  }
+
+  return '';
 }
 
 /**
@@ -43,11 +49,11 @@ export function buildCustomerWhatsAppUrl(rawPhone: string, message: string = '')
 }
 
 /**
- * Clasifica a un cliente en su segmento RFM correspondiente:
- * - 'vip': 3 o más pedidos, o gasto >= $50, o marcado manualmente con tag 'vip'.
- * - 'frecuente': 2 pedidos realizados, o tag 'frecuente'.
- * - 'inactivo': tag 'inactivo', o más de 60 días sin compras registradas.
- * - 'nuevo': 0 o 1 pedido, activo en los últimos 60 días.
+ * Clasifica a un cliente en su segmento RFM correspondiente con precedencia unificada y mutuamente excluyente:
+ * 1. 'inactivo': tag 'inactivo', o más de 60 días transcurridos desde el último pedido.
+ * 2. 'vip': no inactivo Y (3 o más pedidos, o gasto >= $50, o marcado con tag 'vip').
+ * 3. 'frecuente': no inactivo, no VIP Y (2 pedidos realizados, o tag 'frecuente').
+ * 4. 'nuevo': resto de clientes activos (0 o 1 pedido dentro de la ventana de 60 días).
  */
 export function computeCustomerSegment(customer: {
   totalOrders?: number | null;
@@ -59,14 +65,7 @@ export function computeCustomerSegment(customer: {
   const spent = Number(customer.totalSpent) || 0;
   const tag = customer.tag;
 
-  if (tag === 'vip' || orders >= 3 || spent >= 50) {
-    return 'vip';
-  }
-
-  if (tag === 'frecuente' || orders === 2) {
-    return 'frecuente';
-  }
-
+  // 1. Inactividad: tag manual o ventana temporal de 60 días
   if (tag === 'inactivo') {
     return 'inactivo';
   }
@@ -85,5 +84,16 @@ export function computeCustomerSegment(customer: {
     }
   }
 
+  // 2. VIP
+  if (tag === 'vip' || orders >= 3 || spent >= 50) {
+    return 'vip';
+  }
+
+  // 3. Frecuente / Recurrente
+  if (tag === 'frecuente' || orders === 2) {
+    return 'frecuente';
+  }
+
+  // 4. Nuevo
   return 'nuevo';
 }

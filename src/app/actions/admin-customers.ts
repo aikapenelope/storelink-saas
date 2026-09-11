@@ -6,7 +6,7 @@ import { headers } from 'next/headers';
 import type { Customer, Order } from '@/payload-types';
 import type { Where } from 'payload';
 import { normalizeCustomerPhone } from '@/lib/customers';
-import { getUserTenantIds, isSuperAdmin } from '@/lib/utils';
+import { getUserTenantIds, isSuperAdmin, assertTenantAccess } from '@/lib/utils';
 
 const PAGE_SIZE = 25;
 const MAX_IMPORT_BATCH = 250;
@@ -96,44 +96,70 @@ export async function fetchCustomersPage({
     andConditions.push({ or: searchConditions });
   }
 
-  // Filtro por segmento RFM
+  // Filtro por segmento RFM con precedencia unificada y mutuamente excluyente
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   if (validSegment !== 'all') {
-    if (validSegment === 'vip') {
-      andConditions.push({
-        or: [
-          { tag: { equals: 'vip' } },
-          { totalOrders: { greater_than_equal: 3 } },
-          { totalSpent: { greater_than_equal: 50 } },
-        ],
-      });
-    } else if (validSegment === 'frecuente') {
-      andConditions.push({
-        and: [
-          {
-            or: [
-              { tag: { equals: 'frecuente' } },
-              { totalOrders: { equals: 2 } },
-            ],
-          },
-          { tag: { not_equals: 'vip' } },
-          { totalOrders: { less_than: 3 } },
-          { totalSpent: { less_than: 50 } },
-        ],
-      });
-    } else if (validSegment === 'inactivo') {
-      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    if (validSegment === 'inactivo') {
       andConditions.push({
         or: [
           { tag: { equals: 'inactivo' } },
           { lastOrderAt: { less_than: sixtyDaysAgo } },
         ],
       });
+    } else if (validSegment === 'vip') {
+      andConditions.push({
+        and: [
+          { tag: { not_equals: 'inactivo' } },
+          {
+            or: [
+              { lastOrderAt: { greater_than_equal: sixtyDaysAgo } },
+              { lastOrderAt: { exists: false } },
+            ],
+          },
+          {
+            or: [
+              { tag: { equals: 'vip' } },
+              { totalOrders: { greater_than_equal: 3 } },
+              { totalSpent: { greater_than_equal: 50 } },
+            ],
+          },
+        ],
+      });
+    } else if (validSegment === 'frecuente') {
+      andConditions.push({
+        and: [
+          { tag: { not_equals: 'inactivo' } },
+          {
+            or: [
+              { lastOrderAt: { greater_than_equal: sixtyDaysAgo } },
+              { lastOrderAt: { exists: false } },
+            ],
+          },
+          { tag: { not_equals: 'vip' } },
+          { totalOrders: { less_than: 3 } },
+          { totalSpent: { less_than: 50 } },
+          {
+            or: [
+              { tag: { equals: 'frecuente' } },
+              { totalOrders: { equals: 2 } },
+            ],
+          },
+        ],
+      });
     } else if (validSegment === 'nuevo') {
       andConditions.push({
         and: [
-          { totalOrders: { less_than_equal: 1 } },
-          { tag: { not_equals: 'vip' } },
           { tag: { not_equals: 'inactivo' } },
+          {
+            or: [
+              { lastOrderAt: { greater_than_equal: sixtyDaysAgo } },
+              { lastOrderAt: { exists: false } },
+            ],
+          },
+          { tag: { not_equals: 'vip' } },
+          { tag: { not_equals: 'frecuente' } },
+          { totalOrders: { less_than_equal: 1 } },
+          { totalSpent: { less_than: 50 } },
         ],
       });
     }
@@ -177,10 +203,12 @@ export interface ImportBatchResult {
 
 /**
  * Importación y migración de contactos/compradores por lotes.
- * Valida y acota los datos, sanitiza teléfonos con prefijo 58 y realiza operaciones idempotentes.
+ * Permite especificar el tenantId explícito, valida autorización multi-tenant con assertTenantAccess,
+ * sanitiza teléfonos al estándar E.164 (10-15 dígitos) y previene duplicaciones canónicas.
  */
 export async function importCustomersBatch(
-  customers: ImportCustomerItem[]
+  customers: ImportCustomerItem[],
+  explicitTenantId?: number | string
 ): Promise<ImportBatchResult> {
   const payload = await getPayload({ config });
   const { user } = await payload.auth({ headers: await headers() });
@@ -208,10 +236,19 @@ export async function importCustomersBatch(
   }
 
   const tenantIds = getUserTenantIds(user);
-  let targetTenantId: number | string | null = tenantIds.length > 0 ? tenantIds[0] : null;
+  let targetTenantId: number | string | null = explicitTenantId ?? (tenantIds.length > 0 ? tenantIds[0] : null);
+
+  if (explicitTenantId && !assertTenantAccess(user, explicitTenantId)) {
+    return {
+      success: false,
+      createdCount: 0,
+      updatedCount: 0,
+      errors: ['No estás autorizado para registrar clientes en el comercio seleccionado.'],
+    };
+  }
 
   if (!targetTenantId && isSuperAdmin(user)) {
-    // Para super-admin sin tenant en sesión, consultar el primer tenant disponible
+    // Para super-admin sin tenant en sesión ni explícito, consultar el primer tenant disponible
     const firstTenant = await payload.find({ collection: 'tenants', limit: 1 });
     if (firstTenant.docs.length > 0) {
       targetTenantId = firstTenant.docs[0].id;
@@ -224,6 +261,16 @@ export async function importCustomersBatch(
       createdCount: 0,
       updatedCount: 0,
       errors: ['No se encontró una tienda asignada para registrar los contactos.'],
+    };
+  }
+
+  const tenantIdNum = typeof targetTenantId === 'number' ? targetTenantId : Number(targetTenantId);
+  if (isNaN(tenantIdNum)) {
+    return {
+      success: false,
+      createdCount: 0,
+      updatedCount: 0,
+      errors: ['Identificador de tienda no válido.'],
     };
   }
 
@@ -243,16 +290,26 @@ export async function importCustomersBatch(
       continue;
     }
 
-    if (!normPhone || normPhone.length < 8) {
-      errors.push(`Fila omitida para "${rawName}": teléfono inválido ("${rawPhone}")`);
+    if (!normPhone || normPhone.length < 10 || normPhone.length > 15) {
+      errors.push(`Fila omitida para "${rawName}": teléfono inválido ("${rawPhone}"). Debe tener entre 10 y 15 dígitos.`);
       continue;
     }
 
     try {
-      // Verificar si el cliente ya existe por teléfono para este comercio
+      // Verificar si el cliente ya existe por teléfono canónico o crudo para este comercio específico
       const existing = await payload.find({
         collection: 'customers',
-        where: { phone: { equals: normPhone } },
+        where: {
+          and: [
+            { tenant: { equals: tenantIdNum } },
+            {
+              or: [
+                { phone: { equals: normPhone } },
+                { phone: { equals: rawPhone } },
+              ],
+            },
+          ],
+        },
         limit: 1,
         user,
         overrideAccess: false,
@@ -271,6 +328,7 @@ export async function importCustomersBatch(
           id: existingDoc.id,
           data: {
             name: rawName,
+            phone: normPhone, // Canonicaliza teléfonos legados a formato normalizado
             ...(rawEmail ? { email: rawEmail } : {}),
             ...(combinedNotes ? { notes: combinedNotes } : {}),
           },
@@ -279,7 +337,6 @@ export async function importCustomersBatch(
         });
         updatedCount++;
       } else {
-        const tenantIdNum = typeof targetTenantId === 'number' ? targetTenantId : Number(targetTenantId);
         await payload.create({
           collection: 'customers',
           data: {
@@ -290,7 +347,7 @@ export async function importCustomersBatch(
             tag: 'nuevo',
             totalOrders: 0,
             totalSpent: 0,
-            tenant: isNaN(tenantIdNum) ? undefined : tenantIdNum,
+            tenant: tenantIdNum,
           },
           user,
           overrideAccess: false,
@@ -410,12 +467,19 @@ export async function fetchCustomerOrders(
     if (!user) return [];
 
     const normPhone = normalizeCustomerPhone(phone);
+    const noLeadingZero = digits.replace(/^0+/, '');
 
     const orConditions: Where[] = [
       { 'customer.phone': { equals: phone } },
     ];
-    if (normPhone && normPhone !== phone) {
+    if (digits && digits !== phone) {
+      orConditions.push({ 'customer.phone': { equals: digits } });
+    }
+    if (normPhone && normPhone !== phone && normPhone !== digits) {
       orConditions.push({ 'customer.phone': { equals: normPhone } });
+    }
+    if (noLeadingZero && noLeadingZero !== phone && noLeadingZero !== digits && noLeadingZero !== normPhone) {
+      orConditions.push({ 'customer.phone': { equals: noLeadingZero } });
     }
 
     const res = await payload.find({

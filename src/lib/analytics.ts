@@ -101,25 +101,28 @@ export async function getCustomerKpis(
   const t = tenantClause(tenantId);
   const { customersTable } = getTableNames(payload);
 
+  const cutoff = sql`((now() AT TIME ZONE ${TZ}) - interval '60 days') AT TIME ZONE ${TZ}`;
+
   const res = await payload.db.drizzle.execute(sql`
     SELECT 
       COUNT(*)::int AS total_customers,
       COUNT(*) FILTER (
-        WHERE tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50
+        WHERE NOT (tag = 'inactivo' OR (last_order_at IS NOT NULL AND last_order_at < ${cutoff}))
+          AND (tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50)
       )::int AS vip_count,
       COUNT(*) FILTER (
-        WHERE (tag = 'frecuente' OR COALESCE(total_orders, 0) = 2)
+        WHERE NOT (tag = 'inactivo' OR (last_order_at IS NOT NULL AND last_order_at < ${cutoff}))
           AND NOT (tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50)
+          AND (tag = 'frecuente' OR COALESCE(total_orders, 0) = 2)
       )::int AS recurrent_count,
       COUNT(*) FILTER (
-        WHERE (tag = 'nuevo' OR COALESCE(total_orders, 0) <= 1)
+        WHERE NOT (tag = 'inactivo' OR (last_order_at IS NOT NULL AND last_order_at < ${cutoff}))
           AND NOT (tag = 'vip' OR COALESCE(total_orders, 0) >= 3 OR COALESCE(total_spent, 0) >= 50)
           AND NOT (tag = 'frecuente' OR COALESCE(total_orders, 0) = 2)
-          AND (last_order_at IS NULL OR last_order_at >= (now() AT TIME ZONE ${TZ})::date - 60)
       )::int AS new_count,
       COUNT(*) FILTER (
         WHERE tag = 'inactivo'
-          OR (last_order_at IS NOT NULL AND last_order_at < (now() AT TIME ZONE ${TZ})::date - 60)
+          OR (last_order_at IS NOT NULL AND last_order_at < ${cutoff})
       )::int AS inactive_count,
       COALESCE(SUM(total_spent), 0)::float8 AS total_spent_usd
     FROM ${customersTable}
