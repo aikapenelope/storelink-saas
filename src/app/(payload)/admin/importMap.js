@@ -1,7 +1,7 @@
 import { TenantSelectionProvider, TenantSelector } from '@payloadcms/plugin-multi-tenant/rsc';
 import { CollectionCards, DocumentHeader, Logo, DefaultNav, FolderField, FolderTableCell } from '@payloadcms/next/rsc';
 import { StoreUrlBanner } from '@/components/admin/StoreUrlBanner';
-import { AnalyticsView } from '@/components/admin/AnalyticsView';
+import { AnalyticsView } from '@/components/admin/analytics/analytics-view';
 import { S3ClientUploadHandler } from '@payloadcms/storage-s3/client';
 
 export const importMap = {
@@ -14,6 +14,6 @@ export const importMap = {
   '@payloadcms/next/rsc#FolderField': FolderField,
   '@payloadcms/next/rsc#FolderTableCell': FolderTableCell,
   '@/components/admin/StoreUrlBanner#StoreUrlBanner': StoreUrlBanner,
-  '@/components/admin/AnalyticsView#AnalyticsView': AnalyticsView,
+  '@/components/admin/analytics/analytics-view#AnalyticsView': AnalyticsView,
   '@payloadcms/storage-s3/client#S3ClientUploadHandler': S3ClientUploadHandler,
 };

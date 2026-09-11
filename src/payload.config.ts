@@ -180,7 +180,7 @@ export default buildConfig({
       ],
       views: {
         analytics: {
-          Component: '@/components/admin/AnalyticsView#AnalyticsView',
+          Component: '@/components/admin/analytics/analytics-view#AnalyticsView',
           path: '/analytics',
         },
       },
