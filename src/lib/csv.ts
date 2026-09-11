@@ -75,23 +75,32 @@ export function parseCSVLine(line: string, delimiter: string = ','): string[] {
 
 /**
  * Detecta el delimitador más probable (coma, punto y coma, tabulador)
- * contando apariciones fuera de comillas en la línea de muestra.
+ * analizando el primer registro completo fuera de comillas.
+ * Evita que comas en valores de texto de filas posteriores sobreescriban
+ * delimitadores estructurales como punto y coma.
  */
-export function detectCsvDelimiter(line: string): ',' | ';' | '\t' {
+export function detectCsvDelimiter(raw: string): ',' | ';' | '\t' {
   let inQuotes = false;
   let commas = 0;
   let semicolons = 0;
   let tabs = 0;
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
     if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
+      if (inQuotes && raw[i + 1] === '"') {
         i++; // saltar comilla escapada dentro de comillas
       } else {
         inQuotes = !inQuotes;
       }
     } else if (!inQuotes) {
+      // Detenerse al finalizar el primer registro si ya se encontraron delimitadores
+      if (char === '\n' || char === '\r') {
+        if (commas > 0 || semicolons > 0 || tabs > 0) {
+          break;
+        }
+        continue;
+      }
       if (char === ',') commas++;
       else if (char === ';') semicolons++;
       else if (char === '\t') tabs++;

@@ -72,6 +72,8 @@ export function CustomersRegistryManager({
 }: CustomersRegistryManagerProps) {
   // Token de petición para evitar que respuestas desordenadas de KPIs sobreescriban el estado más reciente
   const kpiRequestIdRef = useRef(0);
+  // Token secuencial para invalidar lecturas previas de FileReader si se selecciona otro archivo
+  const fileReadSeqRef = useRef(0);
 
   // Estado de lista y filtros
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
@@ -189,12 +191,15 @@ export function CustomersRegistryManager({
   const handleSaveNotes = async () => {
     if (!selectedCustomer) return;
     setSavingNotes(true);
+    const targetId = selectedCustomer.id;
     try {
-      const res = await updateCustomerNotes(selectedCustomer.id, notesInput);
+      const res = await updateCustomerNotes(targetId, notesInput);
       if (res.success) {
-        setSelectedCustomer((prev) => (prev ? { ...prev, notes: notesInput } : null));
+        setSelectedCustomer((prev) =>
+          prev && prev.id === targetId ? { ...prev, notes: notesInput } : prev
+        );
         setCustomers((prev) =>
-          prev.map((c) => (c.id === selectedCustomer.id ? { ...c, notes: notesInput } : c))
+          prev.map((c) => (c.id === targetId ? { ...c, notes: notesInput } : c))
         );
       }
     } finally {
@@ -206,11 +211,14 @@ export function CustomersRegistryManager({
   const handleUpdateTag = async (newTag: 'nuevo' | 'frecuente' | 'vip' | 'inactivo') => {
     if (!selectedCustomer) return;
     setUpdatingTag(true);
+    const targetId = selectedCustomer.id;
     const reqId = ++kpiRequestIdRef.current;
     try {
-      const res = await updateCustomerTag(selectedCustomer.id, newTag);
+      const res = await updateCustomerTag(targetId, newTag);
       if (res.success) {
-        setSelectedCustomer((prev) => (prev ? { ...prev, tag: newTag } : null));
+        setSelectedCustomer((prev) =>
+          prev && prev.id === targetId ? { ...prev, tag: newTag } : prev
+        );
 
         // Refrescar KPIs de forma autoritativa y secuencial (esperando respuesta antes de liberar selector)
         const newKpis = await fetchCustomerKpis(tenantId);
@@ -222,9 +230,7 @@ export function CustomersRegistryManager({
         loadCustomers(activeSegment === 'all' ? page : 1);
       }
     } finally {
-      if (reqId === kpiRequestIdRef.current) {
-        setUpdatingTag(false);
-      }
+      setUpdatingTag(false);
     }
   };
 
@@ -444,7 +450,15 @@ export function CustomersRegistryManager({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Incrementar secuencia para invalidar cualquier lectura anterior en vuelo
+    const currentSeq = ++fileReadSeqRef.current;
+
+    // Limpiar inmediatamente el contenido anterior para no dejar datos residuales si la validación falla
+    setImportInputText('');
+    setImportResult(null);
+
     if (file.size > MAX_IMPORT_FILE_BYTES) {
+      e.target.value = '';
       setImportResult({
         success: false,
         createdCount: 0,
@@ -456,9 +470,14 @@ export function CustomersRegistryManager({
 
     const reader = new FileReader();
     reader.onload = (event) => {
+      // Si el usuario seleccionó otro archivo mientras este se leía, descartar
+      if (currentSeq !== fileReadSeqRef.current) return;
+
       const text = event.target?.result as string;
       if (text) {
         if (text.length > MAX_IMPORT_TEXT_CHARS) {
+          e.target.value = '';
+          setImportInputText('');
           setImportResult({
             success: false,
             createdCount: 0,

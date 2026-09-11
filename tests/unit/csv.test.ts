@@ -126,6 +126,15 @@ describe('detectCsvDelimiter — detección automática de separador', () => {
     const line = '"Pérez, Ana";04141234567;"Caracas, Venezuela"';
     expect(detectCsvDelimiter(line)).toBe(';');
   });
+
+  it('no permite que comas en datos de filas posteriores superen el punto y coma del encabezado', () => {
+    const multiRowCsv = [
+      'Nombre;Telefono;Notas',
+      'Carlos;04141234567;Prefiere rojo, azul, verde, amarillo',
+      'Maria;04249998877;Pedir tenedor, servilletas, salsa, picante, limon',
+    ].join('\n');
+    expect(detectCsvDelimiter(multiRowCsv)).toBe(';');
+  });
 });
 
 describe('parseCSVRecords — RFC 4180 parsing multilínea con saltos dentro de comillas', () => {
