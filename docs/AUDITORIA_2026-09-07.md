@@ -1,5 +1,10 @@
 # AUDITORÍA COMPLETA 2026-09-07 — StoreLink SaaS (delta post PR #88)
 
+> ⚠️ **ESTADO: HALLAZGOS RESUELTOS Y CONSOLIDADOS**  
+> Todos los hallazgos P2 y refactors de esta auditoría (A1–A6, B1–B4, C1–C4, D1–D5) fueron remediados y mergeados en `main`.  
+> Para la fuente única de verdad y el roadmap técnico vigente, consultar:  
+> 🔗 [`docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md`](ESTADO_Y_ROADMAP_CONSOLIDADO.md).
+
 **Commit base:** `ea60fcf` (= `origin/main`, PR #88). **Alcance:** repo completo tras la auditoría final 2026-09-05 (score 9,0 GO). No se re-abren hallazgos ya cerrados de esa baseline; esta pasada audita el delta + dimensiones excluidas (§10): multi-tenant estructural profundo, inventario/CRM, jobs/observabilidad, mantenibilidad (4 archivos >1k) y BD (Supabase advisors).
 **Método:** Fase 1 estático (lint/build/test/audit) + codegraph (índice local, 148 archivos) + 6 agentes paralelos por módulo + Supabase MCP (advisors seguridad/performance). Read-only: cero cambios de código.
 

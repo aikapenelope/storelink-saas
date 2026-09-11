@@ -1,5 +1,10 @@
 # Roadmap de Sprints — Remediación post-auditoría 2026-09-04
 
+> ⚠️ **DOCUMENTO HISTÓRICO CONSOLIDADO**  
+> Los Sprints 1, 3, 4 y la serie de PRs de estabilidad de base de datos y CRM ya fueron completados y mergeados en `main`.  
+> La fuente única de verdad y el estado técnico activo se encuentra en:  
+> 🔗 [`docs/ESTADO_Y_ROADMAP_CONSOLIDADO.md`](ESTADO_Y_ROADMAP_CONSOLIDADO.md).
+
 Derivado de la auditoría integral de 2026-09-04 (5.8/10 NO-GO remediable → objetivo ≥8.0 GO).
 Cada sprint = 2 semanas, 1–3 PRs, con criterios de aceptación verificables. El PR #73 (remediación
 de la auditoría) cierra los fixes transversales; este roadmap organiza lo restante.
