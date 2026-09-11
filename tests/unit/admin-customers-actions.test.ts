@@ -5,6 +5,9 @@ import {
   updateCustomerNotes,
   updateCustomerTag,
   fetchCustomerOrders,
+  fetchCustomerKpis,
+  fetchSegmentPhones,
+  exportSegmentCustomersCsvData,
 } from '@/app/actions/admin-customers';
 import { getCustomerKpis } from '@/lib/analytics';
 
@@ -349,6 +352,93 @@ describe('admin-customers server actions & analytics', () => {
       expect(kpis.inactiveCount).toBe(5);
       expect(kpis.totalSpentUSD).toBe(2500.5);
       expect(kpis.averageLtv).toBeCloseTo(50.01, 2);
+    });
+  });
+
+  describe('fetchSegmentPhones & exportSegmentCustomersCsvData', () => {
+    it('returns deduplicated normalized phones matching segment query', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({
+        docs: [
+          { phone: '0414-1112233' },
+          { phone: '584141112233' }, // Duplicate normalized
+          { phone: '0424-9998877' },
+          { phone: 'invalid' },
+        ],
+      });
+
+      const phones = await fetchSegmentPhones({ segment: 'vip' });
+      expect(phones).toEqual(['584141112233', '584249998877']);
+      expect(mockFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          collection: 'customers',
+          limit: 1000,
+          overrideAccess: false,
+        })
+      );
+    });
+
+    it('exports all customer records matching query with clean fields', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockFind.mockResolvedValueOnce({
+        docs: [
+          {
+            name: 'Ana Silva',
+            phone: '584141234567',
+            email: 'ana@test.com',
+            tag: 'vip',
+            totalOrders: 4,
+            totalSpent: 120,
+            lastOrderAt: '2026-09-01T12:00:00Z',
+            notes: 'Cliente preferencial',
+          },
+        ],
+      });
+
+      const records = await exportSegmentCustomersCsvData({ segment: 'vip' });
+      expect(records.length).toBe(1);
+      expect(records[0].name).toBe('Ana Silva');
+      expect(records[0].phone).toBe('584141234567');
+      expect(records[0].totalSpent).toBe(120);
+    });
+  });
+
+  describe('fetchCustomerKpis server action', () => {
+    it('returns null if user is not authenticated', async () => {
+      mockAuth.mockResolvedValueOnce({ user: null });
+      const res = await fetchCustomerKpis();
+      expect(res).toBeNull();
+    });
+
+    it('returns null if user has no access to explicit tenant', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      const res = await fetchCustomerKpis(999);
+      expect(res).toBeNull();
+    });
+
+    it('queries KPIs for authorized tenant', async () => {
+      const mockUser = { id: 1, role: 'tenant-admin', tenants: [{ tenant: 10 }] };
+      mockAuth.mockResolvedValueOnce({ user: mockUser });
+      mockDrizzleExecute.mockResolvedValueOnce({
+        rows: [
+          {
+            total_customers: '10',
+            vip_count: '2',
+            recurrent_count: '3',
+            new_count: '4',
+            inactive_count: '1',
+            total_spent_usd: '500',
+          },
+        ],
+      });
+
+      const res = await fetchCustomerKpis(10);
+      expect(res).not.toBeNull();
+      expect(res?.totalCustomers).toBe(10);
+      expect(res?.vipCount).toBe(2);
     });
   });
 });

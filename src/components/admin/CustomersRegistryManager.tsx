@@ -26,6 +26,9 @@ import type { Customer, Order } from '@/payload-types';
 import type { CustomerKpis } from '@/lib/analytics';
 import {
   fetchCustomersPage,
+  fetchCustomerKpis,
+  fetchSegmentPhones,
+  exportSegmentCustomersCsvData,
   importCustomersBatch,
   updateCustomerNotes,
   updateCustomerTag,
@@ -86,8 +89,10 @@ export function CustomersRegistryManager({
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportBatchResult | null>(null);
 
-  // Feedback de copiado para difusiones
+  // Feedback de copiado para difusiones y exportación
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [copyingPhones, setCopyingPhones] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   // Debounce de búsqueda (300ms)
   useEffect(() => {
@@ -174,86 +179,99 @@ export function CustomersRegistryManager({
     }
   };
 
-  // Actualizar segmento del cliente
+  // Actualizar segmento del cliente con refresco autoritativo de KPIs y vista
   const handleUpdateTag = async (newTag: 'nuevo' | 'frecuente' | 'vip' | 'inactivo') => {
     if (!selectedCustomer) return;
     setUpdatingTag(true);
     try {
       const res = await updateCustomerTag(selectedCustomer.id, newTag);
       if (res.success) {
-        const oldTag = selectedCustomer.tag || 'nuevo';
         setSelectedCustomer((prev) => (prev ? { ...prev, tag: newTag } : null));
-        setCustomers((prev) =>
-          prev.map((c) => (c.id === selectedCustomer.id ? { ...c, tag: newTag } : c))
-        );
 
-        if (oldTag !== newTag) {
-          setKpis((prev) => {
-            const next = { ...prev };
-            if (oldTag === 'vip') next.vipCount = Math.max(0, next.vipCount - 1);
-            if (oldTag === 'frecuente') next.recurrentCount = Math.max(0, next.recurrentCount - 1);
-            if (oldTag === 'nuevo') next.newCount = Math.max(0, next.newCount - 1);
-            if (oldTag === 'inactivo') next.inactiveCount = Math.max(0, next.inactiveCount - 1);
+        // Refrescar KPIs de forma autoritativa desde la base de datos
+        fetchCustomerKpis(tenantId).then((newKpis) => {
+          if (newKpis) setKpis(newKpis);
+        });
 
-            if (newTag === 'vip') next.vipCount++;
-            if (newTag === 'frecuente') next.recurrentCount++;
-            if (newTag === 'nuevo') next.newCount++;
-            if (newTag === 'inactivo') next.inactiveCount++;
-            return next;
-          });
-        }
+        // Recargar la página actual para reflejar si el cliente entra/sale del filtro activo
+        loadCustomers(page);
       }
     } finally {
       setUpdatingTag(false);
     }
   };
 
-  // Copiar teléfonos para lista de difusión de WhatsApp
-  const handleCopyPhones = () => {
-    const phones = customers
-      .map((c) => normalizeCustomerPhone(c.phone))
-      .filter((p): p is string => Boolean(p && p.length >= 10));
+  // Copiar teléfonos para lista de difusión de WhatsApp de TODO el segmento filtrado (no solo la página actual)
+  const handleCopyPhones = async () => {
+    setCopyingPhones(true);
+    try {
+      const phones = await fetchSegmentPhones({
+        segment: activeSegment,
+        search: debouncedSearch,
+        maxLimit: 1000,
+      });
 
-    const uniquePhones = Array.from(new Set(phones));
+      if (phones.length === 0) {
+        setCopyToast('No hay teléfonos válidos en este segmento.');
+        setTimeout(() => setCopyToast(null), 3000);
+        return;
+      }
 
-    if (uniquePhones.length === 0) {
-      setCopyToast('No hay teléfonos válidos en este segmento.');
-      setTimeout(() => setCopyToast(null), 3000);
-      return;
-    }
-
-    const textToCopy = uniquePhones.join(', ');
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      setCopyToast(`¡${uniquePhones.length} teléfonos copiados al portapapeles!`);
+      const textToCopy = phones.join(', ');
+      await navigator.clipboard.writeText(textToCopy);
+      setCopyToast(`¡${phones.length} teléfonos copiados para lista de difusión!`);
       setTimeout(() => setCopyToast(null), 3500);
-    });
+    } catch (err) {
+      console.error('Error copiando teléfonos para difusión:', err);
+      setCopyToast('Error al copiar teléfonos');
+      setTimeout(() => setCopyToast(null), 3000);
+    } finally {
+      setCopyingPhones(false);
+    }
   };
 
-  // Exportar lista actual a CSV
-  const handleExportCSV = () => {
-    if (customers.length === 0) return;
+  // Exportar TODOS los registros que coincidan con los filtros activos a CSV (hasta 1,000 registros)
+  const handleExportCSV = async () => {
+    setExportingCsv(true);
+    try {
+      const records = await exportSegmentCustomersCsvData({
+        segment: activeSegment,
+        search: debouncedSearch,
+        maxLimit: 1000,
+      });
 
-    const headers = ['Nombre', 'Telefono', 'Email', 'Segmento', 'Total Pedidos', 'Total Gastado USD', 'Ultimo Pedido', 'Notas'];
-    const rows = customers.map((c) => [
-      `"${(c.name || '').replace(/"/g, '""')}"`,
-      `"${c.phone || ''}"`,
-      `"${c.email || ''}"`,
-      `"${c.tag || 'nuevo'}"`,
-      c.totalOrders ?? 0,
-      (c.totalSpent ?? 0).toFixed(2),
-      c.lastOrderAt ? `"${new Date(c.lastOrderAt).toLocaleDateString('es-VE')}"` : '""',
-      `"${(c.notes || '').replace(/"/g, '""')}"`,
-    ]);
+      if (records.length === 0) {
+        setCopyToast('No hay registros para exportar en este filtro.');
+        setTimeout(() => setCopyToast(null), 3000);
+        return;
+      }
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `compradores_${tenantSlug}_${activeSegment}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const headers = ['Nombre', 'Telefono', 'Email', 'Segmento', 'Total Pedidos', 'Total Gastado USD', 'Ultimo Pedido', 'Notas'];
+      const rows = records.map((c) => [
+        `"${(c.name || '').replace(/"/g, '""')}"`,
+        `"${c.phone || ''}"`,
+        `"${c.email || ''}"`,
+        `"${c.tag || 'nuevo'}"`,
+        c.totalOrders ?? 0,
+        (c.totalSpent ?? 0).toFixed(2),
+        c.lastOrderAt ? `"${new Date(c.lastOrderAt).toLocaleDateString('es-VE')}"` : '""',
+        `"${(c.notes || '').replace(/"/g, '""')}"`,
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `compradores_${tenantSlug}_${activeSegment}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error exportando CSV:', err);
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   // Procesar e importar texto o CSV
@@ -297,6 +315,10 @@ export function CustomersRegistryManager({
       if (res.success) {
         // Recargar clientes y primera página
         loadCustomers(1);
+        // Refrescar tarjetas de resumen KPI del servidor
+        fetchCustomerKpis(tenantId).then((newKpis) => {
+          if (newKpis) setKpis(newKpis);
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al procesar la importación';
@@ -428,11 +450,16 @@ export function CustomersRegistryManager({
             {/* Copiar para WhatsApp Broadcast */}
             <button
               type="button"
+              disabled={copyingPhones}
               onClick={handleCopyPhones}
-              className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-200 inline-flex items-center gap-1.5 transition rounded-none cursor-pointer"
-              title="Copiar números del segmento para lista de difusión"
+              className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-200 inline-flex items-center gap-1.5 transition rounded-none cursor-pointer disabled:opacity-50"
+              title="Copiar todos los números del segmento para lista de difusión"
             >
-              <Copy className="w-3.5 h-3.5 text-emerald-400" />
+              {copyingPhones ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5 text-emerald-400" />
+              )}
               <span className="hidden sm:inline">Copiar Difusión</span>
             </button>
 
@@ -452,10 +479,15 @@ export function CustomersRegistryManager({
             {/* Exportar CSV */}
             <button
               type="button"
+              disabled={exportingCsv}
               onClick={handleExportCSV}
-              className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-200 inline-flex items-center gap-1.5 transition rounded-none cursor-pointer"
+              className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-200 inline-flex items-center gap-1.5 transition rounded-none cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-3.5 h-3.5 text-zinc-400" />
+              {exportingCsv ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-zinc-400" />
+              )}
               <span>Exportar</span>
             </button>
           </div>
