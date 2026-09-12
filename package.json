@@ -22,8 +22,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.27.0",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1127.0",
-    "@aws-sdk/s3-request-presigner": "^3.1127.0",
+    "@aws-sdk/client-s3": "^3.1128.0",
+    "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@payloadcms/db-postgres": "^3.88.0",
     "@payloadcms/email-resend": "^3.88.0",
     "@payloadcms/next": "^3.88.0",
@@ -38,7 +38,7 @@
     "clsx": "^2.1.1",
     "graphql": "^16.8.1",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.41.0",
+    "lucide-react": "^1.43.0",
     "next": "15.5.25",
     "payload": "^3.88.0",
     "pg": "^8.23.0",
@@ -52,9 +52,9 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.6",
+    "@eslint/eslintrc": "^3.3.7",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.0",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
